@@ -1,0 +1,99 @@
+/// Fonte externa de dados consumida pelo BIOS, populada via seed.
+///
+/// Manter as fontes como entidade permite reordenar a cadeia de fallback cadastral,
+/// desabilitar uma fonte ou ajustar limites sem novo deploy.
+///
+/// Observações:
+///  - `slug` é o identificador estável usado pelos adapters (`DataSourceInterface`);
+///  - mapeado para a coleção `data_sources`.
+model DataSource {
+  /// Identificador da fonte.
+  id_data_source String @id @default(auto()) @map("_id") @db.ObjectId
+
+  /// Identificador estável (ex.: BRASIL_API, OPEN_CNPJ, MINHA_RECEITA, IBGE_CNAE, IBAMA, CGU_CEIS, CGU_CNEP, GHG_PROTOCOL).
+  slug String @unique(map: "idx_data_sources_slug")
+
+  /// Nome de exibição da fonte.
+  name String
+
+  /// URL base de acesso à fonte.
+  base_url String
+
+  /// Papel da fonte no BIOS.
+  role DataSourceRole
+
+  /// Padrão de ingestão da fonte.
+  ingestion_mode IngestionMode
+
+  /// Ordem na cadeia de fallback cadastral (1 = BrasilAPI, 2 = OpenCNPJ, 3 = Minha Receita).
+  fallback_priority Int?
+
+  /// Categoria das evidências produzidas, quando `role` = EVIDENCE.
+  evidence_category EvidenceCategory?
+
+  /// ID do ODS (`Ods`) ao qual as evidências desta fonte se vinculam, quando `role` = EVIDENCE.
+  ods_id String? @db.ObjectId
+
+  /// Limite de requisições por minuto respeitado pelo adapter (NFPD01).
+  rate_limit_per_minute Int?
+
+  /// Janela de validade do cache das consultas a esta fonte, em segundos (NFDE01).
+  cache_ttl_seconds Int?
+
+  /// Timeout das requisições à fonte, em milissegundos.
+  request_timeout_ms Int?
+
+  /// Indica se a fonte está habilitada.
+  is_enabled Boolean @default(true)
+
+  /// Data/hora de criação do registro.
+  created_at DateTime @default(now())
+
+  /// Data/hora da última atualização do registro.
+  updated_at DateTime @updatedAt
+
+  /// ODS (`Ods`) vinculado às evidências da fonte.
+  ods Ods? @relation(fields: [ods_id], references: [id_ods])
+
+  /// Execuções de ingestão da fonte (`IngestionRun`).
+  ingestion_runs IngestionRun[]
+
+  /// Log de requisições à fonte (`DataSourceRequestLog`).
+  request_logs DataSourceRequestLog[]
+
+  /// Registros brutos coletados da fonte (`EvidenceRaw`).
+  raw_evidences EvidenceRaw[]
+
+  /// Evidências normalizadas produzidas pela fonte (`EvidenceNormalized`).
+  evidences EvidenceNormalized[]
+
+  /// Perfis cadastrais cuja última atualização veio desta fonte (`CompanyProfile`).
+  company_profiles CompanyProfile[]
+
+  @@index([role, is_enabled, fallback_priority], map: "idx_data_sources_role_enabled_priority")
+  @@map("data_sources")
+}
+
+/// Papel de uma fonte externa no BIOS.
+enum DataSourceRole {
+  /// Dados cadastrais de pessoa jurídica (cadeia de fallback).
+  CADASTRAL
+
+  /// Descrição de atividades econômicas (CNAE).
+  CNAE_TAXONOMY
+
+  /// Fonte de evidência ambiental ou de conduta.
+  EVIDENCE
+}
+
+/// Padrão de ingestão de uma fonte externa.
+enum IngestionMode {
+  /// Consulta por CNPJ disparada pela requisição do usuário.
+  ON_DEMAND
+
+  /// Dump completo ingerido por job agendado.
+  DAILY_BATCH
+
+  /// Consulta isolada e não bloqueante, com timeout.
+  BEST_EFFORT
+}

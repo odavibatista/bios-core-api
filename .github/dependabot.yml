@@ -1,0 +1,59 @@
+# Monitoramento e atualização de dependências (RNF NFSE08).
+#
+# Atualizações de versão abrem PRs semanais contra o develop, agrupadas por
+# ecossistema para reduzir o volume de PRs. Alertas e atualizações de
+# segurança são habilitados nas configurações do repositório e não dependem
+# deste agendamento.
+
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: America/Sao_Paulo
+    open-pull-requests-limit: 5
+    labels: [chore, dependencies]
+    commit-message:
+      prefix: chore
+      prefix-development: chore
+      include: scope
+    groups:
+      nestjs:
+        patterns: ['@nestjs/*']
+      prisma:
+        patterns: [prisma, '@prisma/*']
+      lint-e-formatacao:
+        patterns:
+          - eslint
+          - '@eslint/*'
+          - 'eslint-*'
+          - typescript-eslint
+          - prettier
+      testes:
+        patterns: [vitest, '@vitest/*', supertest, '@types/supertest']
+      qualidade-de-commit:
+        patterns: [husky, lint-staged, '@commitlint/*']
+    ignore:
+      # A série 7 do Prisma ainda não suporta MongoDB (ver Ficha Técnica).
+      - dependency-name: prisma
+        update-types: [version-update:semver-major]
+      - dependency-name: '@prisma/client'
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: America/Sao_Paulo
+    labels: [chore, dependencies]
+    commit-message:
+      prefix: ci
+      include: scope

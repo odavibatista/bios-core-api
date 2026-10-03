@@ -1,0 +1,47 @@
+/// Agregado setorial do índice de um ODS em uma janela de tempo (RF30, indicador IA05).
+///
+/// Armazena apenas médias por setor, nunca série histórica por empresa individual.
+///
+/// Observações:
+///  - setor = divisão CNAE (2 dígitos), granularidade adotada para evitar amostras pequenas;
+///  - mapeado para a coleção `sector_score_snapshots`.
+model SectorScoreSnapshot {
+  /// Identificador do agregado.
+  id_sector_score_snapshot String @id @default(auto()) @map("_id") @db.ObjectId
+
+  /// ID do ODS (`Ods`) agregado.
+  ods_id String @db.ObjectId
+
+  /// Divisão CNAE (2 dígitos).
+  cnae_division String
+
+  /// Início da janela de tempo.
+  window_start DateTime
+
+  /// Fim da janela de tempo.
+  window_end DateTime
+
+  /// Média do índice das empresas do setor com índice não nulo.
+  average_score Float?
+
+  /// Média do nível de confiança das empresas do setor.
+  average_confidence Float
+
+  /// Empresas do setor com registro em `company_ods_scores` na janela.
+  company_count Int
+
+  /// Empresas do setor com índice não nulo na janela.
+  scored_company_count Int
+
+  /// Versão das regras de pontuação usadas nos índices agregados.
+  rules_version String
+
+  /// Data/hora de criação do registro.
+  created_at DateTime @default(now())
+
+  /// ODS (`Ods`) agregado.
+  ods Ods @relation(fields: [ods_id], references: [id_ods])
+
+  @@unique([ods_id, cnae_division, window_start], map: "idx_sector_score_snapshots_ods_division_window")
+  @@map("sector_score_snapshots")
+}

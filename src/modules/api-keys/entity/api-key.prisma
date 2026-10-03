@@ -1,0 +1,42 @@
+/// Chave de API para consumo programático da API pública (RF16, RF17).
+///
+/// Observações:
+///  - a chave completa é exibida uma única vez, na geração; apenas seu hash SHA-256
+///    é persistido (NFSE01);
+///  - `key_prefix` é público e permite localizar a chave sem varrer hashes;
+///  - removida junto com a conta do titular (RF27);
+///  - mapeado para a coleção `api_keys`.
+model ApiKey {
+  /// Identificador da chave.
+  id_api_key String @id @default(auto()) @map("_id") @db.ObjectId
+
+  /// ID do usuário (`User`) que gerou a chave.
+  user_id String @db.ObjectId
+
+  /// Nome de identificação escolhido pelo usuário.
+  key_name String
+
+  /// Prefixo público da chave, exibido na listagem e usado na busca.
+  key_prefix String @unique(map: "idx_api_keys_key_prefix")
+
+  /// Hash SHA-256 da chave completa.
+  key_hash String @unique(map: "idx_api_keys_key_hash")
+
+  /// Data/hora do último uso da chave.
+  last_used_at DateTime?
+
+  /// Data/hora da revogação; preenchida, a chave é recusada.
+  revoked_at DateTime?
+
+  /// Data/hora de criação do registro.
+  created_at DateTime @default(now())
+
+  /// Data/hora da última atualização do registro.
+  updated_at DateTime @updatedAt
+
+  /// Usuário (`User`) titular da chave; removida junto com a conta.
+  user User @relation(fields: [user_id], references: [id_user], onDelete: Cascade)
+
+  @@index([user_id, revoked_at], map: "idx_api_keys_user_revoked")
+  @@map("api_keys")
+}

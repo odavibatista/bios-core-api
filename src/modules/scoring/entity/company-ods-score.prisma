@@ -1,0 +1,85 @@
+/// Índice de aderência e nível de confiança de uma empresa para um ODS (RF10, RF11, RF12).
+///
+/// Um documento por empresa e ODS, em coleção separada de `company_profile`, para que
+/// filtro e ordenação pelo índice de um ODS selecionado (RF13, RF14) sejam atendidos por
+/// um único índice composto, sem varrer arrays embutidos.
+///
+/// Observações:
+///  - `uf`, `city` e `cnae_codes` são desnormalizados do perfil cadastral e reescritos no
+///    mesmo job que o atualiza; ficam vazios para CNPJs com evidência e ainda sem perfil;
+///  - `cnpj` é referência lógica a `company_profile` (sem relação Prisma);
+///  - mapeado para a coleção `company_ods_scores`.
+model CompanyOdsScore {
+  /// Identificador do registro.
+  id_company_ods_score String @id @default(auto()) @map("_id") @db.ObjectId
+
+  /// CNPJ da empresa (14 dígitos, sem máscara).
+  cnpj String
+
+  /// ID do ODS (`Ods`) avaliado.
+  ods_id String @db.ObjectId
+
+  /// Número do ODS, desnormalizado para filtros e exportação.
+  ods_number Int
+
+  /// Índice de aderência; nulo quando não há evidência conclusiva para o ODS.
+  score_value Float?
+
+  /// Nível de confiança entre 0 e 1, calculado à parte do índice.
+  confidence_value Float
+
+  /// Quantidade de evidências consideradas.
+  evidence_count Int @default(0)
+
+  /// Contribuições evidência a evidência — a explicação do score (RF12).
+  contributions ScoreContribution[]
+
+  /// Versão das regras de pontuação usadas no cálculo.
+  rules_version String
+
+  /// Sigla da UF, desnormalizada do perfil cadastral.
+  uf String?
+
+  /// Município, desnormalizado do perfil cadastral.
+  city String?
+
+  /// CNAE principal e secundários, desnormalizados do perfil cadastral.
+  cnae_codes String[]
+
+  /// Data/hora do cálculo.
+  calculated_at DateTime
+
+  /// Data/hora de criação do registro.
+  created_at DateTime @default(now())
+
+  /// Data/hora da última atualização do registro.
+  updated_at DateTime @updatedAt
+
+  /// ODS (`Ods`) avaliado.
+  ods Ods @relation(fields: [ods_id], references: [id_ods])
+
+  @@unique([cnpj, ods_id], map: "idx_company_ods_scores_cnpj_ods")
+  @@index([ods_id, score_value], map: "idx_company_ods_scores_ods_score")
+  @@index([ods_id, uf, city, score_value], map: "idx_company_ods_scores_ods_location_score")
+  @@index([ods_id, cnae_codes, score_value], map: "idx_company_ods_scores_ods_cnae_score")
+  @@index([ods_id, confidence_value], map: "idx_company_ods_scores_ods_confidence")
+  @@map("company_ods_scores")
+}
+
+/// Contribuição de uma evidência ao índice (subdocumento embutido).
+type ScoreContribution {
+  /// ID da evidência (`EvidenceNormalized`) considerada.
+  evidence_id String @db.ObjectId
+
+  /// Categoria da evidência.
+  category EvidenceCategory
+
+  /// Sinal da evidência.
+  signal EvidenceSignal
+
+  /// Peso aplicado à evidência (fixo no código na v1).
+  weight Float
+
+  /// Contribuição efetiva ao índice, já com o sinal aplicado.
+  points Float
+}

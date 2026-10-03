@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentação do projeto (bios-docs)
+    url: https://github.com/odavibatista/bios-docs
+    about: Requisitos, casos de uso, modelagem e arquitetura que embasam as tarefas da API.

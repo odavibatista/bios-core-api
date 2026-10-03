@@ -1,0 +1,48 @@
+/// Camada bruta de dados: registro original de uma fonte, sem transformação.
+///
+/// Mantida para auditoria (NFCO02).
+///
+/// Observações:
+///  - registros de pessoa física (CPF) são descartados antes de qualquer persistência,
+///    inclusive nesta camada (INL02);
+///  - `payload_hash` deduplica o mesmo registro entre execuções;
+///  - mapeado para a coleção `evidence_raw`.
+model EvidenceRaw {
+  /// Identificador do registro bruto.
+  id_evidence_raw String @id @default(auto()) @map("_id") @db.ObjectId
+
+  /// ID da fonte (`DataSource`) de origem.
+  data_source_id String @db.ObjectId
+
+  /// ID da execução de ingestão (`IngestionRun`) que coletou o registro.
+  ingestion_run_id String? @db.ObjectId
+
+  /// CNPJ extraído do registro, quando identificável.
+  cnpj String?
+
+  /// Identificador do registro na fonte (ex.: número do auto de infração).
+  external_reference String?
+
+  /// Registro original da fonte.
+  payload Json
+
+  /// Hash do payload, usado para deduplicação.
+  payload_hash String
+
+  /// Data/hora da coleta.
+  collected_at DateTime @default(now())
+
+  /// Fonte (`DataSource`) de origem.
+  data_source DataSource @relation(fields: [data_source_id], references: [id_data_source])
+
+  /// Execução de ingestão (`IngestionRun`) que coletou o registro.
+  ingestion_run IngestionRun? @relation(fields: [ingestion_run_id], references: [id_ingestion_run])
+
+  /// Evidências normalizadas derivadas deste registro (`EvidenceNormalized`).
+  evidences EvidenceNormalized[]
+
+  @@unique([data_source_id, payload_hash], map: "idx_evidence_raw_source_payload_hash")
+  @@index([cnpj], map: "idx_evidence_raw_cnpj")
+  @@index([ingestion_run_id], map: "idx_evidence_raw_ingestion_run")
+  @@map("evidence_raw")
+}
