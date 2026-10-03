@@ -1,0 +1,73 @@
+/// Auditoria de envio de e-mail transacional (RF18).
+///
+/// Observações:
+///  - o destinatário é registrado apenas como hash; o e-mail em claro não vai para o log;
+///  - retenção: removido após `created_at` + DATA_RETENTION_EMAIL_DISPATCH_LOGS (padrão 180d),
+///    pelo índice `idx_email_dispatch_logs_created_at` (convertido em TTL na inicialização da API);
+///  - mapeado para a coleção `email_dispatch_logs`.
+model EmailDispatchLog {
+  /// Identificador do registro.
+  id_email_dispatch_log String @id @default(auto()) @map("_id") @db.ObjectId
+
+  /// ID do usuário (`User`) destinatário, quando houver.
+  user_id String? @db.ObjectId
+
+  /// Template enviado.
+  template EmailTemplate
+
+  /// Hash do e-mail do destinatário.
+  recipient_email_hash String
+
+  /// Situação do envio.
+  status EmailDispatchStatus @default(QUEUED)
+
+  /// Identificador do job BullMQ responsável pelo envio.
+  job_id String?
+
+  /// Motivo técnico da falha, quando `status` = FAILED.
+  failure_reason String?
+
+  /// Data/hora do envio efetivo.
+  sent_at DateTime?
+
+  /// Data/hora de criação do registro.
+  created_at DateTime @default(now())
+
+  /// Data/hora da última atualização do registro.
+  updated_at DateTime @updatedAt
+
+  /// Usuário (`User`) destinatário.
+  user User? @relation(fields: [user_id], references: [id_user], onDelete: SetNull)
+
+  @@index([user_id, created_at], map: "idx_email_dispatch_logs_user_created_at")
+  @@index([status, created_at], map: "idx_email_dispatch_logs_status_created_at")
+  @@index([created_at], map: "idx_email_dispatch_logs_created_at")
+  @@map("email_dispatch_logs")
+}
+
+/// Template de e-mail transacional.
+enum EmailTemplate {
+  /// Confirmação de cadastro (RF28).
+  EMAIL_CONFIRMATION
+
+  /// Confirmação de troca de e-mail (RF26).
+  EMAIL_CHANGE_CONFIRMATION
+
+  /// Recuperação de senha (RF25).
+  PASSWORD_RESET
+
+  /// Alerta de login suspeito (RF20).
+  SUSPICIOUS_LOGIN_ALERT
+}
+
+/// Situação de um envio de e-mail.
+enum EmailDispatchStatus {
+  /// Aguardando processamento na fila.
+  QUEUED
+
+  /// Entregue ao servidor SMTP.
+  SENT
+
+  /// Falha no envio.
+  FAILED
+}

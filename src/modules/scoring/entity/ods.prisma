@@ -1,0 +1,43 @@
+/// Objetivo de Desenvolvimento Sustentável de referência, populado via seed.
+///
+/// Seed do MVP: ODS 13 (Ação Contra a Mudança Global do Clima) e ODS 15 (Vida Terrestre).
+/// Incluir um ODS é uma nova entrada de seed, sem alteração de esquema.
+///
+/// Observações:
+///  - mapeado para a coleção `ods`.
+model Ods {
+  /// Identificador do ODS.
+  id_ods String @id @default(auto()) @map("_id") @db.ObjectId
+
+  /// Número oficial do ODS na Agenda 2030.
+  ods_number Int @unique(map: "idx_ods_ods_number")
+
+  /// Título oficial do ODS.
+  title String
+
+  /// Descrição do ODS.
+  description String
+
+  /// Indica se o ODS está ativo no cálculo de índices.
+  is_active Boolean @default(true)
+
+  /// Data/hora de criação do registro.
+  created_at DateTime @default(now())
+
+  /// Data/hora da última atualização do registro.
+  updated_at DateTime @updatedAt
+
+  /// Fontes cujas evidências se vinculam a este ODS (`DataSource`).
+  data_sources DataSource[]
+
+  /// Evidências vinculadas a este ODS (`EvidenceNormalized`).
+  evidences EvidenceNormalized[]
+
+  /// Índices de empresas calculados para este ODS (`CompanyOdsScore`).
+  company_scores CompanyOdsScore[]
+
+  /// Agregados setoriais calculados para este ODS (`SectorScoreSnapshot`).
+  sector_snapshots SectorScoreSnapshot[]
+
+  @@map("ods")
+}

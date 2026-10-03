@@ -1,0 +1,16 @@
+# Barreira de qualidade do commit (RNF NFSE09).
+
+# Schema Prisma: verificado uma única vez, e sem reescrever arquivos, quando o
+# commit altera algum .prisma. A URL é usada só na validação sintática.
+if git diff --cached --name-only --diff-filter=ACMR | grep -q '\.prisma$'; then
+  export DATABASE_URL="${DATABASE_URL:-mongodb://localhost:27017/bios?directConnection=true}"
+  npx --no -- prisma format --check || {
+    echo "pre-commit: schema Prisma fora do padrão — rode 'npm run prisma:format'."
+    exit 1
+  }
+  npx --no -- prisma validate || exit 1
+fi
+
+# Demais arquivos em stage (ver lint-staged.config.mjs). Lotes em série: o lint
+# type-aware em paralelo esgota memória em commits grandes.
+npx --no -- lint-staged --concurrent false

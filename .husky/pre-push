@@ -1,0 +1,25 @@
+# Verificação completa antes de publicar commits (typecheck, testes com
+# cobertura mínima de 75% e e2e), executada apenas quando o push contém
+# mudanças que podem afetar o comportamento da API.
+#
+# A faixa analisada é a de TODOS os commits enviados que ainda não existem em
+# nenhum branch remoto — não apenas o último commit.
+
+ZERO_SHA=0000000000000000000000000000000000000000
+RELEVANT='\.(ts|prisma)$|^package(-lock)?\.json$|^tsconfig[^/]*\.json$|^(vitest|prisma)\.config[^/]*\.ts$|^eslint\.config\.mjs$|^\.env\.example$'
+
+changed_files=""
+while read -r local_ref local_sha remote_ref remote_sha; do
+  # Exclusão de branch remoto: nada a verificar.
+  [ "$local_sha" = "$ZERO_SHA" ] && continue
+
+  changed_files="$changed_files
+$(git log --name-only --format= "$local_sha" --not --remotes)"
+done
+
+if ! printf '%s\n' "$changed_files" | grep -Eq "$RELEVANT"; then
+  echo "pre-push: nenhuma mudança de código, schema ou configuração — verificação dispensada."
+  exit 0
+fi
+
+npm run verify

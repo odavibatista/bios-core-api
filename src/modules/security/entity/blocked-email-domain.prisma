@@ -1,0 +1,42 @@
+/// Domínio de e-mail bloqueado para cadastro (RF22, RF29).
+///
+/// Observações:
+///  - inicializado a partir de seed JSON e mantido por administradores;
+///  - remoção lógica via `deleted_at`; reincluir um domínio restaura o registro;
+///  - mapeado para a coleção `blocked_email_domains`.
+model BlockedEmailDomain {
+  /// Identificador do registro.
+  id_blocked_email_domain String @id @default(auto()) @map("_id") @db.ObjectId
+
+  /// Domínio em minúsculas, sem @ (ex.: mailinator.com).
+  domain String @unique(map: "idx_blocked_email_domains_domain")
+
+  /// Origem da inclusão.
+  origin BlockedDomainOrigin
+
+  /// ID do administrador (`User`) responsável, quando `origin` = ADMIN.
+  created_by_user_id String? @db.ObjectId
+
+  /// Data/hora de criação do registro.
+  created_at DateTime @default(now())
+
+  /// Data/hora da última atualização do registro.
+  updated_at DateTime @updatedAt
+
+  /// Remoção lógica; preenchida, o domínio deixa de ser bloqueado.
+  deleted_at DateTime?
+
+  /// Administrador (`User`) responsável pela inclusão.
+  created_by_user User? @relation(fields: [created_by_user_id], references: [id_user], onDelete: SetNull)
+
+  @@map("blocked_email_domains")
+}
+
+/// Origem da inclusão de um domínio na blacklist.
+enum BlockedDomainOrigin {
+  /// Carregado do arquivo JSON de sementes.
+  SEED
+
+  /// Incluído por administrador (RF29).
+  ADMIN
+}

@@ -1,0 +1,84 @@
+/// Log de cada chamada a uma fonte externa.
+///
+/// Base para auditoria de rate limit (NFPD01), diagnóstico da cadeia de fallback
+/// e o indicador de cobertura por fonte [IA04].
+///
+/// Observações:
+///  - retenção: removido após `requested_at` + DATA_RETENTION_DATA_SOURCE_REQUEST_LOGS (padrão
+///    90d), pelo índice `idx_data_source_request_logs_requested_at` (convertido em TTL na inicialização da API);
+///  - mapeado para a coleção `data_source_request_logs`.
+model DataSourceRequestLog {
+  /// Identificador do registro.
+  id_data_source_request_log String @id @default(auto()) @map("_id") @db.ObjectId
+
+  /// ID da fonte (`DataSource`) consultada.
+  data_source_id String @db.ObjectId
+
+  /// ID da execução de ingestão (`IngestionRun`), quando a chamada ocorreu dentro de um job.
+  ingestion_run_id String? @db.ObjectId
+
+  /// CNPJ consultado, quando aplicável.
+  cnpj String?
+
+  /// Origem da chamada.
+  trigger RequestTrigger
+
+  /// Resultado da chamada.
+  outcome RequestOutcome
+
+  /// Código HTTP devolvido pela fonte.
+  http_status Int?
+
+  /// Duração da chamada, em milissegundos.
+  duration_ms Int
+
+  /// Mensagem de erro, quando houver.
+  error_message String?
+
+  /// Data/hora da chamada.
+  requested_at DateTime @default(now())
+
+  /// Fonte (`DataSource`) consultada.
+  data_source DataSource @relation(fields: [data_source_id], references: [id_data_source])
+
+  /// Execução de ingestão (`IngestionRun`) associada.
+  ingestion_run IngestionRun? @relation(fields: [ingestion_run_id], references: [id_ingestion_run])
+
+  @@index([data_source_id, requested_at], map: "idx_data_source_request_logs_source_requested_at")
+  @@index([cnpj, requested_at], map: "idx_data_source_request_logs_cnpj_requested_at")
+  @@index([requested_at], map: "idx_data_source_request_logs_requested_at")
+  @@map("data_source_request_logs")
+}
+
+/// Origem de uma chamada a fonte externa.
+enum RequestTrigger {
+  /// Consulta de usuário pela interface web.
+  USER_QUERY
+
+  /// Consulta de sistema de terceiros pela API pública.
+  PUBLIC_API
+
+  /// Job agendado.
+  SCHEDULED_JOB
+
+  /// Job avulso sob demanda.
+  ON_DEMAND_JOB
+}
+
+/// Resultado de uma chamada a fonte externa.
+enum RequestOutcome {
+  /// Dados obtidos com sucesso.
+  SUCCESS
+
+  /// A fonte respondeu, sem registro para o CNPJ.
+  NOT_FOUND
+
+  /// Erro na fonte ou na comunicação.
+  FAILURE
+
+  /// Tempo limite excedido.
+  TIMEOUT
+
+  /// Limite de requisições da fonte atingido.
+  RATE_LIMITED
+}

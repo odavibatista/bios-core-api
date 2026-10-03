@@ -1,0 +1,59 @@
+/// Bloqueio de acesso aplicado a um IP ou a um usuário.
+///
+/// Originado por excesso de falhas de login (RF20) ou por chamada a endpoint isca (RF21).
+///
+/// Observações:
+///  - retenção: removido após `blocked_until` + DATA_RETENTION_ACCESS_BLOCKS (padrão 90d), pelo
+///    índice `idx_access_blocks_blocked_until` (convertido em TTL na inicialização da API); bloqueios sem
+///    prazo (`blocked_until` nulo) nunca expiram;
+///  - o banco é a fonte de verdade e a trilha de auditoria; os bloqueios ativos são
+///    espelhados no Redis para verificação rápida a cada requisição;
+///  - mapeado para a coleção `access_blocks`.
+model AccessBlock {
+  /// Identificador do bloqueio.
+  id_access_block String @id @default(auto()) @map("_id") @db.ObjectId
+
+  /// Alvo do bloqueio.
+  scope AccessBlockScope
+
+  /// IP bloqueado, quando `scope` = IP.
+  ip String?
+
+  /// ID do usuário (`User`) bloqueado, quando `scope` = USER.
+  user_id String? @db.ObjectId
+
+  /// Origem do bloqueio.
+  reason AccessBlockReason
+
+  /// Fim do bloqueio; nulo indica bloqueio sem prazo (honeypot).
+  blocked_until DateTime?
+
+  /// Data/hora de criação do bloqueio.
+  created_at DateTime @default(now())
+
+  /// Usuário (`User`) bloqueado; o bloqueio é removido junto com a conta.
+  user User? @relation(fields: [user_id], references: [id_user], onDelete: Cascade)
+
+  @@index([scope, ip, blocked_until], map: "idx_access_blocks_scope_ip_until")
+  @@index([scope, user_id, blocked_until], map: "idx_access_blocks_scope_user_until")
+  @@index([blocked_until], map: "idx_access_blocks_blocked_until")
+  @@map("access_blocks")
+}
+
+/// Alvo de um bloqueio de acesso.
+enum AccessBlockScope {
+  /// Bloqueio por endereço IP.
+  IP
+
+  /// Bloqueio por conta de usuário.
+  USER
+}
+
+/// Origem de um bloqueio de acesso.
+enum AccessBlockReason {
+  /// 5 falhas consecutivas de login — bloqueio de 15 minutos (RF20).
+  LOGIN_ATTEMPTS
+
+  /// Chamada a endpoint isca (RF21).
+  HONEYPOT
+}

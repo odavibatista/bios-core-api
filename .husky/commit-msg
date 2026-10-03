@@ -1,0 +1,2 @@
+# Mensagem de commit no padrão Conventional Commits (ver commitlint.config.mjs).
+npx --no -- commitlint --edit "$1"
