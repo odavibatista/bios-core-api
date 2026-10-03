@@ -1,0 +1,37 @@
+# Infraestrutura local de desenvolvimento.
+#
+# O MongoDB sobe como replica set de nó único: o Prisma exige replica set para
+# executar transações e as ações referenciais emuladas (ex.: cascata na exclusão
+# de conta). O healthcheck inicializa o replica set na primeira execução.
+services:
+  mongodb:
+    image: mongo:8
+    container_name: bios-mongodb
+    command: ['--replSet', 'rs0', '--bind_ip_all', '--port', '27017']
+    ports:
+      - '27017:27017'
+    volumes:
+      - bios-mongodb-data:/data/db
+    healthcheck:
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - "try { rs.status().ok } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'localhost:27017' }] }).ok }"
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: bios-redis
+    ports:
+      - '6379:6379'
+    volumes:
+      - bios-redis-data:/data
+
+volumes:
+  bios-mongodb-data:
+  bios-redis-data:

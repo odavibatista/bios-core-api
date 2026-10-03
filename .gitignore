@@ -1,0 +1,43 @@
+# Compilação
+/dist
+/build
+*.tsbuildinfo
+
+# Dependências
+/node_modules
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+
+# Testes
+/coverage
+/.nyc_output
+
+# IDEs
+/.idea
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Variáveis de ambiente
+.env
+.env.*
+!.env.example
+
+# Cache temporário
+.temp
+.tmp

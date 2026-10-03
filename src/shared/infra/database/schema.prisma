@@ -1,0 +1,21 @@
+// Ponto de entrada do schema Prisma multiarquivo do BIOS.
+//
+// Este arquivo declara apenas o generator e o datasource. Modelos, tipos
+// compostos e enums ficam junto do módulo que os possui, em
+// src/modules/<módulo>/entity/*.prisma; o Prisma os reúne a partir da raiz
+// `src` configurada em prisma.config.ts.
+//
+// Convenções (ver README):
+//  - chave primária `id_<entidade>` (ObjectId mapeado para `_id`);
+//  - chave estrangeira `<entidade>_id`; empresas referenciadas pela chave natural `cnpj`;
+//  - campos em snake_case; coleções em snake_case no plural (exceto as camadas de dados);
+//  - índices nomeados `idx_<coleção>_<campos>`.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
