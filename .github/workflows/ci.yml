@@ -44,6 +44,11 @@ jobs:
           node-version: 22.x
           cache: npm
 
+      # O lockfile é gerado com o npm 11. O npm 10 que acompanha o Node 22 resolve
+      # dependências peer opcionais de outra forma e rejeita o lockfile no `npm ci`.
+      - name: Alinhar versão do npm com a do lockfile
+        run: npm install -g npm@11
+
       - name: Instalar dependências
         run: npm ci
 
@@ -88,6 +93,11 @@ jobs:
         with:
           node-version: 22.x
           cache: npm
+
+      # O lockfile é gerado com o npm 11. O npm 10 que acompanha o Node 22 resolve
+      # dependências peer opcionais de outra forma e rejeita o lockfile no `npm ci`.
+      - name: Alinhar versão do npm com a do lockfile
+        run: npm install -g npm@11
 
       - name: Instalar dependências
         run: npm ci
