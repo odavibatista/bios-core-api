@@ -1,0 +1,71 @@
+name: Tarefa de configuração
+description: Configuração do projeto, infraestrutura, pipelines, dependências ou ferramentas de qualidade.
+title: '[CHORE] '
+labels: [chore]
+projects: [odavibatista/15]
+
+body:
+  - type: dropdown
+    id: category
+    attributes:
+      label: Categoria
+      options:
+        - Projeto e ferramentas
+        - CI (pipelines)
+        - Dependências
+        - Qualidade (lint, testes, hooks)
+        - Banco de dados (Prisma, índices, seeds)
+        - Infraestrutura local (Docker, variáveis de ambiente)
+        - Repositório (configurações do GitHub)
+        - Documentação
+    validations:
+      required: true
+
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objetivo
+      description: O que deve estar configurado ao final da tarefa.
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivação e requisitos atendidos
+      description: >-
+        Por que a configuração é necessária. Cole os RNFs atendidos (06-Requisitos-Nao-Funcionais.md)
+        ou o trecho da Ficha Técnica / Projeto e Arquitetura que a define.
+    validations:
+      required: true
+
+  - type: textarea
+    id: tasks
+    attributes:
+      label: Tarefas
+      value: |
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Critérios de aceite
+      description: Como verificar que a configuração está correta.
+      value: |
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: affected-files
+    attributes:
+      label: Arquivos e configurações afetados
+      description: Arquivos do repositório, variáveis de ambiente ou configurações do GitHub envolvidos.
+
+  - type: textarea
+    id: references
+    attributes:
+      label: Referências
+      description: Documentação oficial, decisões registradas no bios-docs ou issues relacionadas.

@@ -1,0 +1,110 @@
+name: Bug
+description: Comportamento da API diferente do especificado nos artefatos de análise ou nos testes.
+title: '[BUG] '
+labels: [bugs]
+projects: [odavibatista/15]
+
+body:
+  - type: dropdown
+    id: module
+    attributes:
+      label: Módulo
+      options:
+        - accounts
+        - authentication
+        - api-keys
+        - security
+        - mailing
+        - data-sources
+        - evidences
+        - companies
+        - scoring
+        - shared (infraestrutura transversal)
+        - Não identificado
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severidade
+      options:
+        - Crítica — indisponibilidade, perda de dados ou falha de segurança
+        - Alta — fluxo normal de um caso de uso não funciona
+        - Média — fluxo alternativo ou regra de negócio incorreta
+        - Baixa — mensagem, documentação da API ou detalhe sem impacto funcional
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Ambiente
+      options:
+        - Local
+        - develop
+        - pre-prod
+        - main
+    validations:
+      required: true
+
+  - type: input
+    id: affected-flow
+    attributes:
+      label: Endpoint ou fluxo afetado
+      placeholder: POST /auth/login — UC02, fluxo alternativo 3.2
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Versão
+      description: Branch e commit em que o problema foi observado.
+      placeholder: develop @ 1a2b3c4
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Passos para reproduzir
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Comportamento esperado
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Comportamento atual
+    validations:
+      required: true
+
+  - type: textarea
+    id: violated-requirement
+    attributes:
+      label: Requisito violado
+      description: >-
+        Cole o bloco do RF, RNF ou RIN, ou a regra de negócio do caso de uso, que o comportamento
+        atual descumpre.
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Saída relevante do terminal ou da resposta da API. Formatada automaticamente como código.
+      render: shell
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidências
+      description: Prints, payloads de request e response ou links.
