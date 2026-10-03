@@ -35,14 +35,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # Histórico completo para validar todas as mensagens de commit do PR.
-          fetch-depth: ${{ github.event_name == 'pull_request' && 0 || 1 }}
+          # Histórico completo: o commitlint precisa dos commits da base e do head
+          # do PR para validar todas as mensagens do intervalo.
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22.x
           cache: npm
+
+      # O lockfile é gerado com o npm 11. O npm 10 que acompanha o Node 22 resolve
+      # dependências peer opcionais de outra forma e rejeita o lockfile no `npm ci`.
+      - name: Alinhar versão do npm com a do lockfile
+        run: npm install -g npm@11
 
       - name: Instalar dependências
         run: npm ci
@@ -88,6 +94,11 @@ jobs:
         with:
           node-version: 22.x
           cache: npm
+
+      # O lockfile é gerado com o npm 11. O npm 10 que acompanha o Node 22 resolve
+      # dependências peer opcionais de outra forma e rejeita o lockfile no `npm ci`.
+      - name: Alinhar versão do npm com a do lockfile
+        run: npm install -g npm@11
 
       - name: Instalar dependências
         run: npm ci
