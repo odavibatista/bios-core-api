@@ -1,0 +1,98 @@
+/// Camada agregada: perfil cadastral da pessoa jurídica (RF05, RF06).
+///
+/// Observações:
+///  - nenhum dado de sócios ou administradores é armazenado (INL02);
+///  - os índices de aderência por ODS ficam em `company_ods_scores`;
+///  - `content_hash` e `previous_content_hash` formam o snapshot leve: detectam mudança
+///    cadastral sem motor de diff;
+///  - mapeado para a coleção `company_profile`.
+model CompanyProfile {
+  /// Identificador do perfil.
+  id_company_profile String @id @default(auto()) @map("_id") @db.ObjectId
+
+  /// CNPJ da empresa (14 dígitos, sem máscara).
+  cnpj String @unique(map: "idx_company_profile_cnpj")
+
+  /// Razão social.
+  legal_name String
+
+  /// Nome fantasia.
+  trade_name String?
+
+  /// Situação cadastral na Receita Federal.
+  registration_status String
+
+  /// Porte da empresa.
+  company_size String?
+
+  /// Endereço público da pessoa jurídica.
+  address CompanyAddress
+
+  /// CNAE principal.
+  main_cnae CompanyCnae
+
+  /// CNAEs secundários.
+  secondary_cnaes CompanyCnae[]
+
+  /// ID do provedor da cadeia de fallback (`DataSource`) que respondeu a última atualização.
+  cadastral_source_id String @db.ObjectId
+
+  /// Hash do conteúdo cadastral atual.
+  content_hash String
+
+  /// Hash da versão cadastral anterior.
+  previous_content_hash String?
+
+  /// Última atualização a partir da fonte cadastral; base da janela de cache.
+  refreshed_at DateTime
+
+  /// Data/hora de criação do registro.
+  created_at DateTime @default(now())
+
+  /// Data/hora da última atualização do registro.
+  updated_at DateTime @updatedAt
+
+  /// Provedor cadastral (`DataSource`) da última atualização.
+  cadastral_source DataSource @relation(fields: [cadastral_source_id], references: [id_data_source])
+
+  @@index([address.uf, address.city], map: "idx_company_profile_uf_city")
+  @@index([main_cnae.code], map: "idx_company_profile_main_cnae")
+  @@fulltext([legal_name, trade_name], map: "idx_company_profile_name_text")
+  @@map("company_profile")
+}
+
+/// Endereço público da pessoa jurídica (subdocumento embutido).
+type CompanyAddress {
+  /// Logradouro.
+  street String?
+
+  /// Número.
+  number String?
+
+  /// Complemento.
+  complement String?
+
+  /// Bairro.
+  neighborhood String?
+
+  /// Município.
+  city String
+
+  /// Código IBGE do município.
+  city_ibge_code String?
+
+  /// Sigla da UF (2 caracteres).
+  uf String
+
+  /// CEP, sem máscara.
+  zipcode String?
+}
+
+/// Atividade econômica (subdocumento embutido).
+type CompanyCnae {
+  /// Código CNAE de 7 dígitos, sem máscara.
+  code String
+
+  /// Descrição da atividade econômica (RF06).
+  description String
+}

@@ -1,0 +1,114 @@
+/// Camada normalizada: uma evidência por registro de fonte, com fonte, categoria,
+/// ODS, estado e datas (RF07, RF08).
+///
+/// Observações:
+///  - `evidence_key` é determinística (`<slug>:<referência>` ou `<slug>:<cnpj>:NOT_FOUND`),
+///    permitindo upsert idempotente ao reprocessar um dump;
+///  - `cnpj` é referência lógica a `company_profile`: a ingestão em lote cria evidências
+///    para CNPJs ainda sem perfil cadastral, por isso não há relação Prisma;
+///  - mapeado para a coleção `evidence_normalized`.
+model EvidenceNormalized {
+  /// Identificador da evidência.
+  id_evidence String @id @default(auto()) @map("_id") @db.ObjectId
+
+  /// Chave determinística para upsert idempotente.
+  evidence_key String @unique(map: "idx_evidence_normalized_evidence_key")
+
+  /// CNPJ da empresa (14 dígitos, sem máscara).
+  cnpj String
+
+  /// ID da fonte (`DataSource`) de origem.
+  data_source_id String @db.ObjectId
+
+  /// ID do registro bruto (`EvidenceRaw`); nulo em evidências NOT_FOUND e UNKNOWN.
+  evidence_raw_id String? @db.ObjectId
+
+  /// ID do ODS (`Ods`) ao qual a evidência se vincula.
+  ods_id String @db.ObjectId
+
+  /// Categoria da evidência.
+  category EvidenceCategory
+
+  /// Estado da evidência — nunca booleano (IND02).
+  state EvidenceState
+
+  /// Sinal derivado da categoria: EMISSAO_GEE positivo; demais negativos.
+  signal EvidenceSignal
+
+  /// Resumo legível exibido ao usuário.
+  summary String?
+
+  /// Identificador do registro no órgão de origem (RF09).
+  source_reference String?
+
+  /// Link para auditoria na fonte original (RF09).
+  source_url String?
+
+  /// Atributos normalizados específicos da fonte.
+  details Json?
+
+  /// Data de publicação do registro na fonte (RF08).
+  published_at DateTime?
+
+  /// Data de coleta pelo BIOS (RF08).
+  collected_at DateTime
+
+  /// Após esta data, a evidência passa a OUTDATED até nova coleta.
+  valid_until DateTime
+
+  /// Data/hora de criação do registro.
+  created_at DateTime @default(now())
+
+  /// Data/hora da última atualização do registro.
+  updated_at DateTime @updatedAt
+
+  /// Fonte (`DataSource`) de origem.
+  data_source DataSource @relation(fields: [data_source_id], references: [id_data_source])
+
+  /// Registro bruto (`EvidenceRaw`) de origem.
+  evidence_raw EvidenceRaw? @relation(fields: [evidence_raw_id], references: [id_evidence_raw])
+
+  /// ODS (`Ods`) vinculado.
+  ods Ods @relation(fields: [ods_id], references: [id_ods])
+
+  @@index([cnpj, ods_id, state], map: "idx_evidence_normalized_cnpj_ods_state")
+  @@index([cnpj, category], map: "idx_evidence_normalized_cnpj_category")
+  @@index([valid_until], map: "idx_evidence_normalized_valid_until")
+  @@map("evidence_normalized")
+}
+
+/// Categoria de evidência (ver Projeto e Arquitetura, seção 4).
+enum EvidenceCategory {
+  /// IBAMA — vinculada ao ODS 15.
+  INFRACAO_AMBIENTAL
+
+  /// CGU CEIS/CNEP — ODS 15, sinal complementar de peso reduzido.
+  CONDUTA_ADMINISTRATIVA
+
+  /// GHG Protocol — vinculada ao ODS 13.
+  EMISSAO_GEE
+}
+
+/// Estado de uma evidência. Ausência de dado (UNKNOWN) nunca equivale a evidência negativa.
+enum EvidenceState {
+  /// Registro confirmado na fonte.
+  CONFIRMED
+
+  /// Fonte consultada, sem registro para o CNPJ.
+  NOT_FOUND
+
+  /// Fonte indisponível ou sem cobertura; não pontua.
+  UNKNOWN
+
+  /// Coleta vencida; aguarda atualização.
+  OUTDATED
+}
+
+/// Sinal de uma evidência no cálculo do índice.
+enum EvidenceSignal {
+  /// Contribui positivamente.
+  POSITIVE
+
+  /// Contribui negativamente.
+  NEGATIVE
+}

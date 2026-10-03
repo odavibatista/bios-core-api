@@ -1,0 +1,56 @@
+/// Token de uso único e validade limitada enviado por e-mail ao usuário.
+///
+/// Cobre confirmação de conta (RF28), troca de e-mail (RF26) e recuperação de senha (RF25).
+///
+/// Observações:
+///  - apenas o hash SHA-256 do token é persistido; o valor puro só existe no e-mail enviado;
+///  - retenção: removido após `expires_at` + DATA_RETENTION_USER_TOKENS (padrão 7d), pelo
+///    índice `idx_user_tokens_expires_at` (convertido em TTL na inicialização da API);
+///  - mapeado para a coleção `user_tokens`.
+model UserToken {
+  /// Identificador do token.
+  id_user_token String @id @default(auto()) @map("_id") @db.ObjectId
+
+  /// ID do usuário (`User`) dono do token.
+  user_id String @db.ObjectId
+
+  /// Finalidade do token.
+  purpose UserTokenPurpose
+
+  /// Hash SHA-256 do token enviado por e-mail.
+  token_hash String @unique(map: "idx_user_tokens_token_hash")
+
+  /// Novo e-mail cifrado com AES-256, presente apenas quando `purpose` = EMAIL_CHANGE.
+  pending_email_encrypted String?
+
+  /// Data/hora de expiração do token.
+  expires_at DateTime
+
+  /// Data/hora de uso do token; preenchida, invalida novos usos.
+  used_at DateTime?
+
+  /// Data/hora de criação do registro.
+  created_at DateTime @default(now())
+
+  /// Data/hora da última atualização do registro.
+  updated_at DateTime @updatedAt
+
+  /// Usuário (`User`) dono do token; removido junto com a conta.
+  user User @relation(fields: [user_id], references: [id_user], onDelete: Cascade)
+
+  @@index([user_id, purpose, used_at], map: "idx_user_tokens_user_purpose_used")
+  @@index([expires_at], map: "idx_user_tokens_expires_at")
+  @@map("user_tokens")
+}
+
+/// Finalidade de um token de uso único.
+enum UserTokenPurpose {
+  /// Ativação de conta recém-criada (RF28).
+  EMAIL_CONFIRMATION
+
+  /// Confirmação de troca de e-mail (RF26).
+  EMAIL_CHANGE
+
+  /// Recuperação de senha esquecida (RF25).
+  PASSWORD_RESET
+}

@@ -1,0 +1,31 @@
+/// Chamada registrada a um endpoint isca (RF21).
+///
+/// Observações:
+///  - os dados sintéticos devolvidos pelos endpoints isca são gerados sob demanda,
+///    sem coleção própria;
+///  - retenção: removido após `hit_at` + DATA_RETENTION_HONEYPOT_HITS (padrão 180d), pelo
+///    índice `idx_honeypot_hits_hit_at` (convertido em TTL na inicialização da API);
+///  - mapeado para a coleção `honeypot_hits`.
+model HoneypotHit {
+  /// Identificador do registro.
+  id_honeypot_hit String @id @default(auto()) @map("_id") @db.ObjectId
+
+  /// IP de origem da chamada.
+  ip String
+
+  /// Caminho do endpoint isca chamado.
+  endpoint String
+
+  /// Método HTTP da chamada.
+  http_method String
+
+  /// User-agent de origem da chamada.
+  user_agent String?
+
+  /// Data/hora da chamada.
+  hit_at DateTime @default(now())
+
+  @@index([ip, hit_at], map: "idx_honeypot_hits_ip_hit_at")
+  @@index([hit_at], map: "idx_honeypot_hits_hit_at")
+  @@map("honeypot_hits")
+}
