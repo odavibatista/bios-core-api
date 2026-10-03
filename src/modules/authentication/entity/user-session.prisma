@@ -1,0 +1,83 @@
+/// Elo de uma sessão de usuário: um refresh token de uso único (RF23, RF24, RF32, NFSE05).
+///
+/// Modelo de sessão:
+///  - o login emite um access token JWT de vida curta e um refresh token opaco;
+///  - o access token carrega o ID deste documento (`sid`) e só é aceito enquanto o elo
+///    estiver ativo — revogar o elo invalida o access token imediatamente;
+///  - cada renovação (RF32) consome o refresh token: o elo atual é revogado como ROTATED,
+///    aponta para o novo elo em `replaced_by_session_id`, e o novo elo herda o `family_id`;
+///  - um refresh token já rotacionado, se reapresentado, indica vazamento: todas as
+///    sessões ativas do usuário são revogadas (REUSE_DETECTED) e o titular é alertado.
+///
+/// Observações:
+///  - apenas o hash SHA-256 do refresh token é persistido;
+///  - elos rotacionados são mantidos até a retenção expirar, para que a detecção de reuso
+///    continue funcionando após a rotação;
+///  - retenção: removido após `expires_at` + DATA_RETENTION_USER_SESSIONS (padrão 30d), pelo
+///    índice `idx_user_sessions_expires_at` (convertido em TTL na inicialização da API);
+///  - mapeado para a coleção `user_sessions`.
+model UserSession {
+  /// Identificador do elo; enviado no access token como `sid`.
+  id_user_session String @id @default(auto()) @map("_id") @db.ObjectId
+
+  /// ID do usuário (`User`) dono da sessão.
+  user_id String @db.ObjectId
+
+  /// Identificador da família de rotação: compartilhado por todos os elos originados do
+  /// mesmo login (um dispositivo). Encerrar a sessão revoga a família inteira.
+  family_id String
+
+  /// Hash SHA-256 do refresh token deste elo.
+  refresh_token_hash String @unique(map: "idx_user_sessions_refresh_token_hash")
+
+  /// ID do elo (`UserSession`) que substituiu este na rotação; preenchido apenas quando
+  /// `revocation_reason` = ROTATED.
+  replaced_by_session_id String? @db.ObjectId
+
+  /// IP de origem da emissão deste elo.
+  ip String
+
+  /// User-agent de origem da emissão deste elo.
+  user_agent String?
+
+  /// Expiração do refresh token deste elo (renovada a cada rotação).
+  expires_at DateTime
+
+  /// Data/hora da revogação; preenchida, o elo deixa de ser aceito.
+  revoked_at DateTime?
+
+  /// Motivo da revogação.
+  revocation_reason SessionRevocationReason?
+
+  /// Data/hora de emissão do elo.
+  created_at DateTime @default(now())
+
+  /// Usuário (`User`) dono da sessão; removida junto com a conta.
+  user User @relation(fields: [user_id], references: [id_user], onDelete: Cascade)
+
+  @@index([user_id, revoked_at], map: "idx_user_sessions_user_revoked")
+  @@index([family_id, revoked_at], map: "idx_user_sessions_family_revoked")
+  @@index([expires_at], map: "idx_user_sessions_expires_at")
+  @@map("user_sessions")
+}
+
+/// Motivo de revogação de um elo de sessão.
+enum SessionRevocationReason {
+  /// Refresh token consumido em uma renovação; substituído pelo elo seguinte (RF32).
+  ROTATED
+
+  /// Encerramento da sessão do dispositivo atual (RF23).
+  LOGOUT
+
+  /// Encerramento de todas as sessões do usuário, a pedido dele (RF23).
+  LOGOUT_ALL_DEVICES
+
+  /// Troca de senha pelo usuário autenticado (RF24).
+  PASSWORD_CHANGE
+
+  /// Redefinição de senha esquecida (RF25).
+  PASSWORD_RESET
+
+  /// Refresh token já rotacionado foi reapresentado: indício de vazamento (RF32).
+  REUSE_DETECTED
+}

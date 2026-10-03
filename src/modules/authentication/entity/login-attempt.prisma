@@ -1,0 +1,49 @@
+/// Registro de uma tentativa de autenticação (RF19).
+///
+/// A contagem de falhas consecutivas para o bloqueio temporário (RF20) considera
+/// as tentativas desde o último sucesso, por IP e por usuário.
+///
+/// Observações:
+///  - `user_id` é anulado na exclusão da conta, preservando apenas IP e data/hora;
+///  - retenção: removida após `attempted_at` + DATA_RETENTION_LOGIN_ATTEMPTS (padrão 90d), pelo
+///    índice `idx_login_attempts_attempted_at` (convertido em TTL na inicialização da API);
+///  - mapeado para a coleção `login_attempts`.
+model LoginAttempt {
+  /// Identificador da tentativa.
+  id_login_attempt String @id @default(auto()) @map("_id") @db.ObjectId
+
+  /// ID do usuário (`User`); nulo quando o e-mail informado não corresponde a uma conta.
+  user_id String? @db.ObjectId
+
+  /// IP de origem da tentativa.
+  ip String
+
+  /// Indica se a autenticação foi bem-sucedida.
+  was_successful Boolean
+
+  /// Motivo da falha, quando `was_successful` é falso.
+  failure_reason LoginFailureReason?
+
+  /// Data/hora da tentativa.
+  attempted_at DateTime @default(now())
+
+  /// Usuário (`User`) associado à tentativa.
+  user User? @relation(fields: [user_id], references: [id_user], onDelete: SetNull)
+
+  @@index([ip, attempted_at], map: "idx_login_attempts_ip_attempted_at")
+  @@index([user_id, attempted_at], map: "idx_login_attempts_user_attempted_at")
+  @@index([attempted_at], map: "idx_login_attempts_attempted_at")
+  @@map("login_attempts")
+}
+
+/// Motivo de falha de uma tentativa de autenticação.
+enum LoginFailureReason {
+  /// E-mail inexistente ou senha incorreta (indistinguíveis para quem tenta).
+  INVALID_CREDENTIALS
+
+  /// Conta ainda não confirmada por e-mail.
+  ACCOUNT_INACTIVE
+
+  /// IP ou usuário com bloqueio ativo.
+  ACCESS_BLOCKED
+}

@@ -1,0 +1,92 @@
+/// Execução de um job de ingestão (agendada ou avulsa por CNPJ).
+///
+/// A última execução bem-sucedida de uma fonte em lote define a data de referência
+/// do estado NOT_FOUND das suas evidências.
+///
+/// Observações:
+///  - dump idêntico ao da última execução bem-sucedida (mesmo `dump_checksum`)
+///    encerra o job como SKIPPED_UNCHANGED, sem reprocessamento;
+///  - mapeado para a coleção `ingestion_runs`.
+model IngestionRun {
+  /// Identificador da execução.
+  id_ingestion_run String @id @default(auto()) @map("_id") @db.ObjectId
+
+  /// ID da fonte (`DataSource`) ingerida.
+  data_source_id String @db.ObjectId
+
+  /// Tipo da execução.
+  run_type IngestionRunType
+
+  /// CNPJ alvo, preenchido apenas em execuções avulsas.
+  cnpj String?
+
+  /// Situação da execução.
+  status IngestionRunStatus @default(QUEUED)
+
+  /// Identificador do job BullMQ.
+  job_id String?
+
+  /// Checksum do dump baixado.
+  dump_checksum String?
+
+  /// Quantidade de registros lidos da fonte.
+  records_read Int @default(0)
+
+  /// Quantidade de registros gravados ou atualizados.
+  records_upserted Int @default(0)
+
+  /// Quantidade de registros descartados, incluindo os de pessoa física (CPF).
+  records_discarded Int @default(0)
+
+  /// Mensagem de erro, quando `status` = FAILED.
+  error_message String?
+
+  /// Data/hora de início do processamento.
+  started_at DateTime?
+
+  /// Data/hora de término do processamento.
+  finished_at DateTime?
+
+  /// Data/hora de criação do registro.
+  created_at DateTime @default(now())
+
+  /// Fonte (`DataSource`) ingerida.
+  data_source DataSource @relation(fields: [data_source_id], references: [id_data_source])
+
+  /// Requisições realizadas durante a execução (`DataSourceRequestLog`).
+  request_logs DataSourceRequestLog[]
+
+  /// Registros brutos coletados na execução (`EvidenceRaw`).
+  raw_evidences EvidenceRaw[]
+
+  @@index([data_source_id, status, finished_at], map: "idx_ingestion_runs_source_status_finished")
+  @@index([cnpj], map: "idx_ingestion_runs_cnpj")
+  @@map("ingestion_runs")
+}
+
+/// Tipo de execução de ingestão.
+enum IngestionRunType {
+  /// Job repetível agendado (ex.: ingestão diária do IBAMA).
+  SCHEDULED
+
+  /// Job avulso disparado sob demanda para um CNPJ.
+  ON_DEMAND
+}
+
+/// Situação de uma execução de ingestão.
+enum IngestionRunStatus {
+  /// Enfileirada, aguardando processamento.
+  QUEUED
+
+  /// Em processamento.
+  RUNNING
+
+  /// Concluída com sucesso.
+  SUCCEEDED
+
+  /// Encerrada sem reprocessamento: dump idêntico ao da última execução.
+  SKIPPED_UNCHANGED
+
+  /// Encerrada com falha após esgotar as tentativas.
+  FAILED
+}

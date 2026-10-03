@@ -1,0 +1,86 @@
+/// Conta de usuário do BIOS.
+///
+/// Armazena identidade, credenciais e papel de acesso. Campos pessoais são
+/// cifrados com AES-256; a senha recebe duas camadas (hash bcrypt cifrado com AES-256).
+///
+/// Observações:
+///  - sem soft delete: a exclusão de conta (RF27) remove o documento e, por cascata,
+///    tokens, sessões e chaves de API (direito de eliminação da LGPD);
+///  - as chaves de cifragem nunca ficam no banco, apenas sua versão;
+///  - mapeado para a coleção `users`.
+model User {
+  /// Identificador do usuário.
+  id_user String @id @default(auto()) @map("_id") @db.ObjectId
+
+  /// Nome de exibição do usuário.
+  user_name String
+
+  /// E-mail cifrado com AES-256.
+  email_encrypted String
+
+  /// Índice cego: hash determinístico do e-mail normalizado, usado no login e na verificação de unicidade.
+  email_hash String @unique(map: "idx_users_email_hash")
+
+  /// Hash bcrypt da senha, cifrado com AES-256.
+  password_encrypted String
+
+  /// Endereço completo serializado e cifrado com AES-256.
+  address_encrypted String?
+
+  /// Versão da chave AES usada nos campos cifrados deste documento (rotação de chaves).
+  encryption_key_version Int @default(1)
+
+  /// Papel de acesso do usuário.
+  role UserRole @default(USER)
+
+  /// Falso até a confirmação do e-mail (RF28).
+  is_active Boolean @default(false)
+
+  /// Data/hora da confirmação do e-mail.
+  email_confirmed_at DateTime?
+
+  /// Data/hora do último login bem-sucedido.
+  last_login_at DateTime?
+
+  /// Data/hora da última troca de senha.
+  password_changed_at DateTime?
+
+  /// Data/hora de criação do registro.
+  created_at DateTime @default(now())
+
+  /// Data/hora da última atualização do registro.
+  updated_at DateTime @updatedAt
+
+  /// Tokens de uso único enviados por e-mail (`UserToken`).
+  tokens UserToken[]
+
+  /// Sessões JWT emitidas para o usuário (`UserSession`).
+  sessions UserSession[]
+
+  /// Chaves de API geradas pelo usuário (`ApiKey`).
+  api_keys ApiKey[]
+
+  /// Tentativas de login associadas ao usuário (`LoginAttempt`).
+  login_attempts LoginAttempt[]
+
+  /// Bloqueios aplicados ao usuário (`AccessBlock`).
+  access_blocks AccessBlock[]
+
+  /// Domínios incluídos na blacklist por este usuário, quando administrador (`BlockedEmailDomain`).
+  blocked_email_domains BlockedEmailDomain[]
+
+  /// E-mails transacionais enviados ao usuário (`EmailDispatchLog`).
+  email_dispatch_logs EmailDispatchLog[]
+
+  @@index([role], map: "idx_users_role")
+  @@map("users")
+}
+
+/// Papel de acesso do usuário. O Administrador é a mesma entidade, diferenciada apenas por este enum.
+enum UserRole {
+  /// Usuário comum (padrão).
+  USER
+
+  /// Usuário com acesso à gestão da blacklist de domínios de e-mail.
+  ADMIN
+}
