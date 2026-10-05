@@ -1,15 +1,25 @@
+import { faker } from '@test/support/faker.js';
 import { Duration } from './duration.js';
 
 describe('Duration', () => {
   it.each([
-    ['45s', 45],
-    ['30m', 1_800],
-    ['12h', 43_200],
-    ['7d', 604_800],
-    ['4w', 2_419_200],
-    [' 90D ', 7_776_000],
-  ])('interpreta "%s" como %i segundos', (text, seconds) => {
-    expect(Duration.parse(text).toSeconds()).toBe(seconds);
+    ['s', 1],
+    ['m', 60],
+    ['h', 3_600],
+    ['d', 86_400],
+    ['w', 604_800],
+  ])('interpreta quantidades em "%s" (%i segundos cada)', (unit, seconds) => {
+    const amount = faker.number.int({ max: 10_000 });
+
+    expect(Duration.parse(`${amount}${unit}`).toSeconds()).toBe(
+      amount * seconds,
+    );
+  });
+
+  it('ignora espaços nas bordas e diferença de caixa', () => {
+    const days = faker.number.int({ min: 1, max: 999 });
+
+    expect(Duration.parse(` ${days}D `).toSeconds()).toBe(days * 86_400);
   });
 
   it.each([
@@ -26,7 +36,9 @@ describe('Duration', () => {
   });
 
   it('converte para milissegundos', () => {
-    expect(Duration.parse('2m').toMilliseconds()).toBe(120_000);
+    const seconds = faker.number.int({ max: 10_000_000 });
+
+    expect(Duration.ofSeconds(seconds).toMilliseconds()).toBe(seconds * 1_000);
   });
 
   it.each([
@@ -40,11 +52,12 @@ describe('Duration', () => {
   });
 
   it('compara durações', () => {
-    const oneDay = Duration.parse('1d');
+    const days = faker.number.int({ min: 1, max: 365 });
+    const duration = Duration.parse(`${days}d`);
 
-    expect(oneDay.isAtLeast(Duration.parse('24h'))).toBe(true);
-    expect(oneDay.isAtLeast(Duration.parse('2d'))).toBe(false);
-    expect(oneDay.equals(Duration.parse('1440m'))).toBe(true);
+    expect(duration.isAtLeast(Duration.parse(`${days * 24}h`))).toBe(true);
+    expect(duration.isAtLeast(Duration.parse(`${days + 1}d`))).toBe(false);
+    expect(duration.equals(Duration.parse(`${days * 1_440}m`))).toBe(true);
   });
 
   it.each([-1, 1.5, Number.NaN])('rejeita %d segundos', (seconds) => {

@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ConfigService } from '@nestjs/config';
-import { Duration } from '../domain/value-objects/duration.js';
+import { buildDuration } from '@test/factories/shared/duration.factory.js';
 import {
   buildRetentionPolicies,
   RETENTION_RULES,
@@ -19,27 +19,29 @@ function readEntitySchemas(): string {
 }
 
 describe('data-retention.config', () => {
-  it('monta uma política por regra, com a retenção configurada', () => {
-    const retention = Duration.parse('3d');
+  it('monta uma política por regra, com a retenção configurada na variável da regra', () => {
+    const retentionBySetting = new Map(
+      RETENTION_RULES.map(({ setting }) => [setting, buildDuration()]),
+    );
     const configService = {
-      get: vi.fn(() => retention),
+      get: vi.fn((setting: string) =>
+        retentionBySetting.get(
+          setting as (typeof RETENTION_RULES)[number]['setting'],
+        ),
+      ),
     } as unknown as ConfigService<Environment, true>;
 
     const policies = buildRetentionPolicies(configService);
 
-    expect(policies).toHaveLength(RETENTION_RULES.length);
-    expect(policies[0]).toEqual({
-      collection: 'user_tokens',
-      field: 'expires_at',
-      indexName: 'idx_user_tokens_expires_at',
-      retention,
-    });
-    expect(configService.get).toHaveBeenCalledWith(
-      'DATA_RETENTION_USER_TOKENS',
-      {
-        infer: true,
-      },
+    expect(policies).toEqual(
+      RETENTION_RULES.map(({ setting, ...rule }) => ({
+        ...rule,
+        retention: retentionBySetting.get(setting),
+      })),
     );
+    for (const { setting } of RETENTION_RULES) {
+      expect(configService.get).toHaveBeenCalledWith(setting, { infer: true });
+    }
   });
 
   describe('coerência com os schemas Prisma', () => {

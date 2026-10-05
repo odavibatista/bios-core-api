@@ -18,7 +18,7 @@ A documentação de requisitos, modelagem e arquitetura do projeto fica no repos
 | Validação e DTOs | Zod 4 com Standard Schema nativo do Nest (`@Body({ schema })`) |
 | Documentação da API | `@nestjs/swagger` 12 (OpenAPI gerado dos schemas Zod) + Scalar |
 | Filas e cache | Redis 7 (BullMQ — a configurar com os módulos de ingestão) |
-| Testes | Vitest 4 + `@nestjs/testing` + Supertest |
+| Testes | Vitest 4 + `@nestjs/testing` + Supertest + Faker (dados de teste) |
 | Qualidade | ESLint 10 (`typescript-eslint`, type-checked) + Prettier |
 
 O Prisma está fixado na série 6 porque a série 7 ainda não suporta MongoDB.
@@ -134,8 +134,9 @@ src/
 - **Controllers** retornam valores — sem `@Res()` —, preservando interceptors, filtros e
   serialização do framework.
 - **Imports.** Relativos dentro da mesma área (`app`, `shared` ou um módulo); entre áreas,
-  pelos aliases `@app/*`, `@shared/*` e `@modules/*`. Por ser ESM, todo import relativo ou
-  por alias termina em `.js`.
+  pelos aliases `@app/*`, `@shared/*` e `@modules/*`; os testes de `src/` chegam ao apoio de
+  teste (`test/`) por `@test/*`. Por ser ESM, todo import relativo ou por alias termina em
+  `.js`.
 
 ## Banco de dados (Prisma)
 
@@ -193,8 +194,23 @@ Vitest com a API de mocks equivalente à do Jest (`vi.fn`, `vi.spyOn`). Dependê
 substituídas pelo container do Nest com `Test.createTestingModule(...).overrideProvider()`,
 sem mock de módulo inteiro. Mocks são limpos e restaurados automaticamente entre testes.
 
-A cobertura mínima de 75% (RNF NFPD03) é verificada em `npm run test:cov`; ficam fora da
-medição apenas o bootstrap (`main.ts`) e as declarações de módulo.
+### Cobertura
+
+`npm run test:cov` mede a cobertura do código de `src/` e reprova a execução abaixo de 75% em
+linhas, funções, branches ou statements (RNF NFPD03). O relatório fica em `coverage/`:
+`index.html` para navegação, `coverage-summary.json` e `lcov.info` para ferramentas. Ele é
+gerado mesmo quando algum teste falha.
+
+Ficam fora da medição, pelo sufixo do nome (`COVERAGE_EXCLUDE` em `vitest.config.ts`):
+
+| Sufixo | Motivo |
+| --- | --- |
+| `.spec.ts`, `main.ts` | Os próprios testes e o bootstrap da aplicação |
+| `seeder.ts` | Seeders de catálogo, exercitados contra o banco real nos testes e2e |
+| `config.ts` | Configuração da aplicação, validada na inicialização |
+| `.exception.ts`, `.protocol.ts`, `.decorator.ts`, `.module.ts` | Declarações: exceções de domínio, contratos, decorators e módulos do Nest |
+
+Os testes desses arquivos continuam sendo executados; eles só não entram no cálculo do limite.
 
 ### Testes e2e
 
@@ -224,6 +240,33 @@ suba a infraestrutura antes: `npm run docker:up`.
 Os catálogos de referência (ODS, fontes de dados e blacklist de domínios) têm seeders
 idempotentes nos próprios módulos (`infra/db/seeders/`), reunidos em
 `src/app/database/catalog.seeders.ts` na ordem de dependência.
+
+### Dados de teste
+
+Todas as suítes, unitárias e e2e, geram seus dados com o Faker (locale pt-BR). Valores
+arbitrários não são fixados à mão; ficam fixos apenas os valores que são a própria regra
+testada, como os ODS de referência, os padrões da configuração ou as mensagens de erro.
+
+- **Instância única**: os testes importam `faker` de `test/support/faker.ts`. O ESLint
+  bloqueia o import direto de `@faker-js/faker` nos testes; o código de produção (ex.:
+  honeypot, RF21) continua livre para usá-lo.
+- **Factories**: registros e objetos de domínio vêm de `test/factories/<módulo>/`, criados
+  com `defineFactory`. `build(overrides)` gera um objeto completo e fixa só os campos do
+  cenário; `buildMany(n, overrides)` gera vários.
+- **Semente reproduzível**: cada arquivo de teste recebe uma semente aleatória
+  (`test/setup/faker.setup.ts`). Quando um teste falha, a semente aparece na saída; para
+  repetir exatamente os mesmos dados:
+
+```bash
+FAKER_SEED=<semente> npx vitest run <arquivo>        # bash
+$env:FAKER_SEED=<semente>; npx vitest run <arquivo>  # PowerShell
+```
+
+```ts
+import { odsFactory } from '@test/factories/scoring/ods.factory.js';
+
+const ods = odsFactory.build({ ods_number: 15 }); // demais campos aleatórios
+```
 
 ## Qualidade e integração contínua
 

@@ -1,4 +1,5 @@
 import type { ArgumentMetadata } from '@nestjs/common';
+import { faker } from '@test/support/faker.js';
 import { z } from 'zod';
 import { PaginationQuerySchema } from '../../domain/dtos/requests/pagination.dto.js';
 import { ValidationFailedException } from '../../domain/errors/validation-failed.exception.js';
@@ -18,22 +19,23 @@ describe('SchemaValidationPipe', () => {
   };
 
   it('devolve o valor transformado pelo schema', async () => {
+    const page = faker.number.int({ min: 1, max: 1_000 });
     const queryMetadata: ArgumentMetadata = {
       type: 'query',
       schema: PaginationQuerySchema,
     };
 
-    await expect(pipe.transform({ page: '3' }, queryMetadata)).resolves.toEqual(
-      {
-        page: 3,
-        page_size: 20,
-      },
-    );
+    await expect(
+      pipe.transform({ page: String(page) }, queryMetadata),
+    ).resolves.toEqual({ page, page_size: 20 });
   });
 
   it('lança ValidationFailedException com o caminho de cada campo inválido', async () => {
     const attempt = pipe.transform(
-      { cnpj: '123', address: { uf: 'SAO' } },
+      {
+        cnpj: faker.string.numeric({ length: { min: 1, max: 13 } }),
+        address: { uf: faker.string.alpha({ length: { min: 3, max: 5 } }) },
+      },
       bodyMetadata,
     );
 
@@ -47,8 +49,8 @@ describe('SchemaValidationPipe', () => {
   });
 
   it('não valida parâmetros sem schema declarado', async () => {
-    await expect(pipe.transform('livre', { type: 'param' })).resolves.toBe(
-      'livre',
-    );
+    const value = faker.lorem.word();
+
+    await expect(pipe.transform(value, { type: 'param' })).resolves.toBe(value);
   });
 });

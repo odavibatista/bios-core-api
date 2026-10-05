@@ -1,16 +1,11 @@
 import { Test } from '@nestjs/testing';
-import type { HealthCheckResponse } from '../../domain/dtos/requests/health-check.dto.js';
+import { healthCheckResponseFactory } from '@test/factories/shared/health-check-response.factory.js';
 import { CheckHealthUseCase } from '../../infra/usecases/health/check-health.usecase.js';
 import { HealthController } from './health.controller.js';
 
 describe('HealthController', () => {
   it('delega a verificação ao caso de uso', async () => {
-    const health: HealthCheckResponse = {
-      status: 'ok',
-      uptime_seconds: 42,
-      checks: { database: 'up' },
-      timestamp: '2026-10-03T12:00:00.000Z',
-    };
+    const health = healthCheckResponseFactory.build();
     const execute = vi.fn().mockResolvedValue(health);
 
     const moduleRef = await Test.createTestingModule({

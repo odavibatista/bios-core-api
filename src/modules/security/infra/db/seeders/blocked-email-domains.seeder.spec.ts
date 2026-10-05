@@ -1,4 +1,6 @@
-import type { PrismaClient } from '@prisma/client';
+import { BlockedDomainOrigin, type PrismaClient } from '@prisma/client';
+import { blockedEmailDomainFactory } from '@test/factories/security/blocked-email-domain.factory.js';
+import { faker } from '@test/support/faker.js';
 import {
   BlockedEmailDomainsSeeder,
   SEED_BLOCKED_EMAIL_DOMAINS,
@@ -6,10 +8,14 @@ import {
 
 const DOMAIN = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/;
 
-function createClient(existingDomains: string[]) {
+function createClient(existingDomains: readonly string[]) {
   const findMany = vi
     .fn()
-    .mockResolvedValue(existingDomains.map((domain) => ({ domain })));
+    .mockResolvedValue(
+      existingDomains.map((domain) =>
+        blockedEmailDomainFactory.build({ domain }),
+      ),
+    );
   const createMany = vi.fn().mockResolvedValue({ count: 0 });
   const client = {
     blockedEmailDomain: { findMany, createMany },
@@ -32,7 +38,11 @@ describe('BlockedEmailDomainsSeeder', () => {
   });
 
   it('insere em lote, com origem SEED, apenas os domínios ainda ausentes', async () => {
-    const { client, findMany, createMany } = createClient(['mailinator.com']);
+    const existing = faker.helpers.arrayElements(SEED_BLOCKED_EMAIL_DOMAINS, {
+      min: 1,
+      max: 50,
+    });
+    const { client, findMany, createMany } = createClient(existing);
 
     await new BlockedEmailDomainsSeeder().run(client);
 
@@ -40,17 +50,20 @@ describe('BlockedEmailDomainsSeeder', () => {
     expect(createMany).toHaveBeenCalledOnce();
 
     const [{ data }] = createMany.mock.calls[0] as [
-      { data: { domain: string; origin: string }[] },
+      { data: { domain: string; origin: BlockedDomainOrigin }[] },
     ];
-    expect(data).toHaveLength(SEED_BLOCKED_EMAIL_DOMAINS.length - 1);
-    expect(data).toContainEqual({ domain: 'yopmail.com', origin: 'SEED' });
-    expect(data.map(({ domain }) => domain)).not.toContain('mailinator.com');
+    const inserted = data.map(({ domain }) => domain);
+
+    expect([...inserted, ...existing].sort()).toEqual(
+      [...SEED_BLOCKED_EMAIL_DOMAINS].sort(),
+    );
+    expect(
+      data.every(({ origin }) => origin === BlockedDomainOrigin.SEED),
+    ).toBe(true);
   });
 
   it('não insere nada quando todos os domínios já existem, preservando remoções lógicas', async () => {
-    const { client, createMany } = createClient([
-      ...SEED_BLOCKED_EMAIL_DOMAINS,
-    ]);
+    const { client, createMany } = createClient(SEED_BLOCKED_EMAIL_DOMAINS);
 
     await new BlockedEmailDomainsSeeder().run(client);
 
