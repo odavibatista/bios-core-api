@@ -16,6 +16,8 @@ export default defineConfig({
     clearMocks: true,
     restoreMocks: true,
     root: './',
+    // Semente do Faker por arquivo, exibida quando um teste falha.
+    setupFiles: ['test/setup/faker.setup.ts'],
     include: ['src/**/*.spec.ts'],
     coverage: {
       provider: 'v8',
