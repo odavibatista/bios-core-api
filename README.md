@@ -193,8 +193,23 @@ Vitest com a API de mocks equivalente à do Jest (`vi.fn`, `vi.spyOn`). Dependê
 substituídas pelo container do Nest com `Test.createTestingModule(...).overrideProvider()`,
 sem mock de módulo inteiro. Mocks são limpos e restaurados automaticamente entre testes.
 
-A cobertura mínima de 75% (RNF NFPD03) é verificada em `npm run test:cov`; ficam fora da
-medição apenas o bootstrap (`main.ts`) e as declarações de módulo.
+### Cobertura
+
+`npm run test:cov` mede a cobertura do código de `src/` e reprova a execução abaixo de 75% em
+linhas, funções, branches ou statements (RNF NFPD03). O relatório fica em `coverage/`:
+`index.html` para navegação, `coverage-summary.json` e `lcov.info` para ferramentas. Ele é
+gerado mesmo quando algum teste falha.
+
+Ficam fora da medição, pelo sufixo do nome (`COVERAGE_EXCLUDE` em `vitest.config.ts`):
+
+| Sufixo | Motivo |
+| --- | --- |
+| `.spec.ts`, `main.ts` | Os próprios testes e o bootstrap da aplicação |
+| `seeder.ts` | Seeders de catálogo, exercitados contra o banco real nos testes e2e |
+| `config.ts` | Configuração da aplicação, validada na inicialização |
+| `.exception.ts`, `.protocol.ts`, `.decorator.ts`, `.module.ts` | Declarações: exceções de domínio, contratos, decorators e módulos do Nest |
+
+Os testes desses arquivos continuam sendo executados; eles só não entram no cálculo do limite.
 
 ### Testes e2e
 
