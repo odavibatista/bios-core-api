@@ -49,7 +49,7 @@ npm run start:dev           # API em http://localhost:3000
 | `format` / `format:check` | Prettier com e sem reescrita |
 | `typecheck` | Verificação de tipos sem emitir arquivos |
 | `test` / `test:watch` / `test:cov` | Testes unitários (com limite de cobertura de 75%) |
-| `test:e2e` | Testes ponta a ponta sobre o `AppModule` |
+| `test:e2e` | Testes ponta a ponta sobre o `AppModule` (pipeline HTTP e banco real) |
 | `verify` | Typecheck, testes com cobertura e e2e (o mesmo que roda no pre-push) |
 | `prisma:generate` / `prisma:validate` / `prisma:format` | Operações sobre o schema Prisma |
 | `db:push` | Sincroniza coleções e índices do MongoDB com o schema |
@@ -195,6 +195,35 @@ sem mock de módulo inteiro. Mocks são limpos e restaurados automaticamente ent
 
 A cobertura mínima de 75% (RNF NFPD03) é verificada em `npm run test:cov`; ficam fora da
 medição apenas o bootstrap (`main.ts`) e as declarações de módulo.
+
+### Testes e2e
+
+| Pasta | Escopo |
+| --- | --- |
+| `test/http/` | Pipeline HTTP sobre o `AppModule`, com dependências substituídas via `overrideProvider` |
+| `test/database/` | `AppModule` completo contra um MongoDB real e descartável |
+
+O banco de teste é montado e desmontado pelo setup global (`test/setup/database.global-setup.ts`)
+a cada execução de `npm run test:e2e`:
+
+1. sincroniza coleções e índices com o schema Prisma (`prisma db push`);
+2. disponibiliza o banco às suítes, que o preparam com `PrismaService.reset()` e
+   `PrismaService.seed(seeders)`;
+3. remove o banco inteiro ao final (`dropDatabase`).
+
+O banco padrão é `bios_test` no MongoDB do `docker-compose.yml`; outro endereço pode ser
+informado em `E2E_DATABASE_URL`. `seed` e `reset` só executam com `NODE_ENV=test` **e** em
+banco com sufixo `_test` — fora disso lançam `UnsafeDatabaseOperationException`, o que impede
+que uma configuração errada apague dados reais. As suítes de `test/database/` rodam em série,
+pois compartilham o banco.
+
+Sem MongoDB acessível, as suítes de banco são ignoradas localmente (com aviso) e as demais
+seguem normalmente; no CI a ausência do banco reprova a execução. Para rodá-las localmente,
+suba a infraestrutura antes: `npm run docker:up`.
+
+Os catálogos de referência (ODS, fontes de dados e blacklist de domínios) têm seeders
+idempotentes nos próprios módulos (`infra/db/seeders/`), reunidos em
+`src/app/database/catalog.seeders.ts` na ordem de dependência.
 
 ## Qualidade e integração contínua
 
