@@ -106,7 +106,12 @@ jobs:
       - name: Testes unitários e de integração (cobertura mínima de 75% — NFPD03)
         run: npm run test:cov
 
-      - name: Testes e2e
+      # Mesma definição do ambiente local; --wait aguarda o healthcheck, que só
+      # passa quando o replica set já tem primário (aceita escrita).
+      - name: MongoDB de teste (replica set)
+        run: docker compose up --detach --wait mongodb
+
+      - name: Testes e2e (pipeline HTTP e banco real)
         run: npm run test:e2e
 
       - name: Resumo de cobertura

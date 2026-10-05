@@ -2,7 +2,9 @@
 #
 # O MongoDB sobe como replica set de nó único: o Prisma exige replica set para
 # executar transações e as ações referenciais emuladas (ex.: cascata na exclusão
-# de conta). O healthcheck inicializa o replica set na primeira execução.
+# de conta). O healthcheck inicializa o replica set na primeira execução e só
+# reporta o serviço como saudável quando o nó já é primário (aceita escrita), o
+# que permite aguardar o banco com `docker compose up --wait` (usado no CI).
 services:
   mongodb:
     image: mongo:8
@@ -18,7 +20,7 @@ services:
         - mongosh
         - --quiet
         - --eval
-        - "try { rs.status().ok } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'localhost:27017' }] }).ok }"
+        - "try { rs.status() } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'localhost:27017' }] }) } quit(db.hello().isWritablePrimary ? 0 : 1)"
       interval: 5s
       timeout: 10s
       retries: 10
