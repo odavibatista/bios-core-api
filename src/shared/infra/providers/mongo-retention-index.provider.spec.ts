@@ -1,16 +1,8 @@
+import { retentionPolicyFactory } from '@test/factories/shared/retention-policy.factory.js';
+import { faker } from '@test/support/faker.js';
 import type { RetentionPolicy } from '../../domain/dtos/providers/retention-policy.dto.js';
-import { Duration } from '../../domain/value-objects/duration.js';
 import type { PrismaService } from '../database/prisma.service.js';
 import { MongoRetentionIndexProvider } from './mongo-retention-index.provider.js';
-
-const policy: RetentionPolicy = {
-  collection: 'login_attempts',
-  field: 'attempted_at',
-  indexName: 'idx_login_attempts_attempted_at',
-  retention: Duration.parse('90d'),
-};
-
-const NINETY_DAYS = 7_776_000;
 
 function listIndexesResult(indexes: object[]) {
   return { cursor: { firstBatch: indexes, id: 0 }, ok: 1 };
@@ -22,6 +14,14 @@ describe('MongoRetentionIndexProvider', () => {
     $runCommandRaw: runCommandRaw,
   } as unknown as PrismaService);
 
+  let policy: RetentionPolicy;
+  let expireAfterSeconds: number;
+
+  beforeEach(() => {
+    policy = retentionPolicyFactory.build();
+    expireAfterSeconds = policy.retention.toSeconds();
+  });
+
   it('cria o índice já com TTL quando ele não existe', async () => {
     runCommandRaw
       .mockResolvedValueOnce(
@@ -31,12 +31,12 @@ describe('MongoRetentionIndexProvider', () => {
 
     await expect(provider.apply(policy)).resolves.toBe('created');
     expect(runCommandRaw).toHaveBeenLastCalledWith({
-      createIndexes: 'login_attempts',
+      createIndexes: policy.collection,
       indexes: [
         {
-          key: { attempted_at: 1 },
-          name: 'idx_login_attempts_attempted_at',
-          expireAfterSeconds: NINETY_DAYS,
+          key: { [policy.field]: 1 },
+          name: policy.indexName,
+          expireAfterSeconds,
         },
       ],
     });
@@ -56,18 +56,15 @@ describe('MongoRetentionIndexProvider', () => {
     runCommandRaw
       .mockResolvedValueOnce(
         listIndexesResult([
-          { name: policy.indexName, key: { attempted_at: 1 } },
+          { name: policy.indexName, key: { [policy.field]: 1 } },
         ]),
       )
       .mockResolvedValueOnce({ ok: 1 });
 
     await expect(provider.apply(policy)).resolves.toBe('updated');
     expect(runCommandRaw).toHaveBeenLastCalledWith({
-      collMod: 'login_attempts',
-      index: {
-        name: 'idx_login_attempts_attempted_at',
-        expireAfterSeconds: NINETY_DAYS,
-      },
+      collMod: policy.collection,
+      index: { name: policy.indexName, expireAfterSeconds },
     });
   });
 
@@ -77,8 +74,9 @@ describe('MongoRetentionIndexProvider', () => {
         listIndexesResult([
           {
             name: policy.indexName,
-            key: { attempted_at: 1 },
-            expireAfterSeconds: 3_600,
+            key: { [policy.field]: 1 },
+            expireAfterSeconds:
+              expireAfterSeconds + faker.number.int({ min: 1, max: 86_400 }),
           },
         ]),
       )
@@ -92,8 +90,8 @@ describe('MongoRetentionIndexProvider', () => {
       listIndexesResult([
         {
           name: policy.indexName,
-          key: { attempted_at: 1 },
-          expireAfterSeconds: NINETY_DAYS,
+          key: { [policy.field]: 1 },
+          expireAfterSeconds,
         },
       ]),
     );
@@ -103,20 +101,23 @@ describe('MongoRetentionIndexProvider', () => {
   });
 
   it('rejeita índice homônimo sobre outra chave', async () => {
+    const otherField = `${policy.field}_${faker.string.alpha({ length: 4, casing: 'lower' })}`;
+
     runCommandRaw.mockResolvedValueOnce(
       listIndexesResult([
-        { name: policy.indexName, key: { ip: 1, attempted_at: 1 } },
+        { name: policy.indexName, key: { [otherField]: 1, [policy.field]: 1 } },
       ]),
     );
 
     await expect(provider.apply(policy)).rejects.toThrow(
-      /exige índice simples sobre "attempted_at"/,
+      `exige índice simples sobre "${policy.field}"`,
     );
   });
 
   it('propaga erros que não sejam de coleção inexistente', async () => {
-    runCommandRaw.mockRejectedValueOnce(new Error('connection refused'));
+    const message = faker.lorem.sentence();
+    runCommandRaw.mockRejectedValueOnce(new Error(message));
 
-    await expect(provider.apply(policy)).rejects.toThrow('connection refused');
+    await expect(provider.apply(policy)).rejects.toThrow(message);
   });
 });

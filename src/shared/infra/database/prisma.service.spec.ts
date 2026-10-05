@@ -1,12 +1,21 @@
 import type { ConfigService } from '@nestjs/config';
 import type { PrismaClient } from '@prisma/client';
+import { faker } from '@test/support/faker.js';
 import type { Environment } from '../../config/environment.config.js';
 import { UnsafeDatabaseOperationException } from '../../domain/errors/unsafe-database-operation.exception.js';
 import { DatabaseSeeder } from './database-seeder.js';
 import { DATABASE_HEALTH_TIMEOUT_MS, PrismaService } from './prisma.service.js';
 
-const TEST_DATABASE_URL =
-  'mongodb://localhost:27017/bios_test?directConnection=true';
+/** Nome aleatório em minúsculas, usado para bancos e coleções. */
+function randomName(): string {
+  return faker.string.alpha({ length: { min: 3, max: 12 }, casing: 'lower' });
+}
+
+function mongoUrl(databaseName: string): string {
+  return `mongodb://${faker.internet.domainName()}:${faker.internet.port()}/${databaseName}?directConnection=true`;
+}
+
+const TEST_DATABASE_URL = mongoUrl(`${randomName()}_test`);
 
 function createService(
   environment: Partial<Pick<Environment, 'NODE_ENV' | 'DATABASE_URL'>> = {},
@@ -65,7 +74,7 @@ describe('PrismaService', () => {
 
     it('retorna falso quando o ping falha', async () => {
       vi.spyOn(service, '$runCommandRaw').mockRejectedValue(
-        new Error('offline'),
+        new Error(faker.lorem.sentence()),
       );
 
       await expect(service.isAvailable()).resolves.toBe(false);
@@ -97,19 +106,25 @@ describe('PrismaService', () => {
   describe('seed', () => {
     it('executa os seeders na ordem informada, com o próprio cliente', async () => {
       const calls: SeederCall[] = [];
+      const names = faker.helpers.uniqueArray(
+        () => faker.lorem.slug(2),
+        faker.number.int({ min: 2, max: 5 }),
+      );
 
-      await service.seed([
-        new RecordingSeeder('ods', calls),
-        new RecordingSeeder('data-sources', calls),
-      ]);
+      await service.seed(names.map((name) => new RecordingSeeder(name, calls)));
 
-      expect(calls.map(({ name }) => name)).toEqual(['ods', 'data-sources']);
+      expect(calls.map(({ name }) => name)).toEqual(names);
       expect(calls.every(({ client }) => client === service)).toBe(true);
     });
   });
 
   describe('reset', () => {
     it('limpa todas as coleções do banco, ignorando as de sistema', async () => {
+      const collections = faker.helpers.uniqueArray(
+        randomName,
+        faker.number.int({ min: 1, max: 5 }),
+      );
+      const systemCollection = `system.${randomName()}`;
       const runCommandRaw = vi
         .spyOn(service, '$runCommandRaw')
         .mockImplementation(
@@ -118,11 +133,9 @@ describe('PrismaService', () => {
               'listCollections' in command
                 ? {
                     cursor: {
-                      firstBatch: [
-                        { name: 'users' },
-                        { name: 'ods' },
-                        { name: 'system.views' },
-                      ],
+                      firstBatch: [...collections, systemCollection].map(
+                        (name) => ({ name }),
+                      ),
                     },
                   }
                 : { ok: 1 },
@@ -131,29 +144,28 @@ describe('PrismaService', () => {
 
       await service.reset();
 
-      expect(runCommandRaw).toHaveBeenCalledWith({
-        delete: 'users',
-        deletes: [{ q: {}, limit: 0 }],
-      });
-      expect(runCommandRaw).toHaveBeenCalledWith({
-        delete: 'ods',
-        deletes: [{ q: {}, limit: 0 }],
-      });
+      for (const collection of collections) {
+        expect(runCommandRaw).toHaveBeenCalledWith({
+          delete: collection,
+          deletes: [{ q: {}, limit: 0 }],
+        });
+      }
       expect(runCommandRaw).not.toHaveBeenCalledWith(
-        expect.objectContaining({ delete: 'system.views' }),
+        expect.objectContaining({ delete: systemCollection }),
       );
     });
 
     it('limpa apenas as coleções informadas', async () => {
+      const collection = randomName();
       const runCommandRaw = vi
         .spyOn(service, '$runCommandRaw')
         .mockResolvedValue({ ok: 1 });
 
-      await service.reset(['user_tokens']);
+      await service.reset([collection]);
 
       expect(runCommandRaw).toHaveBeenCalledOnce();
       expect(runCommandRaw).toHaveBeenCalledWith({
-        delete: 'user_tokens',
+        delete: collection,
         deletes: [{ q: {}, limit: 0 }],
       });
     });
@@ -161,13 +173,16 @@ describe('PrismaService', () => {
 
   describe('proteção contra uso fora de banco descartável', () => {
     it.each([
-      ['NODE_ENV diferente de test', { NODE_ENV: 'development' as const }],
       [
-        'banco sem o sufixo _test',
+        'NODE_ENV diferente de test',
         {
-          DATABASE_URL: 'mongodb://localhost:27017/bios?directConnection=true',
+          NODE_ENV: faker.helpers.arrayElement([
+            'development',
+            'production',
+          ] as const),
         },
       ],
+      ['banco sem o sufixo _test', { DATABASE_URL: mongoUrl(randomName()) }],
     ])('recusa seed e reset com %s', async (_case, environment) => {
       const unsafeService = createService(environment);
       const runCommandRaw = vi.spyOn(unsafeService, '$runCommandRaw');
