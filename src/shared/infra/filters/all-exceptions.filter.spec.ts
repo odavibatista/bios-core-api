@@ -1,14 +1,16 @@
 import { type ArgumentsHost, Logger, NotFoundException } from '@nestjs/common';
 import type { HttpAdapterHost } from '@nestjs/core';
+import { faker } from '@test/support/faker.js';
 import { DependencyUnavailableException } from '../../domain/errors/dependency-unavailable.exception.js';
 import { ValidationFailedException } from '../../domain/errors/validation-failed.exception.js';
 import { AllExceptionsFilter } from './all-exceptions.filter.js';
 
 describe('AllExceptionsFilter', () => {
+  const path = `/${faker.lorem.slug(2)}`;
   const response = {};
   const reply = vi.fn();
   const httpAdapterHost = {
-    httpAdapter: { getRequestUrl: vi.fn(() => '/companies'), reply },
+    httpAdapter: { getRequestUrl: vi.fn(() => path), reply },
   } as unknown as HttpAdapterHost;
   const host = {
     switchToHttp: () => ({
@@ -24,7 +26,9 @@ describe('AllExceptionsFilter', () => {
   });
 
   it('usa código e detalhes definidos pela exceção de domínio', () => {
-    const issues = [{ path: 'cnpj', message: 'inválido' }];
+    const issues = [
+      { path: faker.database.column(), message: faker.lorem.sentence() },
+    ];
 
     filter.catch(new ValidationFailedException(issues), host);
 
@@ -34,28 +38,30 @@ describe('AllExceptionsFilter', () => {
         statusCode: 422,
         code: 'VALIDATION_FAILED',
         details: issues,
-        path: '/companies',
+        path,
       }),
       422,
     );
   });
 
   it('deriva o código do status para exceções HTTP do framework', () => {
-    filter.catch(new NotFoundException('Empresa não encontrada.'), host);
+    const message = faker.lorem.sentence();
+
+    filter.catch(new NotFoundException(message), host);
 
     expect(reply).toHaveBeenCalledWith(
       response,
       expect.objectContaining({
         statusCode: 404,
         code: 'NOT_FOUND',
-        message: 'Empresa não encontrada.',
+        message,
       }),
       404,
     );
   });
 
   it('responde 500 genérico para erros desconhecidos e registra o erro', () => {
-    filter.catch(new Error('falha interna com detalhe sensível'), host);
+    filter.catch(new Error(faker.lorem.sentence()), host);
 
     expect(reply).toHaveBeenCalledWith(
       response,
@@ -70,10 +76,10 @@ describe('AllExceptionsFilter', () => {
   });
 
   it('registra erros 5xx de domínio', () => {
-    filter.catch(new DependencyUnavailableException('database'), host);
+    filter.catch(new DependencyUnavailableException(faker.lorem.word()), host);
 
     expect(Logger.prototype.error).toHaveBeenCalledWith(
-      'DEPENDENCY_UNAVAILABLE em /companies',
+      `DEPENDENCY_UNAVAILABLE em ${path}`,
       expect.any(String),
     );
   });
@@ -85,11 +91,13 @@ describe('AllExceptionsFilter', () => {
   });
 
   it('trata valores lançados que não são Error', () => {
-    filter.catch('valor inesperado', host);
+    const thrown = faker.lorem.sentence();
+
+    filter.catch(thrown, host);
 
     expect(Logger.prototype.error).toHaveBeenCalledWith(
-      'INTERNAL_ERROR em /companies',
-      'valor inesperado',
+      `INTERNAL_ERROR em ${path}`,
+      thrown,
     );
   });
 });

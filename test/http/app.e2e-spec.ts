@@ -10,6 +10,8 @@ import { HealthCheckResponseSchema } from '@shared/domain/dtos/requests/health-c
 import { PrismaService } from '@shared/infra/database/prisma.service.js';
 import { CheckHealthUseCase } from '@shared/infra/usecases/health/check-health.usecase.js';
 import request from 'supertest';
+import { healthCheckResponseFactory } from '../factories/shared/health-check-response.factory.js';
+import { faker } from '../support/faker.js';
 
 async function createApp(
   configure: (builder: ReturnType<typeof Test.createTestingModule>) => void,
@@ -66,11 +68,14 @@ describe('API (e2e)', () => {
   });
 
   it('404 com erro padronizado para rota inexistente', async () => {
-    const response = await request(app.getHttpServer())
-      .get('/inexistente')
-      .expect(404);
+    const path = `/${faker.lorem.slug(3)}`;
 
-    expect(ErrorResponseSchema.parse(response.body).code).toBe('NOT_FOUND');
+    const response = await request(app.getHttpServer()).get(path).expect(404);
+
+    expect(ErrorResponseSchema.parse(response.body)).toMatchObject({
+      code: 'NOT_FOUND',
+      path,
+    });
   });
 
   it('publica o documento OpenAPI com os schemas de resposta gerados do Zod', async () => {
@@ -89,6 +94,7 @@ describe('API (e2e)', () => {
 });
 
 describe('Serialização de respostas (e2e)', () => {
+  const health = healthCheckResponseFactory.build();
   let app: INestApplication;
 
   beforeAll(async () => {
@@ -96,11 +102,8 @@ describe('Serialização de respostas (e2e)', () => {
       builder.overrideProvider(CheckHealthUseCase).useValue({
         execute: () =>
           Promise.resolve({
-            status: 'ok',
-            uptime_seconds: 1,
-            checks: { database: 'up' },
-            timestamp: '2026-10-03T12:00:00.000Z',
-            internal_secret: 'nunca deve sair na resposta',
+            ...health,
+            internal_secret: faker.internet.password(),
           }),
       }),
     );
@@ -115,7 +118,6 @@ describe('Serialização de respostas (e2e)', () => {
       .get('/health')
       .expect(200);
 
-    expect(response.body).not.toHaveProperty('internal_secret');
-    expect(response.body.checks).toEqual({ database: 'up' });
+    expect(response.body).toEqual(health);
   });
 });

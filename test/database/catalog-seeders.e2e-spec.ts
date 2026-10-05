@@ -6,6 +6,7 @@ import { SEED_BLOCKED_EMAIL_DOMAINS } from '@modules/security/infra/db/seeders/b
 import type { PrismaService } from '@shared/infra/database/prisma.service.js';
 import { inject } from 'vitest';
 import { createDatabaseTestingApp } from '../support/database-testing-app.js';
+import { faker } from '../support/faker.js';
 
 describe.runIf(inject('databaseAvailable'))(
   'Seeders de catálogo com banco real (e2e)',
@@ -51,20 +52,22 @@ describe.runIf(inject('databaseAvailable'))(
     });
 
     it('é idempotente e preserva ajustes feitos depois da carga inicial', async () => {
+      const { slug } = faker.helpers.arrayElement(DATA_SOURCES);
+      const adjustment = {
+        is_enabled: false,
+        rate_limit_per_minute: faker.number.int({ min: 1, max: 1_000 }),
+        request_timeout_ms: faker.number.int({ min: 500, max: 60_000 }),
+      };
+
       await prisma.seed(CATALOG_SEEDERS);
-      await prisma.dataSource.update({
-        where: { slug: 'GHG_PROTOCOL' },
-        data: { is_enabled: false },
-      });
+      await prisma.dataSource.update({ where: { slug }, data: adjustment });
 
       await prisma.seed(CATALOG_SEEDERS);
 
       expect(await prisma.dataSource.count()).toBe(DATA_SOURCES.length);
       expect(
-        await prisma.dataSource.findUniqueOrThrow({
-          where: { slug: 'GHG_PROTOCOL' },
-        }),
-      ).toMatchObject({ is_enabled: false });
+        await prisma.dataSource.findUniqueOrThrow({ where: { slug } }),
+      ).toMatchObject(adjustment);
     });
 
     it('reset remove os documentos de todas as coleções', async () => {

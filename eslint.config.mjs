@@ -40,4 +40,24 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-argument': 'off',
     },
   },
+  {
+    // Nos testes, o Faker vem da instância com semente reproduzível. O código de
+    // produção (ex.: honeypot) segue livre para importar o pacote.
+    files: ['**/*.spec.ts', '**/*.e2e-spec.ts', 'test/**/*.ts'],
+    ignores: ['test/support/faker.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@faker-js/faker', '@faker-js/faker/*'],
+              message:
+                'Nos testes, importe `faker` de test/support/faker.ts (instância com semente reproduzível).',
+            },
+          ],
+        },
+      ],
+    },
+  },
 );

@@ -18,7 +18,7 @@ A documentação de requisitos, modelagem e arquitetura do projeto fica no repos
 | Validação e DTOs | Zod 4 com Standard Schema nativo do Nest (`@Body({ schema })`) |
 | Documentação da API | `@nestjs/swagger` 12 (OpenAPI gerado dos schemas Zod) + Scalar |
 | Filas e cache | Redis 7 (BullMQ — a configurar com os módulos de ingestão) |
-| Testes | Vitest 4 + `@nestjs/testing` + Supertest |
+| Testes | Vitest 4 + `@nestjs/testing` + Supertest + Faker (dados de teste) |
 | Qualidade | ESLint 10 (`typescript-eslint`, type-checked) + Prettier |
 
 O Prisma está fixado na série 6 porque a série 7 ainda não suporta MongoDB.
@@ -134,8 +134,9 @@ src/
 - **Controllers** retornam valores — sem `@Res()` —, preservando interceptors, filtros e
   serialização do framework.
 - **Imports.** Relativos dentro da mesma área (`app`, `shared` ou um módulo); entre áreas,
-  pelos aliases `@app/*`, `@shared/*` e `@modules/*`. Por ser ESM, todo import relativo ou
-  por alias termina em `.js`.
+  pelos aliases `@app/*`, `@shared/*` e `@modules/*`; os testes de `src/` chegam ao apoio de
+  teste (`test/`) por `@test/*`. Por ser ESM, todo import relativo ou por alias termina em
+  `.js`.
 
 ## Banco de dados (Prisma)
 
@@ -224,6 +225,33 @@ suba a infraestrutura antes: `npm run docker:up`.
 Os catálogos de referência (ODS, fontes de dados e blacklist de domínios) têm seeders
 idempotentes nos próprios módulos (`infra/db/seeders/`), reunidos em
 `src/app/database/catalog.seeders.ts` na ordem de dependência.
+
+### Dados de teste
+
+Todas as suítes, unitárias e e2e, geram seus dados com o Faker (locale pt-BR). Valores
+arbitrários não são fixados à mão; ficam fixos apenas os valores que são a própria regra
+testada, como os ODS de referência, os padrões da configuração ou as mensagens de erro.
+
+- **Instância única**: os testes importam `faker` de `test/support/faker.ts`. O ESLint
+  bloqueia o import direto de `@faker-js/faker` nos testes; o código de produção (ex.:
+  honeypot, RF21) continua livre para usá-lo.
+- **Factories**: registros e objetos de domínio vêm de `test/factories/<módulo>/`, criados
+  com `defineFactory`. `build(overrides)` gera um objeto completo e fixa só os campos do
+  cenário; `buildMany(n, overrides)` gera vários.
+- **Semente reproduzível**: cada arquivo de teste recebe uma semente aleatória
+  (`test/setup/faker.setup.ts`). Quando um teste falha, a semente aparece na saída; para
+  repetir exatamente os mesmos dados:
+
+```bash
+FAKER_SEED=<semente> npx vitest run <arquivo>        # bash
+$env:FAKER_SEED=<semente>; npx vitest run <arquivo>  # PowerShell
+```
+
+```ts
+import { odsFactory } from '@test/factories/scoring/ods.factory.js';
+
+const ods = odsFactory.build({ ods_number: 15 }); // demais campos aleatórios
+```
 
 ## Qualidade e integração contínua
 

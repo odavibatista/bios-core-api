@@ -26,6 +26,8 @@ export default defineConfig({
     root: './',
     include: ['test/**/*.e2e-spec.ts'],
     globalSetup: ['test/setup/database.global-setup.ts'],
+    // Semente do Faker por arquivo, exibida quando um teste falha.
+    setupFiles: ['test/setup/faker.setup.ts'],
     // As suítes compartilham o mesmo banco: execução em série.
     fileParallelism: false,
     testTimeout: 15_000,

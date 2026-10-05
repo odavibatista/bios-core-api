@@ -1,16 +1,12 @@
 import { Test } from '@nestjs/testing';
+import { retentionPolicyFactory } from '@test/factories/shared/retention-policy.factory.js';
+import { faker } from '@test/support/faker.js';
 import type { RetentionPolicy } from '../../../domain/dtos/providers/retention-policy.dto.js';
 import { RetentionIndexProvider } from '../../../domain/providers/retention-index.provider.js';
-import { Duration } from '../../../domain/value-objects/duration.js';
 import { SyncRetentionIndexesUseCase } from './sync-retention-indexes.usecase.js';
 
-function policy(collection: string): RetentionPolicy {
-  return {
-    collection,
-    field: 'created_at',
-    indexName: `idx_${collection}_created_at`,
-    retention: Duration.parse('30d'),
-  };
+function indexOf({ collection, indexName }: RetentionPolicy): string {
+  return `${collection}.${indexName}`;
 }
 
 describe('SyncRetentionIndexesUseCase', () => {
@@ -29,39 +25,43 @@ describe('SyncRetentionIndexesUseCase', () => {
   });
 
   it('agrupa o resultado de cada política e isola as falhas', async () => {
+    const policies = retentionPolicyFactory.buildMany(5);
+    const [created, updated, failedWithError, unchanged, failedWithValue] =
+      policies;
+    const errorMessage = faker.lorem.sentence();
+    const thrownValue = faker.lorem.sentence();
+
     retentionIndexProvider.apply
       .mockResolvedValueOnce('created')
       .mockResolvedValueOnce('updated')
-      .mockRejectedValueOnce(new Error('timeout'))
+      .mockRejectedValueOnce(new Error(errorMessage))
       .mockResolvedValueOnce('unchanged')
-      .mockRejectedValueOnce('falha sem Error');
+      .mockRejectedValueOnce(thrownValue);
 
-    const report = await useCase.execute(['a', 'b', 'c', 'd', 'e'].map(policy));
+    const report = await useCase.execute(policies);
 
     expect(report).toEqual({
-      created: ['a.idx_a_created_at'],
-      updated: ['b.idx_b_created_at'],
-      unchanged: ['d.idx_d_created_at'],
+      created: [indexOf(created)],
+      updated: [indexOf(updated)],
+      unchanged: [indexOf(unchanged)],
       failed: [
-        { index: 'c.idx_c_created_at', reason: 'timeout' },
-        { index: 'e.idx_e_created_at', reason: 'falha sem Error' },
+        { index: indexOf(failedWithError), reason: errorMessage },
+        { index: indexOf(failedWithValue), reason: thrownValue },
       ],
     });
   });
 
   it('resume o motivo à linha relevante de erros multilinha do Prisma', async () => {
+    const cause = `Raw query failed. Code: \`unknown\`. Message: \`${faker.lorem.sentence()}\``;
     retentionIndexProvider.apply.mockRejectedValueOnce(
       new Error(
-        '\nInvalid `prisma.$runCommandRaw()` invocation:\n\n\n' +
-          'Raw query failed. Code: `unknown`. Message: `Server selection timeout`\n',
+        `\nInvalid \`prisma.$runCommandRaw()\` invocation:\n\n\n${cause}\n`,
       ),
     );
 
-    const { failed } = await useCase.execute([policy('a')]);
+    const { failed } = await useCase.execute([retentionPolicyFactory.build()]);
 
-    expect(failed[0].reason).toBe(
-      'Raw query failed. Code: `unknown`. Message: `Server selection timeout`',
-    );
+    expect(failed[0].reason).toBe(cause);
   });
 
   it('retorna relatório vazio sem políticas', async () => {

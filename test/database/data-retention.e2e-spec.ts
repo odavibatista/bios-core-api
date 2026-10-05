@@ -9,6 +9,7 @@ import { SyncRetentionIndexesUseCase } from '@shared/infra/usecases/data-retenti
 import { inject } from 'vitest';
 import { z } from 'zod';
 import { createDatabaseTestingApp } from '../support/database-testing-app.js';
+import { faker } from '../support/faker.js';
 
 const ListIndexesResultSchema = z.object({
   cursor: z.object({
@@ -70,15 +71,22 @@ describe.runIf(inject('databaseAvailable'))(
     });
 
     it('altera o prazo de um índice TTL existente sem recriá-lo', async () => {
-      const [policy] = policies;
+      const policy = faker.helpers.arrayElement(policies);
+      const retention = Duration.ofSeconds(
+        policy.retention.toSeconds() +
+          faker.number.int({ min: 60, max: 86_400 }),
+      );
+
       const report = await syncRetentionIndexes.execute([
-        { ...policy, retention: Duration.parse('2d') },
+        { ...policy, retention },
       ]);
 
       expect(report.updated).toEqual([
         `${policy.collection}.${policy.indexName}`,
       ]);
-      expect(await expireAfterSecondsOf(prisma, policy)).toBe(172_800);
+      expect(await expireAfterSecondsOf(prisma, policy)).toBe(
+        retention.toSeconds(),
+      );
     });
   },
 );
