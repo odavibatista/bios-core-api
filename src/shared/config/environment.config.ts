@@ -111,6 +111,11 @@ export const environmentSchema = z.object({
     .default(10_000),
   QUEUE_SCHEDULES_SYNC_ON_BOOT: z.stringbool().default(true),
 
+  /* Cache de consultas (NFDE01) — ver cache.config.ts.
+     Vale apenas como reserva: a janela de cada consulta vem de
+     `data_sources.cache_ttl_seconds`, ajustável no banco sem novo deploy. */
+  CACHE_DEFAULT_TTL: durationVariable('7d', { minimum: '1m' }),
+
   /* Sessões (RF32, NFSE05) — access token curto; refresh token renovado a cada rotação */
   AUTH_ACCESS_TOKEN_LIFETIME: durationVariable('15m', {
     minimum: '1m',

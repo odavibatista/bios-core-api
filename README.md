@@ -17,7 +17,7 @@ A documentação de requisitos, modelagem e arquitetura do projeto fica no repos
 | Banco de dados | MongoDB 8 (replica set) via Prisma ORM 6.19 |
 | Validação e DTOs | Zod 4 com Standard Schema nativo do Nest (`@Body({ schema })`) |
 | Documentação da API | `@nestjs/swagger` 12 (OpenAPI gerado dos schemas Zod) + Scalar |
-| Filas | Redis 7 via BullMQ 6 (`@nestjs/bullmq`), com `ioredis` como driver |
+| Filas e cache | Redis 7 via BullMQ 6 (`@nestjs/bullmq`) e `ioredis` |
 | Testes | Vitest 4 + `@nestjs/testing` + Supertest + Faker (dados de teste) |
 | Qualidade | ESLint 10 (`typescript-eslint`, type-checked) + Prettier |
 
@@ -202,6 +202,34 @@ await queues.schedule({ queue, id: 'ibama-daily-ingestion', jobName, cron: '0 4 
   construído e, sem Redis, derruba o processo com uma rejeição que não passa pelo evento de
   erro.
 
+## Cache de consultas
+
+Evita nova chamada à fonte externa para um CNPJ já consultado dentro da janela de validade
+(NFDE01) — é o que faz um perfil já visto responder rápido (NFDE02). O contrato é
+`CacheProvider`, implementado sobre a mesma conexão `ioredis` do health check.
+
+```ts
+const profile = await cache.get<CompanyProfile>({ namespace, identifier: cnpj });
+await cache.set({ namespace, identifier: cnpj }, profile, ttlSeconds);
+await cache.invalidate(cnpj); // tudo sobre o CNPJ, em todos os namespaces
+```
+
+- **Chave versionada.** `bios:cache:v<formato>:<namespace>:<identificador>`. O namespace separa
+  perfil, evidências e notas; a versão do formato aposenta todas as entradas de uma vez quando
+  o conteúdo gravado muda de forma, sem precisar limpar o Redis no deploy.
+- **Janela por fonte.** O TTL de cada consulta vem de `data_sources.cache_ttl_seconds`
+  (`ResolveSourceCacheTtlUseCase`), ajustável no banco sem novo deploy. Sem valor configurado,
+  vale `CACHE_DEFAULT_TTL`.
+- **Cache nunca derruba nem atrasa a requisição.** Falha do Redis é registrada em log e tratada
+  como ausência de dado, e toda operação tem orçamento de latência
+  (`CACHE_OPERATION_BUDGET_MS`, 500 ms): o cliente mantém uma fila interna de comandos enquanto
+  tenta reconectar, e sem esse corte um `GET` esperaria a reconexão. Esgotado o prazo, a
+  consulta segue para a fonte (NFCO01).
+- **Invalidação explícita.** `invalidate(cnpj)` apaga todos os namespaces do CNPJ em um único
+  `DEL` — sem `SCAN`, cujo custo cresce com o tamanho do banco. É o que se chama depois de
+  recalcular os índices, para não servir perfil novo com nota velha. Falha aqui é registrada
+  como **erro**, não aviso: dado vencido continuaria servível até o fim do TTL.
+
 ## Criptografia de dados sensíveis
 
 E-mail, endereço e o hash da senha são cifrados antes de chegar ao banco (RNF NFSE03). O
@@ -334,10 +362,12 @@ A infraestrutura de teste é montada e desmontada pelo setup global
 
 Os endereços padrão são `bios_test` no MongoDB e o banco `1` no Redis do
 `docker-compose.yml`; outros podem ser informados em `E2E_DATABASE_URL` e `E2E_REDIS_URL`.
-Cada um tem uma garantia de descarte: `seed` e `reset` só executam com `NODE_ENV=test` **e**
-em banco com sufixo `_test` (fora disso lançam `UnsafeDatabaseOperationException`), e o setup
-recusa limpar o banco `0` do Redis, que é o de uso geral. As suítes de `test/database/` rodam
-em série, pois compartilham o banco.
+Cada um tem garantias de descarte: `seed` e `reset` só executam com `NODE_ENV=test` **e** em
+banco com sufixo `_test` (fora disso lançam `UnsafeDatabaseOperationException`); no Redis, o
+setup recusa o banco `0`, que é o de uso geral, e recusa limpar um banco que contenha chave
+fora dos prefixos do projeto (`bios:`, `bull:`) — o que protege de outro Redis ocupando a
+porta 6379 na mesma máquina. As suítes de `test/database/` rodam em série, pois compartilham
+o banco.
 
 Sem MongoDB ou sem Redis acessível, as suítes correspondentes são ignoradas localmente (com
 aviso) e as demais seguem normalmente; no CI a ausência reprova a execução. Para rodá-las
