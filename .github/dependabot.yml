@@ -44,6 +44,22 @@ updates:
         update-types: [version-update:semver-major]
       - dependency-name: '@prisma/client'
         update-types: [version-update:semver-major]
+      # A série 7 do TypeScript não é aceita pelas ferramentas da stack:
+      # @nestjs/swagger declara peer "^5.5.0 || ^6.0.0" e typescript-eslint,
+      # ">=4.8.4 <6.1.0". Com ela instalada o `npm ci` falha em ERESOLVE e o CI
+      # não chega a rodar. Reavaliar quando as duas subirem o teto.
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+      # A série 5 do Vitest passa a exigir o binário nativo do Rolldown já na
+      # inicialização. Esse binário é declarado como dependência opcional *e*
+      # peer, combinação que o npm não instala a partir do lockfile
+      # (npm/cli#4828), e o runner não sobe por falta dele. A série 4 instala o
+      # mesmo Vite 8 e não depende do binding. Reavaliar quando npm ou Rolldown
+      # corrigirem.
+      - dependency-name: vitest
+        update-types: [version-update:semver-major]
+      - dependency-name: '@vitest/coverage-v8'
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions
     directory: /
