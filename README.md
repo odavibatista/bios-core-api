@@ -28,6 +28,7 @@ O Prisma está fixado na série 6 porque a série 7 ainda não suporta MongoDB.
 ```bash
 npm install                 # instala dependências e gera o Prisma Client
 cp .env.example .env        # ajuste as variáveis se necessário
+npm run keys:generate       # gera as chaves de criptografia e cole-as no .env
 npm run docker:up           # MongoDB (replica set) e Redis
 npm run db:push             # cria coleções e índices a partir do schema Prisma
 npm run start:dev           # API em http://localhost:3000
@@ -52,6 +53,7 @@ npm run start:dev           # API em http://localhost:3000
 | `test:e2e` | Testes ponta a ponta sobre o `AppModule` (pipeline HTTP e banco real) |
 | `verify` | Typecheck, testes com cobertura e e2e (o mesmo que roda no pre-push) |
 | `prisma:generate` / `prisma:validate` / `prisma:format` | Operações sobre o schema Prisma |
+| `keys:generate` | Gera as chaves de criptografia do `.env` (`-- --version N` para rotacionar) |
 | `db:push` | Sincroniza coleções e índices do MongoDB com o schema |
 | `docker:up` / `docker:down` | Sobe/derruba a infraestrutura local |
 
@@ -157,6 +159,34 @@ Prisma, pois evidências podem existir antes do perfil cadastral.
 O MongoDB precisa rodar como **replica set** (o `docker-compose.yml` já o configura): o
 Prisma usa transações para as ações referenciais emuladas, como a cascata na exclusão de
 conta.
+
+## Criptografia de dados sensíveis
+
+E-mail, endereço e o hash da senha são cifrados antes de chegar ao banco (RNF NFSE03). O
+contrato é `EncryptionProvider`, e a implementação usa **AES-256-GCM** com `node:crypto`
+(`AesEncryptionProvider`).
+
+| Variável | Conteúdo |
+| --- | --- |
+| `ENCRYPTION_KEYS` | Chaves AES versionadas: `1:<chave>,2:<chave>`, cada uma com 32 bytes em base64 ou hexadecimal |
+| `BLIND_INDEX_KEY` | Chave única de 32 bytes do índice cego |
+
+Gere as duas com `npm run keys:generate` e cole a saída no `.env`. Chave ausente, de tamanho
+errado ou com versão repetida impede a aplicação de subir.
+
+- **IV por operação.** Cifrar o mesmo valor duas vezes produz textos diferentes, de modo que
+  dois documentos com o mesmo e-mail não são identificáveis pelo conteúdo cifrado.
+- **Integridade verificada.** O GCM é autenticado: texto adulterado, truncado ou cifrado com
+  outra chave não decifra, e a exceção responde sempre a mesma mensagem genérica — o motivo
+  técnico fica em `details`, para o log.
+- **Rotação gradual.** A maior versão de `ENCRYPTION_KEYS` é a ativa, usada nas novas
+  cifragens; as anteriores continuam disponíveis para ler documentos já gravados, que
+  guardam a versão usada (`encryption_key_version`). Para rotacionar, acrescente a nova
+  versão (`npm run keys:generate -- --version 2`) sem remover as antigas.
+- **Índice cego.** `blindIndex` aplica HMAC-SHA256 sobre o valor normalizado (minúsculas, sem
+  espaços nas bordas), permitindo localizar a conta pelo e-mail no login sem decifrar a
+  coleção. Diferente da chave AES, `BLIND_INDEX_KEY` não é versionada: trocá-la invalidaria
+  todos os índices já gravados.
 
 ### Retenção de dados (índices TTL)
 

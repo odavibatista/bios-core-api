@@ -30,6 +30,7 @@
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
     "prisma:format": "prisma format",
+    "keys:generate": "node scripts/generate-keys.mjs",
     "db:push": "prisma db push",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
