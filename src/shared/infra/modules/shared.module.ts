@@ -14,6 +14,7 @@ import { CheckHealthUseCase } from '../usecases/health/check-health.usecase.js';
 import { DataRetentionModule } from './data-retention.module.js';
 import { EncryptionModule } from './encryption.module.js';
 import { QueueModule } from './queue.module.js';
+import { RedisModule } from './redis.module.js';
 
 /**
  * Módulo global de infraestrutura compartilhada.
@@ -23,8 +24,8 @@ import { QueueModule } from './queue.module.js';
  *  - disponibilizar o acesso ao banco (`DatabaseModule`) e manter os índices de
  *    retenção alinhados à configuração (`DataRetentionModule`);
  *  - disponibilizar a criptografia de dados sensíveis (`EncryptionModule`);
- *  - disponibilizar as filas de comunicação com os serviços de ingestão
- *    (`QueueModule`);
+ *  - disponibilizar o Redis — cache de consultas e health check (`RedisModule`) — e
+ *    as filas de comunicação com os serviços de ingestão (`QueueModule`);
  *  - registrar o pipeline HTTP global: validação de entrada por schema, serialização
  *    de saída por schema e corpo de erro padronizado;
  *  - expor o health check.
@@ -40,6 +41,7 @@ import { QueueModule } from './queue.module.js';
     DatabaseModule,
     DataRetentionModule,
     EncryptionModule,
+    RedisModule,
     QueueModule,
   ],
   controllers: [HealthController],

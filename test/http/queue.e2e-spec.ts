@@ -2,10 +2,8 @@ import { ConfigModule } from '@nestjs/config';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { validateEnvironment } from '@shared/config/environment.config.js';
 import { QueueProvider } from '@shared/domain/providers/queue.provider.js';
-import { RedisHealthProvider } from '@shared/domain/providers/redis-health.provider.js';
 import { QueueModule } from '@shared/infra/modules/queue.module.js';
 import { BullMqQueueProvider } from '@shared/infra/providers/bullmq-queue.provider.js';
-import { RedisService } from '@shared/infra/redis/redis.service.js';
 
 /**
  * Monta o módulo de filas com a configuração real (variáveis validadas pelo
@@ -35,25 +33,22 @@ describe('Infraestrutura de filas (e2e)', () => {
     BLIND_INDEX_KEY: `${'b'.repeat(43)}=`,
   };
 
-  it('injeta os providers pelos contratos de domínio', async () => {
+  it('injeta o provider pelo contrato de domínio', async () => {
     const moduleRef = await createModule(baseEnvironment);
 
     expect(moduleRef.get(QueueProvider)).toBeInstanceOf(BullMqQueueProvider);
-    expect(moduleRef.get(RedisHealthProvider)).toBeInstanceOf(RedisService);
 
     await moduleRef.close();
   });
 
-  it('sobe com o Redis fora do ar, sem bloquear a inicialização', async () => {
-    // Porta sem serviço: o módulo compila e só o health check acusa a falha.
+  it('registra as filas e sobe com o Redis fora do ar', async () => {
+    // Porta sem serviço: o módulo compila, porque nada conecta na montagem.
     const moduleRef = await createModule({
       ...baseEnvironment,
       REDIS_URL: 'redis://localhost:6399/1',
     });
 
-    await expect(
-      moduleRef.get(RedisHealthProvider).isAvailable(),
-    ).resolves.toBe(false);
+    expect(moduleRef.get(QueueProvider)).toBeInstanceOf(BullMqQueueProvider);
 
     await moduleRef.close();
   });
