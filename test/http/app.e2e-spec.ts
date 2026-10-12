@@ -8,6 +8,7 @@ import {
 import { ErrorResponseSchema } from '@shared/domain/dtos/errors/error-response.dto.js';
 import { HealthCheckResponseSchema } from '@shared/domain/dtos/requests/health-check.dto.js';
 import { PrismaService } from '@shared/infra/database/prisma.service.js';
+import { RedisService } from '@shared/infra/redis/redis.service.js';
 import { CheckHealthUseCase } from '@shared/infra/usecases/health/check-health.usecase.js';
 import request from 'supertest';
 import { healthCheckResponseFactory } from '../factories/shared/health-check-response.factory.js';
@@ -28,12 +29,21 @@ async function createApp(
 
 describe('API (e2e)', () => {
   const prisma = { isAvailable: vi.fn<() => Promise<boolean>>() };
+  const redis = { isAvailable: vi.fn<() => Promise<boolean>>() };
   let app: INestApplication;
 
   beforeAll(async () => {
     app = await createApp((builder) =>
-      builder.overrideProvider(PrismaService).useValue(prisma),
+      builder
+        .overrideProvider(PrismaService)
+        .useValue(prisma)
+        .overrideProvider(RedisService)
+        .useValue(redis),
     );
+  });
+
+  beforeEach(() => {
+    redis.isAvailable.mockResolvedValue(true);
   });
 
   afterAll(async () => {
@@ -41,7 +51,7 @@ describe('API (e2e)', () => {
   });
 
   describe('GET /health', () => {
-    it('200 com resposta conforme o schema quando o banco está disponível', async () => {
+    it('200 com resposta conforme o schema quando as dependências estão disponíveis', async () => {
       prisma.isAvailable.mockResolvedValue(true);
 
       const response = await request(app.getHttpServer())
@@ -53,18 +63,25 @@ describe('API (e2e)', () => {
       );
     });
 
-    it('503 com erro padronizado quando o banco está indisponível', async () => {
-      prisma.isAvailable.mockResolvedValue(false);
+    it.each([
+      ['o banco', () => prisma.isAvailable.mockResolvedValue(false)],
+      ['o Redis', () => redis.isAvailable.mockResolvedValue(false)],
+    ])(
+      '503 com erro padronizado quando %s está indisponível',
+      async (_dependency, makeUnavailable) => {
+        prisma.isAvailable.mockResolvedValue(true);
+        makeUnavailable();
 
-      const response = await request(app.getHttpServer())
-        .get('/health')
-        .expect(503);
+        const response = await request(app.getHttpServer())
+          .get('/health')
+          .expect(503);
 
-      expect(ErrorResponseSchema.parse(response.body)).toMatchObject({
-        code: 'DEPENDENCY_UNAVAILABLE',
-        path: '/health',
-      });
-    });
+        expect(ErrorResponseSchema.parse(response.body)).toMatchObject({
+          code: 'DEPENDENCY_UNAVAILABLE',
+          path: '/health',
+        });
+      },
+    );
   });
 
   it('404 com erro padronizado para rota inexistente', async () => {

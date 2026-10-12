@@ -18,7 +18,7 @@ export class HealthController implements HealthControllerInterface {
 
   @Get()
   @ApiOperation({
-    summary: 'Verifica a disponibilidade da API e do banco de dados',
+    summary: 'Verifica a disponibilidade da API, do banco de dados e do Redis',
   })
   @ResponseSchema(HealthCheckResponseSchema)
   @ErrorResponses(HttpStatus.SERVICE_UNAVAILABLE)

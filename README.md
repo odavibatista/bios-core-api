@@ -17,7 +17,7 @@ A documentação de requisitos, modelagem e arquitetura do projeto fica no repos
 | Banco de dados | MongoDB 8 (replica set) via Prisma ORM 6.19 |
 | Validação e DTOs | Zod 4 com Standard Schema nativo do Nest (`@Body({ schema })`) |
 | Documentação da API | `@nestjs/swagger` 12 (OpenAPI gerado dos schemas Zod) + Scalar |
-| Filas e cache | Redis 7 (BullMQ — a configurar com os módulos de ingestão) |
+| Filas | Redis 7 via BullMQ 6 (`@nestjs/bullmq`), com `ioredis` como driver |
 | Testes | Vitest 4 + `@nestjs/testing` + Supertest + Faker (dados de teste) |
 | Qualidade | ESLint 10 (`typescript-eslint`, type-checked) + Prettier |
 
@@ -36,7 +36,7 @@ npm run start:dev           # API em http://localhost:3000
 
 | Endereço | Conteúdo |
 | --- | --- |
-| `GET /health` | Situação da API e do banco |
+| `GET /health` | Situação da API, do banco e do Redis |
 | `/docs` | Referência interativa da API (Scalar) |
 | `/docs/openapi.json` | Documento OpenAPI |
 
@@ -50,7 +50,7 @@ npm run start:dev           # API em http://localhost:3000
 | `format` / `format:check` | Prettier com e sem reescrita |
 | `typecheck` | Verificação de tipos sem emitir arquivos |
 | `test` / `test:watch` / `test:cov` | Testes unitários (com limite de cobertura de 75%) |
-| `test:e2e` | Testes ponta a ponta sobre o `AppModule` (pipeline HTTP e banco real) |
+| `test:e2e` | Testes ponta a ponta (pipeline HTTP, banco real e filas no Redis) |
 | `verify` | Typecheck, testes com cobertura e e2e (o mesmo que roda no pre-push) |
 | `prisma:generate` / `prisma:validate` / `prisma:format` | Operações sobre o schema Prisma |
 | `keys:generate` | Gera as chaves de criptografia do `.env` (`-- --version N` para rotacionar) |
@@ -159,6 +159,48 @@ Prisma, pois evidências podem existir antes do perfil cadastral.
 O MongoDB precisa rodar como **replica set** (o `docker-compose.yml` já o configura): o
 Prisma usa transações para as ações referenciais emuladas, como a cascata na exclusão de
 conta.
+
+## Filas (BullMQ)
+
+Toda a comunicação entre o core e os serviços de ingestão passa por filas BullMQ sobre o
+Redis — não há chamada HTTP entre serviços. Esta API é **só produtora**: cada fila é
+consumida pelo serviço dono do fluxo.
+
+| Fila | Conteúdo |
+| --- | --- |
+| `company-profile` | Dados cadastrais por CNPJ |
+| `environmental-evidences` | Evidências ambientais e de conduta (IBAMA, CEIS/CNEP) |
+| `ghg-inventory` | Inventário de emissões (fallback do GHG Protocol) |
+| `ods-scoring` | Recálculo de índice e confiança por ODS |
+| `email-dispatch` | E-mails transacionais |
+
+O contrato é `QueueProvider`, com três operações:
+
+```ts
+await queues.enqueue(QueueName.EMAIL_DISPATCH, 'send-confirmation', { userId });
+const profile = await queues.enqueueAndWait(QueueName.COMPANY_PROFILE, 'fetch', { cnpj });
+await queues.schedule({ queue, id: 'ibama-daily-ingestion', jobName, cron: '0 4 * * *' });
+```
+
+- **Espera com prazo.** `enqueueAndWait` devolve o resultado do consumidor ou lança
+  `QueueTimeoutException` ao fim de `QUEUE_WAIT_TIMEOUT_MS` (ajustável por chamada). É o que
+  sustenta a degradação graciosa: estourado o prazo de uma fonte não bloqueante, o chamador
+  exibe a evidência como `UNKNOWN` em vez de falhar a consulta inteira. O job **continua** na
+  fila — o prazo é de quem espera, não do processamento.
+- **Falha distinta de prazo.** Esgotadas as tentativas, o job fica registrado como falho
+  (`removeOnFail: false`) e a espera lança `QueueJobFailedException` com o motivo em
+  `details`. É justamente esse registro que permite distinguir as duas situações.
+- **Retry por fila.** Tentativas e backoff exponencial ficam em
+  `src/shared/config/queue.config.ts`: as filas que atendem uma consulta do usuário erram
+  rápido; as de segundo plano insistem mais.
+- **Jobs repetíveis.** `QUEUE_SCHEDULES` declara os agendamentos (cron), registrados a cada
+  boot pelo `QueueSchedulesInitializer`. O registro é idempotente pelo `id`: reiniciar a API
+  não duplica o disparo. Desligue com `QUEUE_SCHEDULES_SYNC_ON_BOOT=false`.
+- **A API sobe sem Redis.** A conexão é `lazyConnect` e o `/health` reporta
+  `checks.redis`. Por esse mesmo motivo a espera consulta o estado do job em intervalos
+  curtos em vez de usar `QueueEvents`: o `QueueEvents` abre uma conexão bloqueante ao ser
+  construído e, sem Redis, derruba o processo com uma rejeição que não passa pelo evento de
+  erro.
 
 ## Criptografia de dados sensíveis
 
@@ -278,24 +320,28 @@ Os testes desses arquivos continuam sendo executados; eles só não entram no c�
 | --- | --- |
 | `test/http/` | Pipeline HTTP sobre o `AppModule`, com dependências substituídas via `overrideProvider` |
 | `test/database/` | `AppModule` completo contra um MongoDB real e descartável |
+| `test/integration/` | Módulos de infraestrutura contra o serviço real (ex.: filas contra o Redis) |
 
-O banco de teste é montado e desmontado pelo setup global (`test/setup/database.global-setup.ts`)
-a cada execução de `npm run test:e2e`:
+A infraestrutura de teste é montada e desmontada pelo setup global
+(`test/setup/infrastructure.global-setup.ts`) a cada execução de `npm run test:e2e`:
 
 1. sincroniza coleções e índices com o schema Prisma (`prisma db push`);
-2. disponibiliza o banco às suítes, que o preparam com `PrismaService.reset()` e
-   `PrismaService.seed(seeders)`;
-3. remove o banco inteiro ao final (`dropDatabase`).
+2. limpa o banco de teste do Redis (`FLUSHDB`), para que jobs de uma execução anterior não
+   interfiram na seguinte;
+3. disponibiliza a infraestrutura às suítes, que preparam o banco com `PrismaService.reset()`
+   e `PrismaService.seed(seeders)`;
+4. remove o banco inteiro ao final (`dropDatabase`).
 
-O banco padrão é `bios_test` no MongoDB do `docker-compose.yml`; outro endereço pode ser
-informado em `E2E_DATABASE_URL`. `seed` e `reset` só executam com `NODE_ENV=test` **e** em
-banco com sufixo `_test` — fora disso lançam `UnsafeDatabaseOperationException`, o que impede
-que uma configuração errada apague dados reais. As suítes de `test/database/` rodam em série,
-pois compartilham o banco.
+Os endereços padrão são `bios_test` no MongoDB e o banco `1` no Redis do
+`docker-compose.yml`; outros podem ser informados em `E2E_DATABASE_URL` e `E2E_REDIS_URL`.
+Cada um tem uma garantia de descarte: `seed` e `reset` só executam com `NODE_ENV=test` **e**
+em banco com sufixo `_test` (fora disso lançam `UnsafeDatabaseOperationException`), e o setup
+recusa limpar o banco `0` do Redis, que é o de uso geral. As suítes de `test/database/` rodam
+em série, pois compartilham o banco.
 
-Sem MongoDB acessível, as suítes de banco são ignoradas localmente (com aviso) e as demais
-seguem normalmente; no CI a ausência do banco reprova a execução. Para rodá-las localmente,
-suba a infraestrutura antes: `npm run docker:up`.
+Sem MongoDB ou sem Redis acessível, as suítes correspondentes são ignoradas localmente (com
+aviso) e as demais seguem normalmente; no CI a ausência reprova a execução. Para rodá-las
+localmente, suba a infraestrutura antes: `npm run docker:up`.
 
 Os catálogos de referência (ODS, fontes de dados e blacklist de domínios) têm seeders
 idempotentes nos próprios módulos (`infra/db/seeders/`), reunidos em
@@ -346,12 +392,16 @@ O workflow `.github/workflows/ci.yml` roda em pull requests e pushes para `devel
 e `main`, sem etapa de deploy:
 
 - **Lint**: mensagens de commit e título do PR, schema Prisma, ESLint, Prettier e typecheck;
-- **Testes**: unitários com limite de cobertura de 75%, e2e, resumo de cobertura no job e
-  relatório completo como artefato.
+- **Testes**: unitários com limite de cobertura de 75%, e2e contra o MongoDB e o Redis do
+  `docker-compose.yml` (aguardados por `docker compose up --wait`), resumo de cobertura no
+  job e relatório completo como artefato.
 
 As actions são fixadas por SHA de commit e atualizadas pelo Dependabot
 (`.github/dependabot.yml`), que também abre PRs semanais de dependências npm contra o
-`develop`, agrupadas por ecossistema e sem saltar o Prisma para a série 7.
+`develop`, agrupadas por ecossistema. As majors que a stack não aceita ficam bloqueadas lá,
+com o motivo registrado: Prisma 7 (sem suporte a MongoDB), TypeScript 7 (recusado pelos peers
+do `@nestjs/swagger` e do `typescript-eslint`) e Vitest 5 (binário nativo do Rolldown que o
+npm não instala a partir do lockfile).
 
 ### Fluxo de contribuição
 
