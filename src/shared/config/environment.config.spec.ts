@@ -32,6 +32,7 @@ describe('validateEnvironment', () => {
       PORT: 3000,
       DATABASE_URL,
       CORS_ORIGINS: true,
+      BCRYPT_COST: 12,
       DATA_RETENTION_SYNC_ON_BOOT: true,
     });
     expect(environment.DATA_RETENTION_USER_TOKENS.toString()).toBe('1w');
@@ -160,6 +161,31 @@ describe('validateEnvironment', () => {
 
       expect(attempt).toThrow(EnvironmentException);
       expect(attempt).toThrow(new RegExp(variable));
+    });
+
+    it('aceita um custo de bcrypt dentro dos limites do algoritmo', () => {
+      const cost = faker.number.int({ min: 4, max: 31 });
+
+      expect(
+        validateEnvironment({ ...REQUIRED, BCRYPT_COST: String(cost) })
+          .BCRYPT_COST,
+      ).toBe(cost);
+    });
+
+    it.each([
+      [
+        'abaixo do mínimo do bcrypt',
+        String(faker.number.int({ min: 0, max: 3 })),
+      ],
+      [
+        'acima do máximo do bcrypt',
+        String(faker.number.int({ min: 32, max: 99 })),
+      ],
+      ['fracionário', '12.5'],
+    ])('rejeita o custo de bcrypt %s', (_case, value) => {
+      expect(() =>
+        validateEnvironment({ ...REQUIRED, BCRYPT_COST: value }),
+      ).toThrow(/BCRYPT_COST/);
     });
   });
 
