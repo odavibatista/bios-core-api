@@ -93,6 +93,10 @@ export const environmentSchema = z.object({
   ENCRYPTION_KEYS: encryptionKeyring(),
   BLIND_INDEX_KEY: singleKey(),
 
+  /* Custo do bcrypt: cada incremento dobra o tempo de verificação da senha.
+     O mínimo e o máximo são os limites do próprio algoritmo. */
+  BCRYPT_COST: z.coerce.number().int().min(4).max(31).default(12),
+
   /* Sessões (RF32, NFSE05) — access token curto; refresh token renovado a cada rotação */
   AUTH_ACCESS_TOKEN_LIFETIME: durationVariable('15m', {
     minimum: '1m',
