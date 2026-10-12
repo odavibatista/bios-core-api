@@ -188,6 +188,36 @@ errado ou com versão repetida impede a aplicação de subir.
   coleção. Diferente da chave AES, `BLIND_INDEX_KEY` não é versionada: trocá-la invalidaria
   todos os índices já gravados.
 
+### Senha
+
+A senha nunca é guardada, nem de forma reversível: o contrato `PasswordProvider` só sabe
+gerar o valor a persistir (`hash`) e conferir uma tentativa contra ele (`verify`). A
+implementação (`BcryptPasswordProvider`) compõe três etapas:
+
+```
+senha → SHA-256 (base64) → bcrypt (BCRYPT_COST) → AES-256-GCM → banco
+```
+
+- **Pré-hash obrigatório.** O bcrypt ignora o que passa de 72 bytes. Sem tratamento, duas
+  senhas longas que só diferem depois desse limite seriam aceitas uma pela outra — falha de
+  autenticação, não detalhe teórico. O resumo SHA-256 em base64 tem 44 caracteres, sempre
+  dentro do limite, e não contém o byte nulo que truncaria a entrada em implementações do
+  bcrypt escritas em C.
+- **Hash cifrado.** O bcrypt resiste à força bruta pelo custo; a cifragem acrescenta uma
+  segunda barreira, porque a chave AES vive fora do banco. Um vazamento da coleção, sozinho,
+  não permite nem testar senhas contra o hash. O valor persistido é um `EncryptedValue`, com
+  a mesma versão de chave dos outros campos protegidos do documento.
+- **Custo configurável.** `BCRYPT_COST` (4 a 31, padrão `12`) define o trabalho por
+  verificação; cada incremento o dobra. Aumentá-lo **não** invalida as senhas já gravadas:
+  o custo viaja no próprio hash e cada uma segue sendo verificada com o seu.
+- **Erro de integridade não é senha errada.** `verify` devolve `false` só para senha
+  incorreta; valor adulterado ou cifrado com versão de chave ausente estoura
+  `EncryptionException`, para não transformar um problema de configuração em credencial
+  inválida.
+
+Alterar qualquer etapa da composição invalidaria todas as senhas gravadas e exigiria um
+fluxo de reidratação no próximo login.
+
 ### Retenção de dados (índices TTL)
 
 Tokens, sessões, bloqueios e logs são removidos automaticamente pelo MongoDB após um prazo
