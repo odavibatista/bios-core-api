@@ -39,6 +39,9 @@ export default defineConfig({
       NODE_ENV: 'test',
       DATABASE_URL: TEST_DATABASE_URL,
       DATA_RETENTION_SYNC_ON_BOOT: 'false',
+      // Chaves de teste: valores fixos, nunca usados fora das suítes.
+      ENCRYPTION_KEYS: `1:${'e'.repeat(43)}=`,
+      BLIND_INDEX_KEY: `${'b'.repeat(43)}=`,
     },
   },
 });

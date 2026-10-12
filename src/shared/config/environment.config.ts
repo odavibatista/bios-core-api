@@ -4,6 +4,7 @@ import {
   Duration,
   type DurationText,
 } from '../domain/value-objects/duration.js';
+import { encryptionKeyring, singleKey } from './encryption.config.js';
 
 /**
  * Ambientes de execução suportados.
@@ -87,6 +88,10 @@ export const environmentSchema = z.object({
             .map((origin) => origin.trim())
             .filter(Boolean),
     ),
+
+  /* Criptografia de dados sensíveis (NFSE03) — ver encryption.config.ts */
+  ENCRYPTION_KEYS: encryptionKeyring(),
+  BLIND_INDEX_KEY: singleKey(),
 
   /* Sessões (RF32, NFSE05) — access token curto; refresh token renovado a cada rotação */
   AUTH_ACCESS_TOKEN_LIFETIME: durationVariable('15m', {

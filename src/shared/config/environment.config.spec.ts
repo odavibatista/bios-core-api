@@ -1,3 +1,7 @@
+import {
+  buildKey,
+  buildKeyring,
+} from '@test/factories/shared/encryption-key.factory.js';
 import { faker } from '@test/support/faker.js';
 import { EnvironmentException } from '../domain/errors/environment.exception.js';
 import {
@@ -12,9 +16,16 @@ function databaseName(): string {
 
 const DATABASE_URL = `mongodb://${faker.internet.domainName()}:${faker.internet.port()}/${databaseName()}?directConnection=true`;
 
+/** Variáveis sem valor padrão: a aplicação não sobe sem elas. */
+const REQUIRED = {
+  DATABASE_URL,
+  ENCRYPTION_KEYS: buildKeyring(),
+  BLIND_INDEX_KEY: buildKey(),
+};
+
 describe('validateEnvironment', () => {
-  it('aplica os valores padrão quando apenas DATABASE_URL é informada', () => {
-    const environment = validateEnvironment({ DATABASE_URL });
+  it('aplica os valores padrão quando só as variáveis obrigatórias são informadas', () => {
+    const environment = validateEnvironment({ ...REQUIRED });
 
     expect(environment).toMatchObject({
       NODE_ENV: 'development',
@@ -35,7 +46,7 @@ describe('validateEnvironment', () => {
       const refreshHours = faker.number.int({ min: 1, max: 24 * 90 });
 
       const environment = validateEnvironment({
-        DATABASE_URL,
+        ...REQUIRED,
         AUTH_ACCESS_TOKEN_LIFETIME: `${accessMinutes}m`,
         AUTH_REFRESH_TOKEN_LIFETIME: `${refreshHours}h`,
       });
@@ -53,7 +64,7 @@ describe('validateEnvironment', () => {
 
       expect(() =>
         validateEnvironment({
-          DATABASE_URL,
+          ...REQUIRED,
           AUTH_ACCESS_TOKEN_LIFETIME: `${minutes}m`,
         }),
       ).toThrow(
@@ -66,7 +77,7 @@ describe('validateEnvironment', () => {
 
       expect(() =>
         validateEnvironment({
-          DATABASE_URL,
+          ...REQUIRED,
           AUTH_REFRESH_TOKEN_LIFETIME: `${minutes}m`,
         }),
       ).toThrow(
@@ -80,7 +91,7 @@ describe('validateEnvironment', () => {
       const hours = faker.number.int({ min: 1, max: 24 * 365 });
 
       const environment = validateEnvironment({
-        DATABASE_URL,
+        ...REQUIRED,
         DATA_RETENTION_USER_SESSIONS: `${hours}h`,
         DATA_RETENTION_SYNC_ON_BOOT: 'false',
       });
@@ -98,7 +109,7 @@ describe('validateEnvironment', () => {
     ])('rejeita a duração %s ("%s")', (_case, value) => {
       expect(() =>
         validateEnvironment({
-          DATABASE_URL,
+          ...REQUIRED,
           DATA_RETENTION_HONEYPOT_HITS: value,
         }),
       ).toThrow(
@@ -116,7 +127,7 @@ describe('validateEnvironment', () => {
     );
 
     const environment = validateEnvironment({
-      DATABASE_URL,
+      ...REQUIRED,
       NODE_ENV: nodeEnv,
       PORT: String(port),
       // Espaços e a vírgula final são descartados.
@@ -128,15 +139,42 @@ describe('validateEnvironment', () => {
     expect(environment.CORS_ORIGINS).toEqual(origins);
   });
 
+  describe('criptografia', () => {
+    it('converte as chaves em material pronto para uso', () => {
+      const environment = validateEnvironment({
+        ...REQUIRED,
+        ENCRYPTION_KEYS: buildKeyring([1, 2]),
+      });
+
+      expect(environment.ENCRYPTION_KEYS.activeVersion).toBe(2);
+      expect([...environment.ENCRYPTION_KEYS.keys.keys()]).toEqual([1, 2]);
+      expect(environment.BLIND_INDEX_KEY).toHaveLength(32);
+    });
+
+    it.each([
+      ['ENCRYPTION_KEYS', 'sem versão'],
+      ['BLIND_INDEX_KEY', 'de tamanho inválido'],
+    ])('rejeita %s %s', (variable) => {
+      const attempt = () =>
+        validateEnvironment({ ...REQUIRED, [variable]: 'chave-invalida' });
+
+      expect(attempt).toThrow(EnvironmentException);
+      expect(attempt).toThrow(new RegExp(variable));
+    });
+  });
+
   it('aceita connection strings mongodb+srv', () => {
     const url = `mongodb+srv://${faker.internet.username()}:${faker.internet.password()}@${faker.internet.domainName()}/${databaseName()}`;
 
-    expect(validateEnvironment({ DATABASE_URL: url }).DATABASE_URL).toBe(url);
+    expect(
+      validateEnvironment({ ...REQUIRED, DATABASE_URL: url }).DATABASE_URL,
+    ).toBe(url);
   });
 
   it('lança EnvironmentException listando todas as variáveis inválidas', () => {
     const attempt = () =>
       validateEnvironment({
+        ...REQUIRED,
         DATABASE_URL: `postgres://${faker.internet.domainName()}/${databaseName()}`,
         NODE_ENV: faker.lorem.word(),
       });
@@ -148,7 +186,11 @@ describe('validateEnvironment', () => {
     expect(attempt).toThrow(/NODE_ENV/);
   });
 
-  it('exige DATABASE_URL', () => {
-    expect(() => validateEnvironment({})).toThrow(/DATABASE_URL/);
+  it.each(Object.keys(REQUIRED))('exige %s', (variable) => {
+    const incomplete = Object.fromEntries(
+      Object.entries(REQUIRED).filter(([name]) => name !== variable),
+    );
+
+    expect(() => validateEnvironment(incomplete)).toThrow(new RegExp(variable));
   });
 });
