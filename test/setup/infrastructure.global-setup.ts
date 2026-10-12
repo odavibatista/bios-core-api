@@ -91,11 +91,18 @@ async function prepareRedis(project: TestProject, url: string): Promise<void> {
   // Sem ouvinte, o evento de erro derruba o processo de teste.
   client.on('error', () => undefined);
 
+  let connected = false;
+
   try {
     await client.connect();
+    connected = true;
+    await assertOwnDatabase(client, url);
     await client.flushdb();
     project.provide('redisAvailable', true);
-  } catch {
+  } catch (error) {
+    // Conectou e recusou: é problema de configuração, não de indisponibilidade.
+    if (connected) throw error;
+
     warn(
       project,
       'redisAvailable',
@@ -104,6 +111,31 @@ async function prepareRedis(project: TestProject, url: string): Promise<void> {
     );
   } finally {
     client.disconnect();
+  }
+}
+
+/** Prefixos das chaves gravadas pelo BIOS: cache próprio e filas do BullMQ. */
+const OWN_KEY_PATTERN = /^(bios|bull):/;
+
+/**
+ * Recusa limpar um banco que tenha chave de outro sistema.
+ *
+ * O índice do banco já protege o banco de uso geral, mas não protege de um
+ * Redis que não é o do BIOS ocupando a mesma porta — outro projeto rodando na
+ * máquina, por exemplo. Uma amostra de chaves basta: se nenhuma é do BIOS e
+ * existem chaves, o banco é de outro sistema.
+ */
+async function assertOwnDatabase(client: Redis, url: string): Promise<void> {
+  const [, keys] = await client.scan(0, 'COUNT', 100);
+  const foreign = keys.find((key) => !OWN_KEY_PATTERN.test(key));
+
+  if (foreign) {
+    throw new Error(
+      `Redis de teste em ${new URL(url).host} tem a chave "${foreign}", que ` +
+        'não foi gravada pelo BIOS: execução abortada para não apagar dados ' +
+        'de outro sistema. Suba o Redis do docker-compose.yml do projeto ou ' +
+        'aponte E2E_REDIS_URL para um banco exclusivo.',
+    );
   }
 }
 
