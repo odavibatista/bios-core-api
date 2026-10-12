@@ -3,8 +3,8 @@ import request from 'supertest';
 import { inject } from 'vitest';
 import { createDatabaseTestingApp } from '../support/database-testing-app.js';
 
-describe.runIf(inject('databaseAvailable'))(
-  'GET /health com banco real (e2e)',
+describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
+  'GET /health com infraestrutura real (e2e)',
   () => {
     let app: INestApplication;
 
@@ -16,12 +16,12 @@ describe.runIf(inject('databaseAvailable'))(
       await app.close();
     });
 
-    it('responde 200 com o banco disponível', async () => {
+    it('responde 200 com o banco e o Redis disponíveis', async () => {
       const response = await request(app.getHttpServer())
         .get('/health')
         .expect(200);
 
-      expect(response.body.checks).toEqual({ database: 'up' });
+      expect(response.body.checks).toEqual({ database: 'up', redis: 'up' });
     });
   },
 );
