@@ -40,6 +40,7 @@ describe('validateEnvironment', () => {
       QUEUE_SCHEDULES_SYNC_ON_BOOT: true,
       DATA_RETENTION_SYNC_ON_BOOT: true,
     });
+    expect(environment.CACHE_DEFAULT_TTL.toString()).toBe('1w');
     expect(environment.DATA_RETENTION_USER_TOKENS.toString()).toBe('1w');
     expect(environment.DATA_RETENTION_LOGIN_ATTEMPTS.toString()).toBe('90d');
     expect(environment.AUTH_ACCESS_TOKEN_LIFETIME.toString()).toBe('15m');
@@ -128,6 +129,23 @@ describe('validateEnvironment', () => {
         expect(attempt).toThrow(/REDIS_URL: deve ser uma URL Redis/);
       },
     );
+
+    it('converte a janela de reserva do cache', () => {
+      const days = faker.number.int({ min: 1, max: 30 });
+
+      expect(
+        validateEnvironment({
+          ...REQUIRED,
+          CACHE_DEFAULT_TTL: `${days}d`,
+        }).CACHE_DEFAULT_TTL.toSeconds(),
+      ).toBe(days * 86_400);
+    });
+
+    it('rejeita janela de reserva do cache sem unidade', () => {
+      expect(() =>
+        validateEnvironment({ ...REQUIRED, CACHE_DEFAULT_TTL: '604800' }),
+      ).toThrow(/CACHE_DEFAULT_TTL/);
+    });
 
     it('aceita Redis com TLS', () => {
       const url = `rediss://${faker.internet.domainName()}:6380`;
