@@ -7,5 +7,9 @@ declare module 'vitest' {
     testDatabaseUrl: string;
     /** Indica se o banco de teste está acessível; suítes com banco são ignoradas quando falso. */
     databaseAvailable: boolean;
+    /** URL do Redis de teste. */
+    testRedisUrl: string;
+    /** Indica se o Redis está acessível; suítes com fila são ignoradas quando falso. */
+    redisAvailable: boolean;
   }
 }

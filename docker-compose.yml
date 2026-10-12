@@ -33,6 +33,13 @@ services:
       - '6379:6379'
     volumes:
       - bios-redis-data:/data
+    # O healthcheck permite aguardar o Redis com `docker compose up --wait`
+    # (usado no CI) antes de rodar as suítes que dependem de fila.
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
 volumes:
   bios-mongodb-data:

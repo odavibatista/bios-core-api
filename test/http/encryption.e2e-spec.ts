@@ -34,6 +34,7 @@ async function createProvider(
 describe('Criptografia de dados sensíveis (e2e)', () => {
   const baseEnvironment = {
     DATABASE_URL: 'mongodb://localhost:27017/bios_test?directConnection=true',
+    REDIS_URL: 'redis://localhost:6379/1',
     ENCRYPTION_KEYS: buildKeyring(),
     BLIND_INDEX_KEY: buildKey(),
   };
@@ -57,8 +58,10 @@ describe('Criptografia de dados sensíveis (e2e)', () => {
   });
 
   it('impede a aplicação de subir sem as chaves', async () => {
-    await expect(
-      createProvider({ DATABASE_URL: baseEnvironment.DATABASE_URL }),
-    ).rejects.toThrow(/ENCRYPTION_KEYS/);
+    const { DATABASE_URL, REDIS_URL } = baseEnvironment;
+
+    await expect(createProvider({ DATABASE_URL, REDIS_URL })).rejects.toThrow(
+      /ENCRYPTION_KEYS/,
+    );
   });
 });

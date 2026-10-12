@@ -9,11 +9,20 @@ const TEST_DATABASE_URL =
   'mongodb://localhost:27017/bios_test?directConnection=true';
 
 /**
+ * Redis descartável dos testes e2e. O índice do banco é obrigatório e diferente
+ * de 0: o setup global limpa o banco inteiro e recusa fazê-lo no banco de uso
+ * geral.
+ */
+const TEST_REDIS_URL = process.env.E2E_REDIS_URL ?? 'redis://localhost:6379/1';
+
+/**
  * Configuração dos testes e2e (HTTP ponta a ponta sobre o AppModule).
  *
  *  - test/http/: pipeline HTTP com dependências substituídas via `overrideProvider`;
  *  - test/database/: AppModule completo contra o MongoDB de teste, montado e
- *    desmontado pelo setup global a cada execução.
+ *    desmontado pelo setup global a cada execução;
+ *  - test/integration/: módulos de infraestrutura contra o serviço real
+ *    correspondente (ex.: filas contra o Redis de teste).
  */
 export default defineConfig({
   resolve: {
@@ -25,7 +34,7 @@ export default defineConfig({
     restoreMocks: true,
     root: './',
     include: ['test/**/*.e2e-spec.ts'],
-    globalSetup: ['test/setup/database.global-setup.ts'],
+    globalSetup: ['test/setup/infrastructure.global-setup.ts'],
     // Semente do Faker por arquivo, exibida quando um teste falha.
     setupFiles: ['test/setup/faker.setup.ts'],
     // As suítes compartilham o mesmo banco: execução em série.
@@ -34,11 +43,15 @@ export default defineConfig({
     hookTimeout: 30_000,
     provide: {
       testDatabaseUrl: TEST_DATABASE_URL,
+      testRedisUrl: TEST_REDIS_URL,
     },
     env: {
       NODE_ENV: 'test',
       DATABASE_URL: TEST_DATABASE_URL,
+      REDIS_URL: TEST_REDIS_URL,
       DATA_RETENTION_SYNC_ON_BOOT: 'false',
+      // Sem agendamento no boot: as suítes registram o que precisam testar.
+      QUEUE_SCHEDULES_SYNC_ON_BOOT: 'false',
       // Chaves de teste: valores fixos, nunca usados fora das suítes.
       ENCRYPTION_KEYS: `1:${'e'.repeat(43)}=`,
       BLIND_INDEX_KEY: `${'b'.repeat(43)}=`,
