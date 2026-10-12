@@ -16,9 +16,12 @@ function databaseName(): string {
 
 const DATABASE_URL = `mongodb://${faker.internet.domainName()}:${faker.internet.port()}/${databaseName()}?directConnection=true`;
 
+const REDIS_URL = `redis://${faker.internet.domainName()}:${faker.internet.port()}/1`;
+
 /** Variáveis sem valor padrão: a aplicação não sobe sem elas. */
 const REQUIRED = {
   DATABASE_URL,
+  REDIS_URL,
   ENCRYPTION_KEYS: buildKeyring(),
   BLIND_INDEX_KEY: buildKey(),
 };
@@ -33,6 +36,8 @@ describe('validateEnvironment', () => {
       DATABASE_URL,
       CORS_ORIGINS: true,
       BCRYPT_COST: 12,
+      QUEUE_WAIT_TIMEOUT_MS: 10_000,
+      QUEUE_SCHEDULES_SYNC_ON_BOOT: true,
       DATA_RETENTION_SYNC_ON_BOOT: true,
     });
     expect(environment.DATA_RETENTION_USER_TOKENS.toString()).toBe('1w');
@@ -84,6 +89,52 @@ describe('validateEnvironment', () => {
       ).toThrow(
         /AUTH_REFRESH_TOKEN_LIFETIME: deve ser uma duração de no mínimo 1h/,
       );
+    });
+  });
+
+  describe('filas', () => {
+    it('aceita um prazo de espera dentro dos limites', () => {
+      const timeout = faker.number.int({ min: 1_000, max: 60_000 });
+
+      const environment = validateEnvironment({
+        ...REQUIRED,
+        QUEUE_WAIT_TIMEOUT_MS: String(timeout),
+        QUEUE_SCHEDULES_SYNC_ON_BOOT: 'false',
+      });
+
+      expect(environment.QUEUE_WAIT_TIMEOUT_MS).toBe(timeout);
+      expect(environment.QUEUE_SCHEDULES_SYNC_ON_BOOT).toBe(false);
+    });
+
+    it.each([
+      ['curto demais para uma fonte externa', 999],
+      ['longo demais para uma requisição HTTP', 60_001],
+    ])('rejeita o prazo de espera %s', (_case, value) => {
+      expect(() =>
+        validateEnvironment({
+          ...REQUIRED,
+          QUEUE_WAIT_TIMEOUT_MS: String(value),
+        }),
+      ).toThrow(/QUEUE_WAIT_TIMEOUT_MS/);
+    });
+
+    it.each(['amqp://localhost', 'localhost:6379', faker.lorem.word()])(
+      'rejeita a URL de Redis "%s"',
+      (url) => {
+        const attempt = () =>
+          validateEnvironment({ ...REQUIRED, REDIS_URL: url });
+
+        expect(attempt).toThrow(EnvironmentException);
+        expect(attempt).toThrow(/REDIS_URL: deve ser uma URL Redis/);
+      },
+    );
+
+    it('aceita Redis com TLS', () => {
+      const url = `rediss://${faker.internet.domainName()}:6380`;
+
+      expect(
+        validateEnvironment({ ...REQUIRED, REDIS_URL: url }).REDIS_URL,
+      ).toBe(url);
     });
   });
 

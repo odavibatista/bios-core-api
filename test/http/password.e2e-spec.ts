@@ -40,6 +40,7 @@ async function createProviders(environment: Record<string, string>): Promise<{
 describe('Senha em duas camadas (e2e)', () => {
   const baseEnvironment = {
     DATABASE_URL: 'mongodb://localhost:27017/bios_test?directConnection=true',
+    REDIS_URL: 'redis://localhost:6379/1',
     ENCRYPTION_KEYS: buildKeyring(),
     BLIND_INDEX_KEY: buildKey(),
     // Custo mínimo: a suíte verifica a montagem do módulo, não a dureza.

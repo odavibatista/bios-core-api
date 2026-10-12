@@ -14,6 +14,7 @@ export const HealthCheckResponseSchema = z
     checks: z
       .object({
         database: z.literal('up').describe('Situação do banco de dados'),
+        redis: z.literal('up').describe('Situação do Redis (filas e cache)'),
       })
       .describe('Situação de cada dependência'),
     timestamp: z.iso.datetime().describe('Momento da verificação (ISO 8601)'),

@@ -77,6 +77,9 @@ export const environmentSchema = z.object({
   DATABASE_URL: z
     .string()
     .regex(/^mongodb(\+srv)?:\/\//, 'deve ser uma connection string MongoDB'),
+  REDIS_URL: z
+    .string()
+    .regex(/^rediss?:\/\//, 'deve ser uma URL Redis (redis:// ou rediss://)'),
   CORS_ORIGINS: z
     .string()
     .default('*')
@@ -96,6 +99,17 @@ export const environmentSchema = z.object({
   /* Custo do bcrypt: cada incremento dobra o tempo de verificação da senha.
      O mínimo e o máximo são os limites do próprio algoritmo. */
   BCRYPT_COST: z.coerce.number().int().min(4).max(31).default(12),
+
+  /* Filas (NFCO01) — ver queue.config.ts.
+     O prazo da espera por um job limita o tempo que o usuário aguarda uma fonte
+     externa; estourado, o chamador decide entre falhar ou seguir sem o dado. */
+  QUEUE_WAIT_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .min(1_000)
+    .max(60_000)
+    .default(10_000),
+  QUEUE_SCHEDULES_SYNC_ON_BOOT: z.stringbool().default(true),
 
   /* Sessões (RF32, NFSE05) — access token curto; refresh token renovado a cada rotação */
   AUTH_ACCESS_TOKEN_LIFETIME: durationVariable('15m', {

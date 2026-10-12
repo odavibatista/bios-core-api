@@ -13,6 +13,7 @@ import { SchemaValidationPipe } from '../pipes/schema-validation.pipe.js';
 import { CheckHealthUseCase } from '../usecases/health/check-health.usecase.js';
 import { DataRetentionModule } from './data-retention.module.js';
 import { EncryptionModule } from './encryption.module.js';
+import { QueueModule } from './queue.module.js';
 
 /**
  * Módulo global de infraestrutura compartilhada.
@@ -22,6 +23,8 @@ import { EncryptionModule } from './encryption.module.js';
  *  - disponibilizar o acesso ao banco (`DatabaseModule`) e manter os índices de
  *    retenção alinhados à configuração (`DataRetentionModule`);
  *  - disponibilizar a criptografia de dados sensíveis (`EncryptionModule`);
+ *  - disponibilizar as filas de comunicação com os serviços de ingestão
+ *    (`QueueModule`);
  *  - registrar o pipeline HTTP global: validação de entrada por schema, serialização
  *    de saída por schema e corpo de erro padronizado;
  *  - expor o health check.
@@ -37,6 +40,7 @@ import { EncryptionModule } from './encryption.module.js';
     DatabaseModule,
     DataRetentionModule,
     EncryptionModule,
+    QueueModule,
   ],
   controllers: [HealthController],
   providers: [
