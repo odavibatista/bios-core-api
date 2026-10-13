@@ -10,6 +10,7 @@ import {
   buildKeyring,
 } from '../factories/shared/encryption-key.factory.js';
 import { buildPassword } from '../factories/shared/password.factory.js';
+import { buildTestEnvironment } from '../support/environment.js';
 
 /**
  * Monta o módulo de criptografia com a configuração real (variáveis validadas
@@ -38,14 +39,12 @@ async function createProviders(environment: Record<string, string>): Promise<{
 }
 
 describe('Senha em duas camadas (e2e)', () => {
-  const baseEnvironment = {
-    DATABASE_URL: 'mongodb://localhost:27017/bios_test?directConnection=true',
-    REDIS_URL: 'redis://localhost:6379/1',
+  const baseEnvironment = buildTestEnvironment({
     ENCRYPTION_KEYS: buildKeyring(),
     BLIND_INDEX_KEY: buildKey(),
     // Custo mínimo: a suíte verifica a montagem do módulo, não a dureza.
     BCRYPT_COST: '4',
-  };
+  });
 
   it('injeta o provider pelo contrato de domínio e fecha o ciclo da senha', async () => {
     const { passwords } = await createProviders(baseEnvironment);

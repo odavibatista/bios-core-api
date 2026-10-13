@@ -78,9 +78,10 @@ describe('configuração de filas', () => {
         url,
         // A aplicação sobe com o Redis fora do ar; o health check reporta.
         lazyConnect: true,
-        // Conexão produtora: o comando falha rápido em vez de pendurar a
-        // requisição do usuário.
-        maxRetriesPerRequest: 1,
+        // Exigência do BullMQ para as conexões bloqueantes dos consumidores,
+        // e esta API hospeda um: o envio de e-mails. Quem protege o lado
+        // produtor de esperar sem fim é o orçamento de publicação.
+        maxRetriesPerRequest: null,
       });
     });
   });
