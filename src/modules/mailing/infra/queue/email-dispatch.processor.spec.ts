@@ -68,6 +68,7 @@ describe('EmailDispatchProcessor', () => {
         to: data.to,
         subject: data.subject,
         html: data.html,
+        text: data.text,
       });
       expect(emailDispatchLogRepository.markSent).toHaveBeenCalledWith(
         data.dispatchLogId,

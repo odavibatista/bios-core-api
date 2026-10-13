@@ -29,6 +29,7 @@ const REQUIRED = {
   SMTP_USER: faker.internet.username(),
   SMTP_PASSWORD: faker.internet.password(),
   MAIL_FROM: `BIOS <${faker.internet.email()}>`,
+  FRONTEND_URL: faker.internet.url(),
 };
 
 describe('validateEnvironment', () => {

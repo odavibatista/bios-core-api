@@ -60,6 +60,7 @@ describe('DispatchEmailUseCase', () => {
         to: request.to,
         subject: request.subject,
         html: request.html,
+        text: request.text,
       },
       { jobId: expect.any(String) },
     );

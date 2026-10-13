@@ -18,7 +18,7 @@ A documentação de requisitos, modelagem e arquitetura do projeto fica no repos
 | Validação e DTOs | Zod 4 com Standard Schema nativo do Nest (`@Body({ schema })`) |
 | Documentação da API | `@nestjs/swagger` 12 (OpenAPI gerado dos schemas Zod) + Scalar |
 | Filas, cache e limite de requisições | Redis 7 via BullMQ 6 (`@nestjs/bullmq`), `ioredis` e `@nestjs/throttler` |
-| E-mail | `nodemailer` por SMTP, com auditoria de cada disparo |
+| E-mail | `nodemailer` por SMTP, templates Handlebars (HTML e texto) e auditoria de cada disparo |
 | Testes | Vitest 4 + `@nestjs/testing` + Supertest + Faker (dados de teste) |
 | Qualidade | ESLint 10 (`typescript-eslint`, type-checked) + Prettier |
 
@@ -208,20 +208,45 @@ await queues.schedule({ queue, id: 'ibama-daily-ingestion', jobName, cron: '0 4 
 
 ## E-mails transacionais
 
-Confirmação de cadastro, recuperação de senha e alerta de login suspeito (RF18). O caso de uso
-`DispatchEmailUseCase` **só registra e enfileira**; quem envia é o `EmailDispatchProcessor`,
-consumidor da fila `email-dispatch` hospedado nesta API.
+Confirmação de cadastro, troca de e-mail, recuperação de senha e alerta de acesso suspeito
+(RF18). Os fluxos de negócio chamam `SendTransactionalEmailUseCase`, que **renderiza e
+enfileira**; quem envia é o `EmailDispatchProcessor`, consumidor da fila `email-dispatch`
+hospedado nesta API.
 
 ```ts
-const dispatchLogId = await dispatchEmail.execute({
+const dispatchLogId = await sendTransactionalEmail.execute({
   template: EmailTemplate.EMAIL_CONFIRMATION,
   to: email,
-  subject: 'Confirme seu cadastro',
-  html: corpo,
+  context: { name, token, validity: '2 horas' },
   userId,
 });
 ```
 
+O contexto é verificado contra o template escolhido: pedir `SUSPICIOUS_LOGIN_ALERT` com os
+dados de um link de confirmação não compila.
+
+| Template | Contexto | Link |
+| --- | --- | --- |
+| `EMAIL_CONFIRMATION` | nome, token, validade | `/confirmar-email/<token>` |
+| `EMAIL_CHANGE_CONFIRMATION` | nome, token, validade | `/confirmar-novo-email/<token>` |
+| `PASSWORD_RESET` | nome, token, validade | `/redefinir-senha/<token>` |
+| `SUSPICIOUS_LOGIN_ALERT` | nome, IP, data/hora | — (nenhum) |
+
+- **Templates versionados em `src/modules/mailing/templates/`**, em pt-BR: um `.hbs` de HTML e
+  um de texto simples por mensagem, mais a moldura comum (`layout.html.hbs`). O texto simples
+  não é enfeite — atende quem lê e-mail sem HTML e melhora a entrega, porque mensagem só-HTML
+  é sinal de spam para boa parte dos filtros. O `nest build` copia os `.hbs` para `dist/`
+  (ver `nest-cli.json`); sem isso a renderização falharia só em produção.
+- **Variáveis escapadas** pelo Handlebars (`{{ }}`). O token vai em **segmento de caminho**, e
+  não em parâmetro de consulta, porque o Handlebars escapa `=`: um `?token=abc` apareceria
+  como `?token&#x3D;abc` no código-fonte da mensagem. A base do link é `FRONTEND_URL` — o
+  endereço do front-end, não o da API.
+- **O alerta de acesso suspeito não tem link nem segredo.** Nenhum token, nenhuma senha e
+  nenhuma âncora clicável: alerta de invasão é alvo clássico de phishing, e um link ali
+  treinaria o usuário a clicar. Há teste que garante isso.
+- **Renderizar antes de enfileirar** é deliberado: o job carrega a mensagem pronta, então
+  mudar um template não altera o conteúdo de um e-mail que já estava na fila, e o consumidor
+  não precisa dos templates para enviar.
 - **Falha de e-mail não derruba o fluxo de origem.** O cadastro, o login e a recuperação de
   senha concluem mesmo com o SMTP fora do ar: o disparo fica na fila e é reenviado com
   backoff (5 tentativas, ver `queue.config.ts`).

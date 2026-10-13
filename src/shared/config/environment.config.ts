@@ -100,6 +100,12 @@ export const environmentSchema = z.object({
   SMTP_PASSWORD: z.string().nonempty(),
   MAIL_FROM: z.string().nonempty(),
 
+  /* Base dos links enviados por e-mail (confirmação de cadastro, redefinição
+     de senha). É o endereço do front-end, não o da API. */
+  FRONTEND_URL: z
+    .string()
+    .regex(/^https?:\/\//, 'deve ser uma URL http:// ou https://'),
+
   /* Criptografia de dados sensíveis (NFSE03) — ver encryption.config.ts */
   ENCRYPTION_KEYS: encryptionKeyring(),
   BLIND_INDEX_KEY: singleKey(),
