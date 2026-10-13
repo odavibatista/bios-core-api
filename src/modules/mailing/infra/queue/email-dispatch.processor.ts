@@ -39,10 +39,10 @@ export class EmailDispatchProcessor extends WorkerHost {
   }
 
   async process(job: Job<EmailDispatchJob>): Promise<void> {
-    const { dispatchLogId, to, subject, html } = job.data;
+    const { dispatchLogId, to, subject, html, text } = job.data;
 
     try {
-      await this.mailProvider.send({ to, subject, html });
+      await this.mailProvider.send({ to, subject, html, text });
       await this.emailDispatchLogRepository.markSent(dispatchLogId);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);

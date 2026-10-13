@@ -25,6 +25,7 @@ export function buildTestEnvironment(
     SMTP_USER: 'bios-testes',
     SMTP_PASSWORD: 'senha-de-teste',
     MAIL_FROM: 'BIOS <nao-responda@bios.test>',
+    FRONTEND_URL: 'https://bios.test',
     ...overrides,
   };
 }

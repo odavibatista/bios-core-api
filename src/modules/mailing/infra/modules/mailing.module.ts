@@ -11,6 +11,9 @@ import {
 } from '../providers/nodemailer-mail.provider.js';
 import { EmailDispatchProcessor } from '../queue/email-dispatch.processor.js';
 import { DispatchEmailUseCase } from '../usecases/dispatch-email.usecase.js';
+import { SendTransactionalEmailUseCase } from '../usecases/send-transactional-email.usecase.js';
+import { TemplateRendererProvider } from '../../domain/providers/template-renderer.provider.js';
+import { HandlebarsTemplateRendererProvider } from '../providers/handlebars-template-renderer.provider.js';
 
 /**
  * E-mails transacionais: enfileiramento, auditoria de envio e o consumidor que
@@ -18,8 +21,9 @@ import { DispatchEmailUseCase } from '../usecases/dispatch-email.usecase.js';
  *
  * Entidades (schemas Prisma em `../../entity`): `EmailDispatchLog`.
  *
- * Exporta apenas o caso de uso: os outros módulos disparam e-mail, nunca
- * enviam. Quem envia é o processor da fila.
+ * Exporta apenas os casos de uso: os outros módulos pedem o envio de um
+ * template, nunca montam ou entregam a mensagem. Quem renderiza é o
+ * `TemplateRendererProvider`; quem entrega é o processor da fila.
  */
 @Module({
   providers: [
@@ -49,13 +53,18 @@ import { DispatchEmailUseCase } from '../usecases/dispatch-email.usecase.js';
 
     /* Providers */
     { provide: MailProvider, useClass: NodemailerMailProvider },
+    {
+      provide: TemplateRendererProvider,
+      useClass: HandlebarsTemplateRendererProvider,
+    },
 
     /* Casos de uso */
     DispatchEmailUseCase,
+    SendTransactionalEmailUseCase,
 
     /* Consumidor da fila */
     EmailDispatchProcessor,
   ],
-  exports: [DispatchEmailUseCase],
+  exports: [SendTransactionalEmailUseCase, DispatchEmailUseCase],
 })
 export class MailingModule {}
