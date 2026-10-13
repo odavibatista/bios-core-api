@@ -5,12 +5,32 @@ como código. Os arquivos seguem o formato de exportação de rulesets do GitHub
 
 | Arquivo | Branches | Regras |
 | --- | --- | --- |
-| `protecao-develop.json` | `develop` | PR obrigatório, apenas **squash merge** (um commit por tarefa), checks **Lint** e **Testes** aprovados com branch atualizado, conversas resolvidas, sem force push nem exclusão |
+| `protecao-main-pre-prod.json` | `main`, `pre-prod` | PR obrigatório, apenas **merge commit** (promoções mantêm o mesmo histórico entre os branches), checks **Lint** e **Testes** aprovados, conversas resolvidas, sem force push nem exclusão |
 | `protecao-main-pre-prod.json` | `main`, `pre-prod` | PR obrigatório, apenas **merge commit** (promoções mantêm o mesmo histórico entre os branches), checks **Lint** e **Testes** aprovados com branch atualizado, conversas resolvidas, sem force push nem exclusão |
 
 Os checks são os jobs do workflow `.github/workflows/ci.yml`, restritos ao GitHub Actions
 (`integration_id` 15368). Nenhum PR exige aprovação de revisor, pois o projeto tem um único
 integrante; a barreira de qualidade é o CI. Não há atores com permissão de ignorar as regras.
+
+## Exigência de branch atualizado
+
+`strict_required_status_checks_policy` (em *Settings*, "Require branches to be up to date
+before merging") vale **só no `develop`**:
+
+- **No `develop` ela protege de verdade.** Um branch de tarefa fica aberto enquanto o
+  `develop` avança, e dois conjuntos de mudanças que passam isolados podem se contradizer
+  quando juntos. Exigir o branch atualizado força esse encontro antes do merge.
+- **Nas promoções ela só atrapalha.** Cada promoção cria um merge commit **no destino**, que
+  nunca volta para a origem: terminada a primeira, o `pre-prod` já está permanentemente
+  "atrás" da `main`, e o `develop`, atrás do `pre-prod`. Com a regra ligada, toda promoção
+  exigiria antes um merge de volta (`main` → `pre-prod` → `develop`) — dois merges extras por
+  entrega, invertendo o fluxo de mão única do projeto e enchendo o `develop` de commits de
+  sincronia.
+
+Desligá-la nas promoções **não afrouxa o CI**: `Lint` e `Testes` continuam obrigatórios e,
+como o workflow roda no evento `pull_request`, o GitHub os executa sobre o *merge* de origem e
+destino — ou seja, o que é testado já é o resultado da promoção, e não o branch de origem
+isolado. A exigência de branch atualizado seria uma segunda checagem do mesmo fato.
 
 ## Como aplicar
 
