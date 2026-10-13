@@ -43,6 +43,7 @@ export class DispatchEmailUseCase extends UseCase<MailDispatchRequest, string> {
     to,
     subject,
     html,
+    text,
     userId,
   }: MailDispatchRequest): Promise<string> {
     const jobId = randomUUID();
@@ -53,7 +54,7 @@ export class DispatchEmailUseCase extends UseCase<MailDispatchRequest, string> {
       userId,
     });
 
-    const job: EmailDispatchJob = { dispatchLogId, to, subject, html };
+    const job: EmailDispatchJob = { dispatchLogId, to, subject, html, text };
     await this.queueProvider.enqueue(
       QueueName.EMAIL_DISPATCH,
       SEND_EMAIL_JOB,

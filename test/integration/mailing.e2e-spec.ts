@@ -5,6 +5,9 @@ import { EmailDispatchStatus } from '@prisma/client';
 import { MailingModule } from '@modules/mailing/infra/modules/mailing.module.js';
 import { MailProvider } from '@modules/mailing/domain/providers/mail.provider.js';
 import { DispatchEmailUseCase } from '@modules/mailing/infra/usecases/dispatch-email.usecase.js';
+import { SendTransactionalEmailUseCase } from '@modules/mailing/infra/usecases/send-transactional-email.usecase.js';
+import { EMAIL_TEMPLATE_SUBJECTS } from '@modules/mailing/domain/dtos/providers/email-template.dto.js';
+import { EmailTemplate } from '@prisma/client';
 import { validateEnvironment } from '@shared/config/environment.config.js';
 import { DatabaseModule } from '@shared/infra/database/database.module.js';
 import { PrismaService } from '@shared/infra/database/prisma.service.js';
@@ -14,7 +17,9 @@ import { Queue } from 'bullmq';
 import { QueueName } from '@shared/domain/dtos/providers/queue-job.dto.js';
 import { inject } from 'vitest';
 import { mailDispatchRequestFactory } from '../factories/mailing/email-dispatch.factory.js';
+import { buildTokenContext } from '../factories/mailing/email-template.factory.js';
 import { buildTestEnvironment } from '../support/environment.js';
+import { faker } from '../support/faker.js';
 
 const REDIS_URL = inject('testRedisUrl');
 
@@ -23,7 +28,8 @@ const REDIS_URL = inject('testRedisUrl');
  * simular falha. Nenhuma suíte abre conexão com servidor de e-mail.
  */
 class RecordingMailProvider extends MailProvider {
-  readonly sent: { to: string; subject: string }[] = [];
+  readonly sent: { to: string; subject: string; html: string; text: string }[] =
+    [];
   attempts = 0;
   failure?: Error;
 
@@ -31,12 +37,13 @@ class RecordingMailProvider extends MailProvider {
     to: string;
     subject: string;
     html: string;
+    text: string;
   }): Promise<void> {
     this.attempts += 1;
 
     if (this.failure) return Promise.reject(this.failure);
 
-    this.sent.push({ to: message.to, subject: message.subject });
+    this.sent.push({ ...message });
 
     return Promise.resolve();
   }
@@ -54,6 +61,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
     let app: INestApplication;
     let prisma: PrismaService;
     let dispatchEmail: DispatchEmailUseCase;
+    let sendTransactionalEmail: SendTransactionalEmailUseCase;
 
     beforeAll(async () => {
       const moduleRef = await Test.createTestingModule({
@@ -80,6 +88,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
 
       prisma = app.get(PrismaService);
       dispatchEmail = app.get(DispatchEmailUseCase);
+      sendTransactionalEmail = app.get(SendTransactionalEmailUseCase);
     });
 
     afterEach(async () => {
@@ -128,7 +137,10 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       expect(log.sent_at).toBeInstanceOf(Date);
       expect(log.job_id).toEqual(expect.any(String));
       expect(mailProvider.sent).toEqual([
-        { to: request.to, subject: request.subject },
+        expect.objectContaining({
+          to: request.to,
+          subject: request.subject,
+        }),
       ]);
     });
 
@@ -144,6 +156,32 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       expect(JSON.stringify(log)).not.toContain(request.to);
       expect(log.recipient_email_hash).not.toBe(request.to);
       expect(log.recipient_email_hash.length).toBeGreaterThan(0);
+    });
+
+    it('renderiza o template a partir dos arquivos e entrega a mensagem', async () => {
+      const to = faker.internet.email();
+      const context = buildTokenContext();
+
+      const dispatchLogId = await sendTransactionalEmail.execute({
+        template: EmailTemplate.EMAIL_CONFIRMATION,
+        to,
+        context,
+      });
+
+      await waitForStatus(dispatchLogId, EmailDispatchStatus.SENT);
+
+      // Prova que os `.hbs` são encontrados em tempo de execução e que o
+      // conteúdo renderizado chega inteiro ao transporte.
+      const [message] = mailProvider.sent;
+      expect(message.subject).toBe(
+        EMAIL_TEMPLATE_SUBJECTS[EmailTemplate.EMAIL_CONFIRMATION],
+      );
+      expect(message.html).toContain('<!doctype html>');
+      expect(message.html).toContain(
+        `https://bios.test/confirmar-email/${context.token}`,
+      );
+      expect(message.text).toContain(context.name);
+      expect(message.text).not.toContain('<');
     });
 
     it('mantém o disparo enfileirado enquanto resta reenvio', async () => {

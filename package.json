@@ -50,6 +50,7 @@
     "@scalar/nestjs-api-reference": "^1.2.26",
     "bcryptjs": "^3.0.3",
     "bullmq": "^6.3.13",
+    "handlebars": "^4.7.10",
     "ioredis": "^6.0.0",
     "nodemailer": "^10.1.0",
     "reflect-metadata": "^0.2.2",

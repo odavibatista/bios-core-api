@@ -10,6 +10,14 @@ export interface MailMessage {
 
   /** Corpo em HTML. */
   html: string;
+
+  /**
+   * Corpo em texto simples, enviado junto do HTML.
+   *
+   * Atende quem lê e-mail sem HTML e melhora a entrega: mensagem só-HTML é
+   * sinal de spam para boa parte dos filtros.
+   */
+  text: string;
 }
 
 /**

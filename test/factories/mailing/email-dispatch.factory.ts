@@ -18,6 +18,7 @@ export const mailDispatchRequestFactory = defineFactory<MailDispatchRequest>(
     to: faker.internet.email(),
     subject: faker.lorem.sentence(),
     html: `<p>${faker.lorem.paragraph()}</p>`,
+    text: faker.lorem.paragraph(),
   }),
 );
 
@@ -27,6 +28,7 @@ export const emailDispatchJobFactory = defineFactory<EmailDispatchJob>(() => ({
   to: faker.internet.email(),
   subject: faker.lorem.sentence(),
   html: `<p>${faker.lorem.paragraph()}</p>`,
+  text: faker.lorem.paragraph(),
 }));
 
 /** Registro de auditoria, no formato devolvido pelo banco. */
