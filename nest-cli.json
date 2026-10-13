@@ -4,6 +4,13 @@
   "sourceRoot": "src",
   "entryFile": "app/main",
   "compilerOptions": {
-    "deleteOutDir": true
+    "deleteOutDir": true,
+    "assets": [
+      {
+        "include": "modules/**/templates/**/*.hbs",
+        "outDir": "dist",
+        "watchAssets": true
+      }
+    ]
   }
 }

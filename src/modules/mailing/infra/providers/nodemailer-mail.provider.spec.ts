@@ -37,24 +37,25 @@ describe('NodemailerMailProvider', () => {
   it('entrega a mensagem ao transporte, com o remetente da configuração', async () => {
     const transport = jsonTransport();
     const sendMail = vi.spyOn(transport, 'sendMail');
-    const { to, subject, html } = mailDispatchRequestFactory.build();
+    const { to, subject, html, text } = mailDispatchRequestFactory.build();
 
-    await (await createProvider(transport)).send({ to, subject, html });
+    await (await createProvider(transport)).send({ to, subject, html, text });
 
     expect(sendMail).toHaveBeenCalledWith({
       from: MAIL_FROM,
       to,
       subject,
       html,
+      text,
     });
   });
 
   it('monta uma mensagem que o Nodemailer aceita', async () => {
-    const { to, subject, html } = mailDispatchRequestFactory.build();
+    const { to, subject, html, text } = mailDispatchRequestFactory.build();
 
     // Sem dublê: é o transporte real que valida endereço, assunto e corpo.
     await expect(
-      (await createProvider(jsonTransport())).send({ to, subject, html }),
+      (await createProvider(jsonTransport())).send({ to, subject, html, text }),
     ).resolves.toBeUndefined();
   });
 
@@ -62,10 +63,10 @@ describe('NodemailerMailProvider', () => {
     const transport = jsonTransport();
     const failure = new Error(faker.lorem.sentence());
     vi.spyOn(transport, 'sendMail').mockRejectedValue(failure);
-    const { to, subject, html } = mailDispatchRequestFactory.build();
+    const { to, subject, html, text } = mailDispatchRequestFactory.build();
 
     await expect(
-      (await createProvider(transport)).send({ to, subject, html }),
+      (await createProvider(transport)).send({ to, subject, html, text }),
     ).rejects.toBe(failure);
   });
 });

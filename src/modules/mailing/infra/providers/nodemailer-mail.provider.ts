@@ -29,7 +29,7 @@ export class NodemailerMailProvider extends MailProvider {
     this.from = configService.get('MAIL_FROM', { infer: true });
   }
 
-  override async send({ to, subject, html }: MailMessage): Promise<void> {
-    await this.transport.sendMail({ from: this.from, to, subject, html });
+  override async send({ to, subject, html, text }: MailMessage): Promise<void> {
+    await this.transport.sendMail({ from: this.from, to, subject, html, text });
   }
 }
