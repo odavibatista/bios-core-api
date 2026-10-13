@@ -15,6 +15,7 @@ import { DataRetentionModule } from './data-retention.module.js';
 import { EncryptionModule } from './encryption.module.js';
 import { QueueModule } from './queue.module.js';
 import { RedisModule } from './redis.module.js';
+import { ThrottlerModule } from './throttler.module.js';
 
 /**
  * Módulo global de infraestrutura compartilhada.
@@ -26,8 +27,9 @@ import { RedisModule } from './redis.module.js';
  *  - disponibilizar a criptografia de dados sensíveis (`EncryptionModule`);
  *  - disponibilizar o Redis — cache de consultas e health check (`RedisModule`) — e
  *    as filas de comunicação com os serviços de ingestão (`QueueModule`);
- *  - registrar o pipeline HTTP global: validação de entrada por schema, serialização
- *    de saída por schema e corpo de erro padronizado;
+ *  - registrar o pipeline HTTP global: limite de requisições (`ThrottlerModule`),
+ *    validação de entrada por schema, serialização de saída por schema e corpo de
+ *    erro padronizado;
  *  - expor o health check.
  */
 @Global()
@@ -43,6 +45,7 @@ import { RedisModule } from './redis.module.js';
     EncryptionModule,
     RedisModule,
     QueueModule,
+    ThrottlerModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -36,6 +36,8 @@ import { REDIS_CLIENT, RedisService } from '../redis/redis.service.js';
     RedisCacheProvider,
     { provide: CacheProvider, useExisting: RedisCacheProvider },
   ],
-  exports: [RedisHealthProvider, CacheProvider],
+  // O cliente é exportado porque os contadores do limite de requisições
+  // (`RedisThrottlerStorage`) usam a mesma conexão do cache.
+  exports: [REDIS_CLIENT, RedisHealthProvider, CacheProvider],
 })
 export class RedisModule {}
