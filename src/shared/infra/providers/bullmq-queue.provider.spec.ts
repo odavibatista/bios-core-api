@@ -10,9 +10,11 @@ import { faker } from '@test/support/faker.js';
 import type { Environment } from '../../config/environment.config.js';
 import {
   buildJobOptions,
+  QUEUE_PUBLISH_BUDGET_MS,
   QUEUE_RETRY_POLICIES,
 } from '../../config/queue.config.js';
 import { QueueName } from '../../domain/dtos/providers/queue-job.dto.js';
+import { DependencyUnavailableException } from '../../domain/errors/dependency-unavailable.exception.js';
 import { QueueJobFailedException } from '../../domain/errors/queue-job-failed.exception.js';
 import { QueueTimeoutException } from '../../domain/errors/queue-timeout.exception.js';
 import {
@@ -143,6 +145,81 @@ describe('BullMqQueueProvider', () => {
           {},
         ),
       ).rejects.toThrow(/sem identificador/);
+    });
+
+    describe('orçamento de publicação', () => {
+      beforeEach(() => {
+        vi.useFakeTimers();
+      });
+
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      /**
+       * Publica capturando o desfecho em vez de propagá-lo.
+       *
+       * A rejeição acontece durante o avanço dos temporizadores, e uma
+       * asserção anexada só depois a encontraria órfã — o que o Vitest
+       * reporta como erro não tratado, mesmo com o teste passando.
+       */
+      function publishCapturing(queue: FakeQueue, name: QueueName) {
+        return createProvider({ [name]: queue })
+          .enqueue(name, buildJobName(), {})
+          .then(
+            () => undefined,
+            (error: unknown) => error,
+          );
+      }
+
+      it('reporta o Redis indisponível quando a publicação não responde', async () => {
+        const queue = fakeQueue();
+        // O cliente guarda o comando enquanto tenta reconectar; a publicação
+        // não pode esperar junto com a requisição que a originou.
+        queue.add.mockReturnValue(new Promise(() => undefined));
+
+        const publishing = publishCapturing(queue, QueueName.COMPANY_PROFILE);
+        await vi.advanceTimersByTimeAsync(QUEUE_PUBLISH_BUDGET_MS);
+
+        const failure = await publishing;
+        expect(failure).toBeInstanceOf(DependencyUnavailableException);
+        expect(failure).toMatchObject({ details: { dependency: 'redis' } });
+      });
+
+      it('trata a falha que chega depois do orçamento vencido', async () => {
+        const queue = fakeQueue();
+        queue.add.mockReturnValue(
+          new Promise((_resolve, reject) =>
+            setTimeout(
+              () => reject(new Error('conexão perdida')),
+              QUEUE_PUBLISH_BUDGET_MS + 10,
+            ),
+          ),
+        );
+
+        const publishing = publishCapturing(queue, QueueName.GHG_INVENTORY);
+        await vi.advanceTimersByTimeAsync(QUEUE_PUBLISH_BUDGET_MS);
+        expect(await publishing).toBeInstanceOf(DependencyUnavailableException);
+
+        // A rejeição tardia da publicação já tem quem a trate: sem isso,
+        // ficaria órfã e reprovaria este próprio teste.
+        await vi.advanceTimersByTimeAsync(20);
+      });
+
+      it('não reclama da publicação que responde dentro do orçamento', async () => {
+        const queue = fakeQueue();
+        const id = buildJobId();
+        queue.add.mockReturnValue(
+          new Promise((resolve) => setTimeout(() => resolve({ id }), 1)),
+        );
+
+        const publishing = createProvider({
+          [QueueName.EMAIL_DISPATCH]: queue,
+        }).enqueue(QueueName.EMAIL_DISPATCH, buildJobName(), {});
+        await vi.advanceTimersByTimeAsync(1);
+
+        await expect(publishing).resolves.toBeUndefined();
+      });
     });
   });
 

@@ -24,6 +24,11 @@ const REQUIRED = {
   REDIS_URL,
   ENCRYPTION_KEYS: buildKeyring(),
   BLIND_INDEX_KEY: buildKey(),
+  SMTP_HOST: faker.internet.domainName(),
+  SMTP_PORT: String(faker.internet.port()),
+  SMTP_USER: faker.internet.username(),
+  SMTP_PASSWORD: faker.internet.password(),
+  MAIL_FROM: `BIOS <${faker.internet.email()}>`,
 };
 
 describe('validateEnvironment', () => {

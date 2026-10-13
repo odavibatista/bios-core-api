@@ -8,6 +8,10 @@ import {
   buildKeyring,
   buildSensitiveValue,
 } from '../factories/shared/encryption-key.factory.js';
+import {
+  buildTestEnvironment,
+  buildTestEnvironmentWithout,
+} from '../support/environment.js';
 
 /**
  * Monta o módulo de criptografia com a configuração real (variáveis validadas
@@ -32,12 +36,10 @@ async function createProvider(
 }
 
 describe('Criptografia de dados sensíveis (e2e)', () => {
-  const baseEnvironment = {
-    DATABASE_URL: 'mongodb://localhost:27017/bios_test?directConnection=true',
-    REDIS_URL: 'redis://localhost:6379/1',
+  const baseEnvironment = buildTestEnvironment({
     ENCRYPTION_KEYS: buildKeyring(),
     BLIND_INDEX_KEY: buildKey(),
-  };
+  });
 
   it('injeta o provider pelo contrato de domínio, com as chaves do ambiente', async () => {
     const provider = await createProvider(baseEnvironment);
@@ -58,10 +60,10 @@ describe('Criptografia de dados sensíveis (e2e)', () => {
   });
 
   it('impede a aplicação de subir sem as chaves', async () => {
-    const { DATABASE_URL, REDIS_URL } = baseEnvironment;
-
-    await expect(createProvider({ DATABASE_URL, REDIS_URL })).rejects.toThrow(
-      /ENCRYPTION_KEYS/,
-    );
+    await expect(
+      createProvider(
+        buildTestEnvironmentWithout('ENCRYPTION_KEYS', 'BLIND_INDEX_KEY'),
+      ),
+    ).rejects.toThrow(/ENCRYPTION_KEYS/);
   });
 });
