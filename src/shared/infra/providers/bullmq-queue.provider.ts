@@ -4,6 +4,7 @@ import type { Queue } from 'bullmq';
 import type { Environment } from '../../config/environment.config.js';
 import {
   buildJobOptions,
+  QUEUE_PUBLISH_BUDGET_MS,
   QUEUE_WAIT_POLL_INTERVAL_MS,
 } from '../../config/queue.config.js';
 import type {
@@ -12,6 +13,7 @@ import type {
   QueueName,
   QueueSchedule,
 } from '../../domain/dtos/providers/queue-job.dto.js';
+import { DependencyUnavailableException } from '../../domain/errors/dependency-unavailable.exception.js';
 import { QueueJobFailedException } from '../../domain/errors/queue-job-failed.exception.js';
 import { QueueTimeoutException } from '../../domain/errors/queue-timeout.exception.js';
 import { QueueProvider } from '../../domain/providers/queue.provider.js';
@@ -108,23 +110,44 @@ export class BullMqQueueProvider extends QueueProvider {
     );
   }
 
+  /**
+   * Publica dentro do orçamento de publicação: com o Redis fora do ar, o
+   * cliente guardaria o comando até reconectar, pendurando a requisição que o
+   * originou. Esgotado o prazo, a dependência é reportada como indisponível e
+   * quem chamou decide o que fazer.
+   */
   private async publish<P>(
     queue: QueueName,
     jobName: string,
     payload: P,
     { jobId, delayMs }: EnqueueOptions,
   ): Promise<string> {
-    const job = await this.queueOf(queue).add(jobName, payload, {
+    let timer: NodeJS.Timeout | undefined;
+    const budget = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(
+        () => reject(new DependencyUnavailableException('redis')),
+        QUEUE_PUBLISH_BUDGET_MS,
+      );
+    });
+    const publishing = this.queueOf(queue).add(jobName, payload, {
       ...buildJobOptions(queue),
       jobId,
       delay: delayMs,
     });
+    // Se o orçamento vencer primeiro, a rejeição posterior já tem quem a trate.
+    void publishing.catch(() => undefined);
 
-    if (!job.id) {
-      throw new Error(`Job publicado em "${queue}" sem identificador.`);
+    try {
+      const job = await Promise.race([publishing, budget]);
+
+      if (!job.id) {
+        throw new Error(`Job publicado em "${queue}" sem identificador.`);
+      }
+
+      return job.id;
+    } finally {
+      clearTimeout(timer);
     }
-
-    return job.id;
   }
 
   private queueOf(name: QueueName): Queue {

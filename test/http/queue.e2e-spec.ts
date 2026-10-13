@@ -4,6 +4,7 @@ import { validateEnvironment } from '@shared/config/environment.config.js';
 import { QueueProvider } from '@shared/domain/providers/queue.provider.js';
 import { QueueModule } from '@shared/infra/modules/queue.module.js';
 import { BullMqQueueProvider } from '@shared/infra/providers/bullmq-queue.provider.js';
+import { buildTestEnvironment } from '../support/environment.js';
 
 /**
  * Monta o módulo de filas com a configuração real (variáveis validadas pelo
@@ -26,12 +27,7 @@ function createModule(
 }
 
 describe('Infraestrutura de filas (e2e)', () => {
-  const baseEnvironment = {
-    DATABASE_URL: 'mongodb://localhost:27017/bios_test?directConnection=true',
-    REDIS_URL: 'redis://localhost:6379/1',
-    ENCRYPTION_KEYS: `1:${'e'.repeat(43)}=`,
-    BLIND_INDEX_KEY: `${'b'.repeat(43)}=`,
-  };
+  const baseEnvironment = buildTestEnvironment();
 
   it('injeta o provider pelo contrato de domínio', async () => {
     const moduleRef = await createModule(baseEnvironment);

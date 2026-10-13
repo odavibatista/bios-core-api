@@ -15,6 +15,7 @@ import request from 'supertest';
 import { inject } from 'vitest';
 import { healthCheckResponseFactory } from '../factories/shared/health-check-response.factory.js';
 import { faker } from '../support/faker.js';
+import { buildTestEnvironment } from '../support/environment.js';
 
 /** Limite curto: o estouro tem de acontecer em poucas requisições. */
 const LIMIT = 2;
@@ -64,15 +65,13 @@ describe.runIf(inject('redisAvailable'))('Limite de requisições (e2e)', () => 
           ignoreEnvFile: true,
           load: [
             () =>
-              validateEnvironment({
-                DATABASE_URL:
-                  'mongodb://localhost:27017/bios_test?directConnection=true',
-                REDIS_URL: inject('testRedisUrl'),
-                ENCRYPTION_KEYS: `1:${'e'.repeat(43)}=`,
-                BLIND_INDEX_KEY: `${'b'.repeat(43)}=`,
-                THROTTLE_LIMIT: String(LIMIT),
-                THROTTLE_PUBLIC_API_LIMIT: String(LIMIT),
-              }),
+              validateEnvironment(
+                buildTestEnvironment({
+                  REDIS_URL: inject('testRedisUrl'),
+                  THROTTLE_LIMIT: String(LIMIT),
+                  THROTTLE_PUBLIC_API_LIMIT: String(LIMIT),
+                }),
+              ),
           ],
         }),
         ThrottlerModule,

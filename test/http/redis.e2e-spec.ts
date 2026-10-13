@@ -14,6 +14,7 @@ import {
 
 /** Porta sem serviço: representa o Redis fora do ar. */
 const UNREACHABLE_REDIS_URL = 'redis://localhost:6399/1';
+import { buildTestEnvironment } from '../support/environment.js';
 
 function createModule(
   environment: Record<string, string>,
@@ -31,12 +32,7 @@ function createModule(
 }
 
 describe('Redis: cache e health check (e2e)', () => {
-  const baseEnvironment = {
-    DATABASE_URL: 'mongodb://localhost:27017/bios_test?directConnection=true',
-    REDIS_URL: 'redis://localhost:6379/1',
-    ENCRYPTION_KEYS: `1:${'e'.repeat(43)}=`,
-    BLIND_INDEX_KEY: `${'b'.repeat(43)}=`,
-  };
+  const baseEnvironment = buildTestEnvironment();
 
   it('injeta os providers pelos contratos de domínio', async () => {
     const moduleRef = await createModule(baseEnvironment);

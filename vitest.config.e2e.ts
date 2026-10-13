@@ -57,6 +57,13 @@ export default defineConfig({
       BLIND_INDEX_KEY: `${'b'.repeat(43)}=`,
       // Custo mínimo do bcrypt: as suítes verificam comportamento, não dureza.
       BCRYPT_COST: '4',
+      // SMTP inexistente: nenhuma suíte envia e-mail de verdade — o transporte é
+      // substituído por `jsonTransport` ou por dublê.
+      SMTP_HOST: 'localhost',
+      SMTP_PORT: '1025',
+      SMTP_USER: 'bios-testes',
+      SMTP_PASSWORD: 'senha-de-teste',
+      MAIL_FROM: 'BIOS <nao-responda@bios.test>',
     },
   },
 });

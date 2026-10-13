@@ -18,6 +18,7 @@ A documentação de requisitos, modelagem e arquitetura do projeto fica no repos
 | Validação e DTOs | Zod 4 com Standard Schema nativo do Nest (`@Body({ schema })`) |
 | Documentação da API | `@nestjs/swagger` 12 (OpenAPI gerado dos schemas Zod) + Scalar |
 | Filas, cache e limite de requisições | Redis 7 via BullMQ 6 (`@nestjs/bullmq`), `ioredis` e `@nestjs/throttler` |
+| E-mail | `nodemailer` por SMTP, com auditoria de cada disparo |
 | Testes | Vitest 4 + `@nestjs/testing` + Supertest + Faker (dados de teste) |
 | Qualidade | ESLint 10 (`typescript-eslint`, type-checked) + Prettier |
 
@@ -163,8 +164,9 @@ conta.
 ## Filas (BullMQ)
 
 Toda a comunicação entre o core e os serviços de ingestão passa por filas BullMQ sobre o
-Redis — não há chamada HTTP entre serviços. Esta API é **só produtora**: cada fila é
-consumida pelo serviço dono do fluxo.
+Redis — não há chamada HTTP entre serviços. As filas de ingestão são consumidas pelo serviço
+dono do fluxo; a única consumida **aqui dentro** é a de e-mails, porque não existe serviço
+separado de envio.
 
 | Fila | Conteúdo |
 | --- | --- |
@@ -172,7 +174,7 @@ consumida pelo serviço dono do fluxo.
 | `environmental-evidences` | Evidências ambientais e de conduta (IBAMA, CEIS/CNEP) |
 | `ghg-inventory` | Inventário de emissões (fallback do GHG Protocol) |
 | `ods-scoring` | Recálculo de índice e confiança por ODS |
-| `email-dispatch` | E-mails transacionais |
+| `email-dispatch` | E-mails transacionais (consumida nesta API) |
 
 O contrato é `QueueProvider`, com três operações:
 
@@ -200,7 +202,39 @@ await queues.schedule({ queue, id: 'ibama-daily-ingestion', jobName, cron: '0 4 
   `checks.redis`. Por esse mesmo motivo a espera consulta o estado do job em intervalos
   curtos em vez de usar `QueueEvents`: o `QueueEvents` abre uma conexão bloqueante ao ser
   construído e, sem Redis, derruba o processo com uma rejeição que não passa pelo evento de
-  erro.
+  erro. Publicar também tem prazo (`QUEUE_PUBLISH_BUDGET_MS`): sem ele, o cliente guardaria o
+  comando até reconectar, pendurando a requisição que o originou — esgotado o prazo, a
+  resposta é `DEPENDENCY_UNAVAILABLE`.
+
+## E-mails transacionais
+
+Confirmação de cadastro, recuperação de senha e alerta de login suspeito (RF18). O caso de uso
+`DispatchEmailUseCase` **só registra e enfileira**; quem envia é o `EmailDispatchProcessor`,
+consumidor da fila `email-dispatch` hospedado nesta API.
+
+```ts
+const dispatchLogId = await dispatchEmail.execute({
+  template: EmailTemplate.EMAIL_CONFIRMATION,
+  to: email,
+  subject: 'Confirme seu cadastro',
+  html: corpo,
+  userId,
+});
+```
+
+- **Falha de e-mail não derruba o fluxo de origem.** O cadastro, o login e a recuperação de
+  senha concluem mesmo com o SMTP fora do ar: o disparo fica na fila e é reenviado com
+  backoff (5 tentativas, ver `queue.config.ts`).
+- **Auditoria em `email_dispatch_logs`.** O registro nasce `QUEUED` apontando para o job, vira
+  `SENT` com `sent_at` quando o envio conclui e `FAILED` com `failure_reason` **só na última
+  tentativa** — um `FAILED` antes disso mentiria, porque ainda há reenvio por vir.
+- **Destinatário só em hash.** A coleção e os logs guardam `recipient_email_hash` (índice cego
+  do e-mail); o endereço em claro existe apenas na carga do job, pelo tempo do envio (INL02).
+- **Remetente único**, de `MAIL_FROM`: quem dispara escolhe destinatário e conteúdo, nunca de
+  onde o e-mail parte.
+- **Em desenvolvimento**, aponte `SMTP_HOST`/`SMTP_PORT` para um servidor local de captura
+  (Mailpit, por exemplo), nunca para um provedor real. As suítes nunca abrem conexão SMTP:
+  usam o `jsonTransport` do próprio Nodemailer ou um dublê.
 
 ## Cache de consultas
 
