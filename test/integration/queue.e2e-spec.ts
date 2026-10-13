@@ -18,6 +18,7 @@ import {
   buildJobPayload,
   queueScheduleFactory,
 } from '../factories/shared/queue-job.factory.js';
+import { buildTestEnvironment } from '../support/environment.js';
 
 const REDIS_URL = inject('testRedisUrl');
 
@@ -41,14 +42,7 @@ describe.runIf(inject('redisAvailable'))('Filas com Redis real (e2e)', () => {
           isGlobal: true,
           ignoreEnvFile: true,
           load: [
-            () =>
-              validateEnvironment({
-                DATABASE_URL:
-                  'mongodb://localhost:27017/bios_test?directConnection=true',
-                REDIS_URL,
-                ENCRYPTION_KEYS: `1:${'e'.repeat(43)}=`,
-                BLIND_INDEX_KEY: `${'b'.repeat(43)}=`,
-              }),
+            () => validateEnvironment(buildTestEnvironment({ REDIS_URL })),
           ],
         }),
         QueueModule,

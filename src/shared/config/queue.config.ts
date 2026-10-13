@@ -70,16 +70,26 @@ export function buildJobOptions(queue: QueueName): DefaultJobOptions {
 export const QUEUE_WAIT_POLL_INTERVAL_MS = 200;
 
 /**
+ * Tempo máximo para publicar um job.
+ *
+ * O cliente mantém uma fila interna de comandos enquanto tenta reconectar, e
+ * sem este corte uma publicação ficaria pendurada esperando o Redis voltar —
+ * junto com a requisição que a originou.
+ */
+export const QUEUE_PUBLISH_BUDGET_MS = 2_000;
+
+/**
  * Conexão com o Redis a partir da configuração validada.
  *
  * `lazyConnect` mantém o mesmo comportamento adotado para o banco: a aplicação
  * sobe com o Redis fora do ar e o health check reporta a falha, em vez de
  * impedir o boot.
  *
- * `maxRetriesPerRequest: 1` vale para conexões produtoras, que é o papel desta
- * API: o comando falha rápido em vez de pendurar a requisição do usuário. Um
- * consumidor (Worker) hospedado aqui exigiria `null`, porque usa conexão
- * bloqueante.
+ * `maxRetriesPerRequest: null` é exigência do BullMQ para as conexões
+ * bloqueantes dos consumidores — e esta API passou a hospedar um deles, o
+ * envio de e-mails. Com qualquer outro valor, o BullMQ sobrescreve a opção e
+ * registra um aviso a cada conexão. Quem protege o lado produtor de uma espera
+ * indefinida é `QUEUE_PUBLISH_BUDGET_MS`, não o número de tentativas.
  */
 export function buildQueueConnection(
   configService: ConfigService<Environment, true>,
@@ -87,6 +97,6 @@ export function buildQueueConnection(
   return {
     url: configService.get('REDIS_URL', { infer: true }),
     lazyConnect: true,
-    maxRetriesPerRequest: 1,
+    maxRetriesPerRequest: null,
   };
 }

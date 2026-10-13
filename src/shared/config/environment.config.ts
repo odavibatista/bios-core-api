@@ -92,6 +92,14 @@ export const environmentSchema = z.object({
             .filter(Boolean),
     ),
 
+  /* E-mails transacionais (RF18). Sem SMTP configurado a aplicação não sobe:
+     confirmação de cadastro e recuperação de senha dependem de envio. */
+  SMTP_HOST: z.string().nonempty(),
+  SMTP_PORT: z.coerce.number().int().min(1).max(65535),
+  SMTP_USER: z.string().nonempty(),
+  SMTP_PASSWORD: z.string().nonempty(),
+  MAIL_FROM: z.string().nonempty(),
+
   /* Criptografia de dados sensíveis (NFSE03) — ver encryption.config.ts */
   ENCRYPTION_KEYS: encryptionKeyring(),
   BLIND_INDEX_KEY: singleKey(),
