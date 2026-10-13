@@ -116,6 +116,16 @@ export const environmentSchema = z.object({
      `data_sources.cache_ttl_seconds`, ajustável no banco sem novo deploy. */
   CACHE_DEFAULT_TTL: durationVariable('7d', { minimum: '1m' }),
 
+  /* Limite de requisições (NFSE04) — ver throttler.config.ts.
+     O limite geral é contado por IP; o da API pública, por chave de API. */
+  THROTTLE_TTL: durationVariable('1m', { minimum: '1s', maximum: '1h' }),
+  THROTTLE_LIMIT: z.coerce.number().int().min(1).default(120),
+  THROTTLE_PUBLIC_API_TTL: durationVariable('1m', {
+    minimum: '1s',
+    maximum: '1h',
+  }),
+  THROTTLE_PUBLIC_API_LIMIT: z.coerce.number().int().min(1).default(60),
+
   /* Sessões (RF32, NFSE05) — access token curto; refresh token renovado a cada rotação */
   AUTH_ACCESS_TOKEN_LIFETIME: durationVariable('15m', {
     minimum: '1m',
