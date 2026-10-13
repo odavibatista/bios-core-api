@@ -17,7 +17,7 @@ A documentação de requisitos, modelagem e arquitetura do projeto fica no repos
 | Banco de dados | MongoDB 8 (replica set) via Prisma ORM 6.19 |
 | Validação e DTOs | Zod 4 com Standard Schema nativo do Nest (`@Body({ schema })`) |
 | Documentação da API | `@nestjs/swagger` 12 (OpenAPI gerado dos schemas Zod) + Scalar |
-| Filas e cache | Redis 7 via BullMQ 6 (`@nestjs/bullmq`) e `ioredis` |
+| Filas, cache e limite de requisições | Redis 7 via BullMQ 6 (`@nestjs/bullmq`), `ioredis` e `@nestjs/throttler` |
 | Testes | Vitest 4 + `@nestjs/testing` + Supertest + Faker (dados de teste) |
 | Qualidade | ESLint 10 (`typescript-eslint`, type-checked) + Prettier |
 
@@ -229,6 +229,35 @@ await cache.invalidate(cnpj); // tudo sobre o CNPJ, em todos os namespaces
   `DEL` — sem `SCAN`, cujo custo cresce com o tamanho do banco. É o que se chama depois de
   recalcular os índices, para não servir perfil novo com nota velha. Falha aqui é registrada
   como **erro**, não aviso: dado vencido continuaria servível até o fim do TTL.
+
+## Limite de requisições
+
+`@nestjs/throttler` com guarda global e contadores no Redis (NFSE04) — em Redis porque o
+limite é do consumidor, não da instância: um contador por processo dobraria o limite efetivo
+com duas instâncias no ar.
+
+| Limite | Janela e teto | Contado por |
+| --- | --- | --- |
+| `default` | `THROTTLE_TTL` / `THROTTLE_LIMIT` | endereço IP |
+| `publicApi` | `THROTTLE_PUBLIC_API_TTL` / `THROTTLE_PUBLIC_API_LIMIT` | chave de API (`x-api-key`), com o IP como alternativa |
+
+- **429 padronizado.** Excedido o limite, a resposta é `RateLimitExceededException` no mesmo
+  corpo `ErrorResponse` dos outros erros, com código estável `RATE_LIMIT_EXCEEDED` e o
+  cabeçalho `Retry-After`. As respostas dentro do limite trazem `X-RateLimit-Limit`,
+  `-Remaining` e `-Reset`.
+- **Janela fixa.** O prazo é definido na primeira requisição da janela (`PEXPIRE NX`) e não se
+  renova a cada chamada; do contrário, quem mantivesse o ritmo nunca veria a janela expirar.
+  Excedido o limite, uma chave de bloqueio responde pelas requisições seguintes até vencer.
+- **Falha do Redis libera a requisição.** Contador indisponível não pode virar porta fechada —
+  seria trocar um limite de taxa por indisponibilidade total. A falha é registrada como erro,
+  porque nesse intervalo a proteção não está valendo.
+- **Isenções com `@SkipRateLimit()`**, não com o `@SkipThrottle()` da biblioteca: sem
+  argumento, ele ignora **apenas** o limite `default`, e o endpoint segue limitado pelos
+  nomeados. O decorator do projeto é derivado da lista de limites declarados, então acompanha
+  limites novos sem revisitar cada isenção. O `/health` é isento, porque é sondado de forma
+  periódica e um 429 ali seria lido como indisponibilidade da API.
+- **Limites mais estritos por endpoint** saem de `@Throttle({ default: { limit, ttl } })` no
+  próprio controller — é o que os endpoints sensíveis de autenticação vão usar.
 
 ## Criptografia de dados sensíveis
 

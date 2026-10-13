@@ -38,6 +38,8 @@ describe('validateEnvironment', () => {
       BCRYPT_COST: 12,
       QUEUE_WAIT_TIMEOUT_MS: 10_000,
       QUEUE_SCHEDULES_SYNC_ON_BOOT: true,
+      THROTTLE_LIMIT: 120,
+      THROTTLE_PUBLIC_API_LIMIT: 60,
       DATA_RETENTION_SYNC_ON_BOOT: true,
     });
     expect(environment.CACHE_DEFAULT_TTL.toString()).toBe('1w');
@@ -91,6 +93,41 @@ describe('validateEnvironment', () => {
         /AUTH_REFRESH_TOKEN_LIFETIME: deve ser uma duração de no mínimo 1h/,
       );
     });
+  });
+
+  describe('limite de requisições', () => {
+    it('converte janelas e tetos dos dois limites', () => {
+      const environment = validateEnvironment({
+        ...REQUIRED,
+        THROTTLE_TTL: '30s',
+        THROTTLE_LIMIT: '200',
+        THROTTLE_PUBLIC_API_TTL: '5m',
+        THROTTLE_PUBLIC_API_LIMIT: '30',
+      });
+
+      expect(environment.THROTTLE_TTL.toSeconds()).toBe(30);
+      expect(environment.THROTTLE_LIMIT).toBe(200);
+      expect(environment.THROTTLE_PUBLIC_API_TTL.toSeconds()).toBe(300);
+      expect(environment.THROTTLE_PUBLIC_API_LIMIT).toBe(30);
+    });
+
+    it.each(['THROTTLE_TTL', 'THROTTLE_PUBLIC_API_TTL'])(
+      'rejeita janela de %s acima de 1h',
+      (variable) => {
+        expect(() =>
+          validateEnvironment({ ...REQUIRED, [variable]: '2h' }),
+        ).toThrow(new RegExp(variable));
+      },
+    );
+
+    it.each(['THROTTLE_LIMIT', 'THROTTLE_PUBLIC_API_LIMIT'])(
+      'rejeita teto de %s abaixo de uma requisição',
+      (variable) => {
+        expect(() =>
+          validateEnvironment({ ...REQUIRED, [variable]: '0' }),
+        ).toThrow(new RegExp(variable));
+      },
+    );
   });
 
   describe('filas', () => {
