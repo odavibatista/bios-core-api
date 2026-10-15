@@ -52,7 +52,7 @@ describe('PrismaUserTokenRepository', () => {
         where: {
           user_id: token.userId,
           purpose: token.purpose,
-          used_at: null,
+          OR: [{ used_at: null }, { used_at: { isSet: false } }],
         },
         data: { used_at: expect.any(Date) },
       });
@@ -147,7 +147,7 @@ describe('PrismaUserTokenRepository', () => {
       expect(updateMany).toHaveBeenCalledWith({
         where: {
           id_user_token: token.id_user_token,
-          used_at: null,
+          OR: [{ used_at: null }, { used_at: { isSet: false } }],
           expires_at: { gt: now },
         },
         data: { used_at: now },

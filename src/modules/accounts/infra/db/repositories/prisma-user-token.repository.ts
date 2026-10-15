@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { UserToken } from '@prisma/client';
+import type { Prisma, UserToken } from '@prisma/client';
 import { PrismaRepository } from '@shared/infra/database/prisma.repository.js';
 import { PrismaService } from '@shared/infra/database/prisma.service.js';
 import {
@@ -7,6 +7,17 @@ import {
   type UserTokenConsumption,
   UserTokenRepository,
 } from '../../../domain/dtos/repositories/user-token.repository.js';
+
+/**
+ * Token ainda não usado.
+ *
+ * `used_at: null` sozinho não basta no MongoDB: o campo omitido na criação
+ * fica ausente do documento, e o Prisma só casa `null` com valor explícito.
+ * Sem tratar a ausência, nenhum token recém-emitido seria encontrado.
+ */
+const UNUSED = {
+  OR: [{ used_at: null }, { used_at: { isSet: false } }],
+} satisfies Prisma.UserTokenWhereInput;
 
 /**
  * Tokens de uso único no MongoDB.
@@ -35,7 +46,7 @@ export class PrismaUserTokenRepository
   }: NewUserToken): Promise<void> {
     await this.transaction(async (transaction) => {
       await transaction.userToken.updateMany({
-        where: { user_id: userId, purpose, used_at: null },
+        where: { user_id: userId, purpose, ...UNUSED },
         data: { used_at: new Date() },
       });
 
@@ -68,7 +79,7 @@ export class PrismaUserTokenRepository
     const { count } = await this.prisma.userToken.updateMany({
       where: {
         id_user_token: token.id_user_token,
-        used_at: null,
+        ...UNUSED,
         expires_at: { gt: now },
       },
       data: { used_at: now },
