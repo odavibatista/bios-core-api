@@ -47,31 +47,24 @@ export class PrismaUserSessionRepository
     return id_user_session;
   }
 
+  async findById(sessionId: string): Promise<UserSessionLink | null> {
+    const session = await this.prisma.userSession.findUnique({
+      where: { id_user_session: sessionId },
+      select: LINK_FIELDS,
+    });
+
+    return session ? toLink(session) : null;
+  }
+
   async findByRefreshTokenHash(
     refreshTokenHash: string,
   ): Promise<UserSessionLink | null> {
     const session = await this.prisma.userSession.findUnique({
       where: { refresh_token_hash: refreshTokenHash },
-      select: {
-        id_user_session: true,
-        user_id: true,
-        family_id: true,
-        expires_at: true,
-        revoked_at: true,
-        revocation_reason: true,
-      },
+      select: LINK_FIELDS,
     });
 
-    return session
-      ? {
-          id: session.id_user_session,
-          userId: session.user_id,
-          familyId: session.family_id,
-          expiresAt: session.expires_at,
-          revokedAt: session.revoked_at,
-          revocationReason: session.revocation_reason,
-        }
-      : null;
+    return session ? toLink(session) : null;
   }
 
   async rotate({
@@ -119,6 +112,19 @@ export class PrismaUserSessionRepository
     }
   }
 
+  async revokeFamily(
+    familyId: string,
+    reason: SessionRevocationReason,
+    revokedAt: Date,
+  ): Promise<number> {
+    const { count } = await this.prisma.userSession.updateMany({
+      where: { family_id: familyId, ...NOT_REVOKED },
+      data: { revoked_at: revokedAt, revocation_reason: reason },
+    });
+
+    return count;
+  }
+
   async revokeAllActive(
     userId: string,
     reason: SessionRevocationReason,
@@ -131,6 +137,29 @@ export class PrismaUserSessionRepository
 
     return count;
   }
+}
+
+/** Campos do elo que a renovação e o guard leem. */
+const LINK_FIELDS = {
+  id_user_session: true,
+  user_id: true,
+  family_id: true,
+  expires_at: true,
+  revoked_at: true,
+  revocation_reason: true,
+} satisfies Prisma.UserSessionSelect;
+
+function toLink(
+  session: Prisma.UserSessionGetPayload<{ select: typeof LINK_FIELDS }>,
+): UserSessionLink {
+  return {
+    id: session.id_user_session,
+    userId: session.user_id,
+    familyId: session.family_id,
+    expiresAt: session.expires_at,
+    revokedAt: session.revoked_at,
+    revocationReason: session.revocation_reason,
+  };
 }
 
 function toCreateData({

@@ -1,5 +1,6 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Public } from '@shared/http/decorators/public.decorator.js';
 import {
   ErrorResponses,
   ResponseSchema,
@@ -38,6 +39,8 @@ export const EMAIL_CONFIRMED_MESSAGE =
   'E-mail confirmado. Sua conta está ativa.';
 
 @ApiTags('Contas')
+// Pública: cadastro, confirmação e reenvio acontecem antes de haver sessão.
+@Public()
 @Controller('accounts')
 export class AccountsController implements AccountsControllerInterface {
   constructor(

@@ -428,8 +428,30 @@ O login (`POST /auth/login`, UC02) confere a senha, registra a tentativa e abre 
   por outro motivo (logout, troca de senha) é só recusado.
 - **Uma única resposta para toda recusa** (`401 SESSION_INVALID`), sem revelar se o token é
   desconhecido, expirado, revogado ou reutilizado.
-- **Fora desta entrega:** encerrar a sessão e o guard que valida o `sid` a cada requisição
-  (UC03).
+
+### Guard de autenticação e encerramento de sessão
+
+Toda rota exige sessão, exceto as marcadas com `@Public()` (UC03, NFSE05).
+
+- **Protegido por padrão.** O `AccessTokenGuard` é global: uma rota nova nasce privada, e quem
+  deve ser acessível sem sessão — cadastro, confirmação, login, renovação, health check — se
+  declara com `@Public()` (método ou controller). Esquecer o decorator numa rota pública a
+  deixa inacessível, o que aparece no primeiro teste; o inverso deixaria uma rota privada
+  aberta sem ninguém perceber. Nos handlers, `@CurrentUser()` entrega o usuário autenticado
+  (`userId`, `sessionId`, `familyId`, `role`).
+- **O token é conferido contra a sessão a cada requisição.** Além da assinatura e do prazo,
+  o guard consulta o elo (`sid`): ele precisa existir, estar ativo, dentro da validade do
+  refresh token e ser do usuário que o token afirma. É isso que dá efeito imediato ao logout,
+  à detecção de reuso e, adiante, à troca de senha, sem lista de tokens revogados. Falha ao
+  consultar o banco **nunca libera** a requisição.
+- **Mesma resposta para toda recusa** (`401 NOT_AUTHENTICATED`): token ausente, malformado,
+  adulterado, expirado ou de sessão encerrada.
+- **Limite antes da autenticação.** O guard de limite de requisições roda primeiro, então
+  requisições com token falso tomam 429 sem chegar ao banco.
+- **`POST /auth/logout`** encerra o dispositivo atual: revoga a família de rotação da sessão
+  como `LOGOUT`, o que invalida o access token e o refresh token juntos, e não toca nas
+  sessões dos outros dispositivos. **`POST /auth/logout-all`** revoga todas as sessões
+  ativas do usuário como `LOGOUT_ALL_DEVICES`. Ambos respondem `204`.
 
 ### Retenção de dados (índices TTL)
 
