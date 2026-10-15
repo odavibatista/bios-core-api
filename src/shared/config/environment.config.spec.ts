@@ -53,6 +53,80 @@ describe('validateEnvironment', () => {
     expect(environment.DATA_RETENTION_LOGIN_ATTEMPTS.toString()).toBe('90d');
     expect(environment.AUTH_ACCESS_TOKEN_LIFETIME.toString()).toBe('15m');
     expect(environment.AUTH_REFRESH_TOKEN_LIFETIME.toString()).toBe('1w');
+    expect(environment.AUTH_EMAIL_CONFIRMATION_TOKEN_LIFETIME.toString()).toBe(
+      '1d',
+    );
+    expect(environment.AUTH_PASSWORD_RESET_TOKEN_LIFETIME.toString()).toBe(
+      '2h',
+    );
+  });
+
+  describe('links enviados por e-mail', () => {
+    it('aceita durações dentro dos limites', () => {
+      const confirmationHours = faker.number.int({ min: 1, max: 24 * 7 });
+      const resetMinutes = faker.number.int({ min: 5, max: 24 * 60 });
+
+      const environment = validateEnvironment({
+        ...REQUIRED,
+        AUTH_EMAIL_CONFIRMATION_TOKEN_LIFETIME: `${confirmationHours}h`,
+        AUTH_PASSWORD_RESET_TOKEN_LIFETIME: `${resetMinutes}m`,
+      });
+
+      expect(
+        environment.AUTH_EMAIL_CONFIRMATION_TOKEN_LIFETIME.toSeconds(),
+      ).toBe(confirmationHours * 3_600);
+      expect(environment.AUTH_PASSWORD_RESET_TOKEN_LIFETIME.toSeconds()).toBe(
+        resetMinutes * 60,
+      );
+    });
+
+    it('limita a confirmação a no máximo 7 dias', () => {
+      const days = faker.number.int({ min: 8, max: 365 });
+
+      expect(() =>
+        validateEnvironment({
+          ...REQUIRED,
+          AUTH_EMAIL_CONFIRMATION_TOKEN_LIFETIME: `${days}d`,
+        }),
+      ).toThrow(
+        /AUTH_EMAIL_CONFIRMATION_TOKEN_LIFETIME: deve ser uma duração entre 1h e 1w/,
+      );
+    });
+
+    it('exige confirmação de no mínimo 1 hora', () => {
+      const minutes = faker.number.int({ min: 1, max: 59 });
+
+      expect(() =>
+        validateEnvironment({
+          ...REQUIRED,
+          AUTH_EMAIL_CONFIRMATION_TOKEN_LIFETIME: `${minutes}m`,
+        }),
+      ).toThrow(/AUTH_EMAIL_CONFIRMATION_TOKEN_LIFETIME: deve ser uma duração/);
+    });
+
+    it('limita a redefinição de senha a no máximo 24 horas', () => {
+      const hours = faker.number.int({ min: 25, max: 1_000 });
+
+      expect(() =>
+        validateEnvironment({
+          ...REQUIRED,
+          AUTH_PASSWORD_RESET_TOKEN_LIFETIME: `${hours}h`,
+        }),
+      ).toThrow(
+        /AUTH_PASSWORD_RESET_TOKEN_LIFETIME: deve ser uma duração entre 5m e 1d/,
+      );
+    });
+
+    it('exige redefinição de senha de no mínimo 5 minutos', () => {
+      const minutes = faker.number.int({ min: 1, max: 4 });
+
+      expect(() =>
+        validateEnvironment({
+          ...REQUIRED,
+          AUTH_PASSWORD_RESET_TOKEN_LIFETIME: `${minutes}m`,
+        }),
+      ).toThrow(/AUTH_PASSWORD_RESET_TOKEN_LIFETIME: deve ser uma duração/);
+    });
   });
 
   describe('sessões', () => {

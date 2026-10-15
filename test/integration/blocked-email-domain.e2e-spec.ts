@@ -65,6 +65,19 @@ describe.runIf(inject('databaseAvailable'))(
       return `${faker.internet.username()}@${domain}`;
     }
 
+    it('bloqueia domínio gravado sem o campo de remoção, como o seeder grava', async () => {
+      const domain = faker.internet.domainName();
+      // O MongoDB guarda campo opcional omitido como ausente, e não como null:
+      // a consulta tem de tratar os dois como "não removido".
+      await prisma.blockedEmailDomain.create({
+        data: { domain, origin: BlockedDomainOrigin.SEED },
+      });
+
+      await expect(policy.execute(emailAt(domain))).rejects.toBeInstanceOf(
+        BlockedEmailDomainException,
+      );
+    });
+
     it('deixa passar domínio que não está na lista', async () => {
       await block(faker.internet.domainName());
 
