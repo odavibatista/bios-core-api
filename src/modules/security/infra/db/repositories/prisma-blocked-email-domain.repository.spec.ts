@@ -31,7 +31,10 @@ describe('PrismaBlockedEmailDomainRepository', () => {
     await repository.isBlocked(domain);
 
     expect(findFirst).toHaveBeenCalledWith({
-      where: { domain, deleted_at: null },
+      where: {
+        domain,
+        OR: [{ deleted_at: null }, { deleted_at: { isSet: false } }],
+      },
       select: { id_blocked_email_domain: true },
     });
   });
