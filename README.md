@@ -593,6 +593,26 @@ contrato é tratada como fonte indisponível. Fica fora desta entrega: o perfil 
 (UC07: evidências e índice por ODS), a busca por nome (UC06 fluxo 1.1, junto da pesquisa do
 UC08) e o próprio serviço de ingestão.
 
+## Chaves de API
+
+`POST /api-keys`, `GET /api-keys` e `DELETE /api-keys/:id` (UC11, RF16) deixam o usuário gerar,
+listar e revogar as próprias chaves. Exigem sessão (JWT); a **autenticação por chave** nas
+rotas públicas é o UC12 e fica fora desta entrega.
+
+- **Formato.** `bios_<id público de 8 caracteres>_<segredo de 256 bits em base64url>`. O
+  prefixo (`bios_` + id público) é o que a listagem mostra e o que a busca por chave usará;
+  o segredo vem do mesmo gerador criptográfico dos demais tokens opacos.
+- **Exibição única.** O `POST` devolve a chave completa (`key`) uma só vez. O banco guarda
+  apenas o SHA-256 da chave inteira (`key_hash`) e o prefixo; a listagem nunca traz a chave
+  nem o resumo. Perdeu a chave: revoga e gera outra.
+- **Teto.** Até 10 chaves ativas por usuário (`422 API_KEY_LIMIT_REACHED`, com `details.limit`);
+  revogar libera a vaga. O id público tem 62⁸ possibilidades, e uma colisão (índice único em
+  `key_prefix`) gera um novo id, com até 3 tentativas.
+- **Revogação.** Definitiva e imediata, só pelo dono: a posse faz parte da própria escrita
+  (`updateMany` filtrando `id_api_key` + `user_id` + não revogada), sem leitura prévia. Chave
+  alheia, inexistente, malformada ou já revogada: o mesmo `404 API_KEY_NOT_FOUND`. O registro
+  fica com `revoked_at` e some da listagem.
+
 ## Testes
 
 Vitest com a API de mocks equivalente à do Jest (`vi.fn`, `vi.spyOn`). Dependências são
