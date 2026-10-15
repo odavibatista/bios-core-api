@@ -193,6 +193,48 @@ describe('PrismaUserRepository', () => {
     });
   });
 
+  describe('findProfileById', () => {
+    it('devolve o papel vigente e o e-mail cifrado da conta', async () => {
+      const user = {
+        id_user: faker.database.mongodbObjectId(),
+        user_name: faker.person.fullName(),
+        is_active: true,
+        role: UserRole.ADMIN,
+        email_encrypted: faker.string.alphanumeric(40),
+        encryption_key_version: 2,
+      };
+      findUnique.mockResolvedValue(user);
+
+      await expect(repository.findProfileById(user.id_user)).resolves.toEqual({
+        id: user.id_user,
+        name: user.user_name,
+        isActive: true,
+        role: UserRole.ADMIN,
+        emailEncrypted: user.email_encrypted,
+        encryptionKeyVersion: 2,
+      });
+      expect(findUnique).toHaveBeenCalledWith({
+        where: { id_user: user.id_user },
+        select: {
+          id_user: true,
+          user_name: true,
+          is_active: true,
+          role: true,
+          email_encrypted: true,
+          encryption_key_version: true,
+        },
+      });
+    });
+
+    it('devolve null quando a conta não existe', async () => {
+      findUnique.mockResolvedValue(null);
+
+      await expect(
+        repository.findProfileById(faker.database.mongodbObjectId()),
+      ).resolves.toBeNull();
+    });
+  });
+
   describe('recordLogin', () => {
     it('grava a data do último login da conta', async () => {
       const userId = faker.database.mongodbObjectId();
