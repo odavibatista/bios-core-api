@@ -9,6 +9,7 @@ describe('PrismaUserRepository', () => {
   const create = vi.fn();
   const findUnique = vi.fn();
   const updateMany = vi.fn();
+  const update = vi.fn();
   let repository: PrismaUserRepository;
 
   function buildNewUser(): NewUser {
@@ -27,7 +28,7 @@ describe('PrismaUserRepository', () => {
         PrismaUserRepository,
         {
           provide: PrismaService,
-          useValue: { user: { create, findUnique, updateMany } },
+          useValue: { user: { create, findUnique, updateMany, update } },
         },
       ],
     }).compile();
@@ -144,6 +145,66 @@ describe('PrismaUserRepository', () => {
       await expect(
         repository.activate(faker.database.mongodbObjectId(), new Date()),
       ).resolves.toBe(false);
+    });
+  });
+
+  describe('findCredentialsByEmailHash', () => {
+    it('devolve o que a autenticação precisa para conferir a senha', async () => {
+      const emailHash = faker.string.hexadecimal({ length: 64, prefix: '' });
+      const user = {
+        id_user: faker.database.mongodbObjectId(),
+        user_name: faker.person.fullName(),
+        is_active: true,
+        role: UserRole.ADMIN,
+        password_encrypted: faker.string.alphanumeric(60),
+        encryption_key_version: 2,
+      };
+      findUnique.mockResolvedValue(user);
+
+      await expect(
+        repository.findCredentialsByEmailHash(emailHash),
+      ).resolves.toEqual({
+        id: user.id_user,
+        name: user.user_name,
+        isActive: true,
+        role: UserRole.ADMIN,
+        passwordEncrypted: user.password_encrypted,
+        encryptionKeyVersion: 2,
+      });
+      expect(findUnique).toHaveBeenCalledWith({
+        where: { email_hash: emailHash },
+        select: {
+          id_user: true,
+          user_name: true,
+          is_active: true,
+          role: true,
+          password_encrypted: true,
+          encryption_key_version: true,
+        },
+      });
+    });
+
+    it('devolve null quando não há conta com o e-mail', async () => {
+      findUnique.mockResolvedValue(null);
+
+      await expect(
+        repository.findCredentialsByEmailHash(faker.string.alphanumeric(64)),
+      ).resolves.toBeNull();
+    });
+  });
+
+  describe('recordLogin', () => {
+    it('grava a data do último login da conta', async () => {
+      const userId = faker.database.mongodbObjectId();
+      const loggedInAt = faker.date.recent();
+      update.mockResolvedValue({});
+
+      await repository.recordLogin(userId, loggedInAt);
+
+      expect(update).toHaveBeenCalledWith({
+        where: { id_user: userId },
+        data: { last_login_at: loggedInAt },
+      });
     });
   });
 });

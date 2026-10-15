@@ -2,9 +2,10 @@
 // @ts-check
 
 /**
- * Gera as chaves de criptografia da aplicação (NFSE03).
+ * Gera as chaves da aplicação: criptografia (NFSE03) e assinatura do access
+ * token (NFSE05).
  *
- * Imprime as duas variáveis prontas para colar no `.env`. As chaves saem em
+ * Imprime as três variáveis prontas para colar no `.env`. As chaves saem em
  * base64 e têm 32 bytes, como exigido por AES-256 e HMAC-SHA256.
  *
  *   npm run keys:generate
@@ -30,6 +31,7 @@ const key = () => randomBytes(KEY_LENGTH_BYTES).toString('base64');
 
 console.log(`ENCRYPTION_KEYS=${version}:${key()}`);
 console.log(`BLIND_INDEX_KEY=${key()}`);
+console.log(`AUTH_ACCESS_TOKEN_SECRET=${key()}`);
 console.log(
   '\nAo rotacionar, mantenha as versões anteriores em ENCRYPTION_KEYS e não' +
     '\ntroque BLIND_INDEX_KEY: ela invalidaria os índices cegos já gravados.',

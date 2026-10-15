@@ -14,6 +14,7 @@ import { inject } from 'vitest';
 import { buildPassword } from '../factories/shared/password.factory.js';
 import { faker } from '../support/faker.js';
 import { createDatabaseTestingApp } from '../support/database-testing-app.js';
+import { resetThrottleCounters } from '../support/throttle.js';
 
 const REDIS_URL = inject('testRedisUrl');
 
@@ -50,6 +51,10 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       ({ app, prisma } = await createDatabaseTestingApp((builder) => {
         builder.overrideProvider(MailProvider).useValue(mailProvider);
       }));
+    });
+
+    beforeEach(async () => {
+      await resetThrottleCounters(REDIS_URL);
     });
 
     afterEach(async () => {
