@@ -140,7 +140,11 @@ export const environmentSchema = z.object({
   }),
   THROTTLE_PUBLIC_API_LIMIT: z.coerce.number().int().min(1).default(60),
 
-  /* Sessões (RF32, NFSE05) — access token curto; refresh token renovado a cada rotação */
+  /* Sessões (RF32, NFSE05) — access token curto; refresh token renovado a cada rotação.
+     O access token é assinado com HMAC-SHA256 (HS256) por este segredo de 32 bytes:
+     trocá-lo invalida os access tokens em circulação (vivem 15 minutos), mas não as
+     sessões, que seguem renováveis pelo refresh token. */
+  AUTH_ACCESS_TOKEN_SECRET: singleKey(),
   AUTH_ACCESS_TOKEN_LIFETIME: durationVariable('15m', {
     minimum: '1m',
     maximum: '60m',

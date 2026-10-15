@@ -3,6 +3,7 @@ import { Prisma, UserRole } from '@prisma/client';
 import { PrismaRepository } from '@shared/infra/database/prisma.repository.js';
 import { PrismaService } from '@shared/infra/database/prisma.service.js';
 import {
+  type AccountCredentials,
   type AccountIdentity,
   type NewUser,
   UserRepository,
@@ -76,6 +77,40 @@ export class PrismaUserRepository
     });
 
     return count === 1;
+  }
+
+  async findCredentialsByEmailHash(
+    emailHash: string,
+  ): Promise<AccountCredentials | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { email_hash: emailHash },
+      select: {
+        id_user: true,
+        user_name: true,
+        is_active: true,
+        role: true,
+        password_encrypted: true,
+        encryption_key_version: true,
+      },
+    });
+
+    return user
+      ? {
+          id: user.id_user,
+          name: user.user_name,
+          isActive: user.is_active,
+          role: user.role,
+          passwordEncrypted: user.password_encrypted,
+          encryptionKeyVersion: user.encryption_key_version,
+        }
+      : null;
+  }
+
+  async recordLogin(userId: string, loggedInAt: Date): Promise<void> {
+    await this.prisma.user.update({
+      where: { id_user: userId },
+      data: { last_login_at: loggedInAt },
+    });
   }
 }
 

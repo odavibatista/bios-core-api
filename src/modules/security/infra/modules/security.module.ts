@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
+import { AccessBlockRepository } from '../../domain/dtos/repositories/access-block.repository.js';
 import { BlockedEmailDomainRepository } from '../../domain/dtos/repositories/blocked-email-domain.repository.js';
 import { EmailDomainPolicyProvider } from '../../domain/providers/email-domain-policy.provider.js';
+import { PrismaAccessBlockRepository } from '../db/repositories/prisma-access-block.repository.js';
 import { PrismaBlockedEmailDomainRepository } from '../db/repositories/prisma-blocked-email-domain.repository.js';
 import { CheckEmailDomainAllowedUseCase } from '../usecases/check-email-domain-allowed.usecase.js';
 
@@ -10,9 +12,10 @@ import { CheckEmailDomainAllowedUseCase } from '../usecases/check-email-domain-a
  *
  * Entidades (schemas Prisma em `../../entity`): `AccessBlock`, `HoneypotHit`, `BlockedEmailDomain`.
  *
- * Exporta a política de domínios de e-mail pelo contrato de domínio
- * (`EmailDomainPolicyProvider`): cadastro e troca de e-mail consultam a
- * blacklist sem conhecer o repositório nem o caso de uso que a implementa.
+ * Exporta pelos contratos de domínio: a política de domínios de e-mail
+ * (`EmailDomainPolicyProvider`), consultada por cadastro e troca de e-mail, e
+ * os bloqueios de acesso (`AccessBlockRepository`), consultados e aplicados
+ * pelo login. Quem usa não conhece a infraestrutura que os implementa.
  */
 @Module({
   providers: [
@@ -21,6 +24,7 @@ import { CheckEmailDomainAllowedUseCase } from '../usecases/check-email-domain-a
       provide: BlockedEmailDomainRepository,
       useClass: PrismaBlockedEmailDomainRepository,
     },
+    { provide: AccessBlockRepository, useClass: PrismaAccessBlockRepository },
 
     /* Casos de uso */
     CheckEmailDomainAllowedUseCase,
@@ -29,6 +33,6 @@ import { CheckEmailDomainAllowedUseCase } from '../usecases/check-email-domain-a
       useExisting: CheckEmailDomainAllowedUseCase,
     },
   ],
-  exports: [EmailDomainPolicyProvider],
+  exports: [EmailDomainPolicyProvider, AccessBlockRepository],
 })
 export class SecurityModule {}

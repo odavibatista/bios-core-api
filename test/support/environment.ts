@@ -20,6 +20,7 @@ export function buildTestEnvironment(
     REDIS_URL: 'redis://localhost:6379/1',
     ENCRYPTION_KEYS: `1:${'e'.repeat(43)}=`,
     BLIND_INDEX_KEY: `${'b'.repeat(43)}=`,
+    AUTH_ACCESS_TOKEN_SECRET: `${'a'.repeat(43)}=`,
     SMTP_HOST: 'localhost',
     SMTP_PORT: '1025',
     SMTP_USER: 'bios-testes',

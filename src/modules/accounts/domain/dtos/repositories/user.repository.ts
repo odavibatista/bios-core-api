@@ -1,3 +1,5 @@
+import type { UserRole } from '@prisma/client';
+
 /** Dados de uma conta nova. Tudo que é pessoal chega já protegido. */
 export interface NewUser {
   /** Nome de exibição. */
@@ -23,8 +25,19 @@ export interface AccountIdentity {
   isActive: boolean;
 }
 
+/** O que a autenticação precisa de uma conta para conferir a senha e abrir a sessão. */
+export interface AccountCredentials extends AccountIdentity {
+  role: UserRole;
+
+  /** Hash bcrypt da senha, cifrado com AES-256. */
+  passwordEncrypted: string;
+
+  /** Versão da chave que cifrou `passwordEncrypted`. */
+  encryptionKeyVersion: number;
+}
+
 /**
- * Contrato das contas de usuário (RF01, RF28).
+ * Contrato das contas de usuário (RF01, RF02, RF28).
  *
  * Classe abstrata (e não interface) para servir também como token de injeção.
  */
@@ -49,4 +62,15 @@ export abstract class UserRepository {
    * ativada ou excluída), sem tratar como erro: confirmar duas vezes é inócuo.
    */
   abstract activate(userId: string, confirmedAt: Date): Promise<boolean>;
+
+  /**
+   * Localiza a conta, com o que é preciso para autenticá-la, pelo índice cego
+   * do e-mail.
+   */
+  abstract findCredentialsByEmailHash(
+    emailHash: string,
+  ): Promise<AccountCredentials | null>;
+
+  /** Registra a data/hora do último login bem-sucedido. */
+  abstract recordLogin(userId: string, loggedInAt: Date): Promise<void>;
 }

@@ -55,6 +55,7 @@ export default defineConfig({
       // Chaves de teste: valores fixos, nunca usados fora das suítes.
       ENCRYPTION_KEYS: `1:${'e'.repeat(43)}=`,
       BLIND_INDEX_KEY: `${'b'.repeat(43)}=`,
+      AUTH_ACCESS_TOKEN_SECRET: `${'a'.repeat(43)}=`,
       // Custo mínimo do bcrypt: as suítes verificam comportamento, não dureza.
       BCRYPT_COST: '4',
       // SMTP inexistente: nenhuma suíte envia e-mail de verdade — o transporte é

@@ -24,6 +24,7 @@ const REQUIRED = {
   REDIS_URL,
   ENCRYPTION_KEYS: buildKeyring(),
   BLIND_INDEX_KEY: buildKey(),
+  AUTH_ACCESS_TOKEN_SECRET: buildKey(),
   SMTP_HOST: faker.internet.domainName(),
   SMTP_PORT: String(faker.internet.port()),
   SMTP_USER: faker.internet.username(),
@@ -336,11 +337,13 @@ describe('validateEnvironment', () => {
       expect(environment.ENCRYPTION_KEYS.activeVersion).toBe(2);
       expect([...environment.ENCRYPTION_KEYS.keys.keys()]).toEqual([1, 2]);
       expect(environment.BLIND_INDEX_KEY).toHaveLength(32);
+      expect(environment.AUTH_ACCESS_TOKEN_SECRET).toHaveLength(32);
     });
 
     it.each([
       ['ENCRYPTION_KEYS', 'sem versão'],
       ['BLIND_INDEX_KEY', 'de tamanho inválido'],
+      ['AUTH_ACCESS_TOKEN_SECRET', 'de tamanho inválido'],
     ])('rejeita %s %s', (variable) => {
       const attempt = () =>
         validateEnvironment({ ...REQUIRED, [variable]: 'chave-invalida' });
