@@ -10,16 +10,20 @@ import { validateEnvironment } from '@shared/config/environment.config.js';
 import { DatabaseModule } from '@shared/infra/database/database.module.js';
 import { PrismaService } from '@shared/infra/database/prisma.service.js';
 import { EncryptionModule } from '@shared/infra/modules/encryption.module.js';
+import { QueueModule } from '@shared/infra/modules/queue.module.js';
 import { inject } from 'vitest';
 import { buildTestEnvironment } from '../support/environment.js';
 import { faker } from '../support/faker.js';
 
+const REDIS_URL = inject('testRedisUrl');
+
 /**
  * Tokens de uso único contra o banco real: a invalidação do link anterior e o
  * gasto único sob concorrência dependem de escritas condicionais e de
- * transação, que só o MongoDB exercita.
+ * transação, que só o MongoDB exercita. O módulo de contas também carrega o
+ * envio de e-mail, que exige a fila (Redis).
  */
-describe.runIf(inject('databaseAvailable'))(
+describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
   'Tokens de uso único com banco real (e2e)',
   () => {
     let app: INestApplication;
@@ -34,10 +38,13 @@ describe.runIf(inject('databaseAvailable'))(
           ConfigModule.forRoot({
             isGlobal: true,
             ignoreEnvFile: true,
-            load: [() => validateEnvironment(buildTestEnvironment())],
+            load: [
+              () => validateEnvironment(buildTestEnvironment({ REDIS_URL })),
+            ],
           }),
           DatabaseModule,
           EncryptionModule,
+          QueueModule,
           AccountsModule,
         ],
       }).compile();

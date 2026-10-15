@@ -3,9 +3,20 @@ import { faker } from '../../support/faker.js';
 /** Limite de bytes que o bcrypt considera; acima disso, o resto é ignorado. */
 export const BCRYPT_INPUT_LIMIT = 72;
 
-/** Senha dentro do limite do bcrypt, como a maioria das senhas reais. */
+/**
+ * Senha dentro do limite do bcrypt, como a maioria das senhas reais, e sempre
+ * aceita pela política de senha do cadastro (letra e número): um sorteio
+ * puramente aleatório pode não trazer dígito e tornaria os testes
+ * intermitentes.
+ */
 export function buildPassword(): string {
-  return faker.internet.password({ length: 16, memorable: false });
+  return faker.helpers
+    .shuffle([
+      ...faker.string.alpha({ length: 6 }),
+      ...faker.string.numeric({ length: 4 }),
+      ...faker.internet.password({ length: 6, memorable: false }),
+    ])
+    .join('');
 }
 
 /**
