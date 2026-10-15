@@ -6,15 +6,24 @@ import type { AuthenticatedUser } from '@shared/domain/dtos/authenticated-user.d
 import { IS_PUBLIC_ROUTE } from '@shared/http/decorators/public.decorator.js';
 import { faker } from '@test/support/faker.js';
 import { SessionResponseSchema } from '../../domain/dtos/requests/session.dto.js';
+import { ChangePasswordUseCase } from '../../infra/usecases/change-password.usecase.js';
 import { LoginUseCase } from '../../infra/usecases/login.usecase.js';
 import { LogoutUseCase } from '../../infra/usecases/logout.usecase.js';
 import { RefreshSessionUseCase } from '../../infra/usecases/refresh-session.usecase.js';
-import { AuthController } from './auth.controller.js';
+import { RequestPasswordResetUseCase } from '../../infra/usecases/request-password-reset.usecase.js';
+import { ResetPasswordUseCase } from '../../infra/usecases/reset-password.usecase.js';
+import {
+  AuthController,
+  PASSWORD_RESET_REQUESTED_MESSAGE,
+} from './auth.controller.js';
 
 describe('AuthController', () => {
   const login = { execute: vi.fn() };
   const refresh = { execute: vi.fn() };
   const logout = { execute: vi.fn() };
+  const changePassword = { execute: vi.fn() };
+  const requestPasswordReset = { execute: vi.fn() };
+  const resetPassword = { execute: vi.fn() };
   let controller: AuthController;
 
   const session = () => ({
@@ -35,6 +44,12 @@ describe('AuthController', () => {
         { provide: LoginUseCase, useValue: login },
         { provide: RefreshSessionUseCase, useValue: refresh },
         { provide: LogoutUseCase, useValue: logout },
+        { provide: ChangePasswordUseCase, useValue: changePassword },
+        {
+          provide: RequestPasswordResetUseCase,
+          useValue: requestPasswordReset,
+        },
+        { provide: ResetPasswordUseCase, useValue: resetPassword },
       ],
     }).compile();
 
@@ -166,19 +181,99 @@ describe('AuthController', () => {
     });
   });
 
+  describe('changePassword', () => {
+    const user: AuthenticatedUser = {
+      userId: faker.database.mongodbObjectId(),
+      sessionId: faker.database.mongodbObjectId(),
+      familyId: faker.string.uuid(),
+      role: UserRole.USER,
+    };
+
+    it('entrega ao caso de uso o usuário e as duas senhas', async () => {
+      changePassword.execute.mockResolvedValue(undefined);
+      const body = {
+        current_password: buildPassword(),
+        new_password: buildPassword(),
+      };
+
+      await expect(
+        controller.changePassword(body, user),
+      ).resolves.toBeUndefined();
+
+      expect(changePassword.execute).toHaveBeenCalledWith({
+        user,
+        currentPassword: body.current_password,
+        newPassword: body.new_password,
+      });
+    });
+
+    it('propaga a recusa do caso de uso', async () => {
+      changePassword.execute.mockRejectedValue(new Error('senha incorreta'));
+
+      await expect(
+        controller.changePassword(
+          { current_password: buildPassword(), new_password: buildPassword() },
+          user,
+        ),
+      ).rejects.toThrow('senha incorreta');
+    });
+  });
+
+  describe('forgotPassword', () => {
+    it('delega o pedido e responde a mesma mensagem para qualquer e-mail', async () => {
+      requestPasswordReset.execute.mockResolvedValue(undefined);
+      const body = { email: faker.internet.email() };
+
+      await expect(controller.forgotPassword(body)).resolves.toEqual({
+        message: PASSWORD_RESET_REQUESTED_MESSAGE,
+      });
+
+      expect(requestPasswordReset.execute).toHaveBeenCalledWith(body);
+    });
+
+    it('não revela na mensagem se a conta existe', () => {
+      expect(PASSWORD_RESET_REQUESTED_MESSAGE).toMatch(/^Se houver/);
+    });
+  });
+
+  describe('resetPassword', () => {
+    it('entrega ao caso de uso o token e a nova senha', async () => {
+      resetPassword.execute.mockResolvedValue(undefined);
+      const body = {
+        token: faker.string.alphanumeric(43),
+        new_password: buildPassword(),
+      };
+
+      await expect(controller.resetPassword(body)).resolves.toBeUndefined();
+
+      expect(resetPassword.execute).toHaveBeenCalledWith(body);
+    });
+
+    it('propaga a recusa do token', async () => {
+      resetPassword.execute.mockRejectedValue(new Error('token inválido'));
+
+      await expect(
+        controller.resetPassword({
+          token: faker.string.alphanumeric(43),
+          new_password: buildPassword(),
+        }),
+      ).rejects.toThrow('token inválido');
+    });
+  });
+
   describe('exigência de autenticação', () => {
     const reflector = new Reflector();
     const isPublic = (handler: object) =>
       reflector.get<boolean | undefined>(IS_PUBLIC_ROUTE, handler as never);
 
-    it.each(['login', 'refresh'] as const)(
+    it.each(['login', 'refresh', 'forgotPassword', 'resetPassword'] as const)(
       '%s é público: não há sessão antes dele',
       (method) => {
         expect(isPublic(AuthController.prototype[method])).toBe(true);
       },
     );
 
-    it.each(['logout', 'logoutAllDevices'] as const)(
+    it.each(['logout', 'logoutAllDevices', 'changePassword'] as const)(
       '%s exige sessão',
       (method) => {
         expect(isPublic(AuthController.prototype[method])).toBeUndefined();

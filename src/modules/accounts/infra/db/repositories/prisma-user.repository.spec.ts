@@ -235,6 +235,120 @@ describe('PrismaUserRepository', () => {
     });
   });
 
+  describe('findSecretsById', () => {
+    it('devolve os campos cifrados e a versão da chave', async () => {
+      const user = {
+        password_encrypted: faker.string.alphanumeric(60),
+        email_encrypted: faker.string.alphanumeric(40),
+        address_encrypted: faker.string.alphanumeric(50),
+        encryption_key_version: 2,
+      };
+      const userId = faker.database.mongodbObjectId();
+      findUnique.mockResolvedValue(user);
+
+      await expect(repository.findSecretsById(userId)).resolves.toEqual({
+        passwordEncrypted: user.password_encrypted,
+        emailEncrypted: user.email_encrypted,
+        addressEncrypted: user.address_encrypted,
+        encryptionKeyVersion: 2,
+      });
+      expect(findUnique).toHaveBeenCalledWith({
+        where: { id_user: userId },
+        select: {
+          password_encrypted: true,
+          email_encrypted: true,
+          address_encrypted: true,
+          encryption_key_version: true,
+        },
+      });
+    });
+
+    it('devolve o endereço como null quando a conta não informou', async () => {
+      findUnique.mockResolvedValue({
+        password_encrypted: faker.string.alphanumeric(60),
+        email_encrypted: faker.string.alphanumeric(40),
+        address_encrypted: null,
+        encryption_key_version: 1,
+      });
+
+      const secrets = await repository.findSecretsById(
+        faker.database.mongodbObjectId(),
+      );
+
+      expect(secrets?.addressEncrypted).toBeNull();
+    });
+
+    it('devolve null quando a conta não existe', async () => {
+      findUnique.mockResolvedValue(null);
+
+      await expect(
+        repository.findSecretsById(faker.database.mongodbObjectId()),
+      ).resolves.toBeNull();
+    });
+  });
+
+  describe('updatePassword', () => {
+    it('grava a senha, a versão da chave e a data da troca', async () => {
+      const userId = faker.database.mongodbObjectId();
+      const update = {
+        passwordEncrypted: faker.string.alphanumeric(60),
+        encryptionKeyVersion: 1,
+        changedAt: faker.date.recent(),
+      };
+      updateMany.mockResolvedValue({ count: 1 });
+
+      await expect(repository.updatePassword(userId, update)).resolves.toBe(
+        true,
+      );
+
+      expect(updateMany).toHaveBeenCalledWith({
+        where: { id_user: userId },
+        data: {
+          password_encrypted: update.passwordEncrypted,
+          encryption_key_version: 1,
+          password_changed_at: update.changedAt,
+          email_encrypted: undefined,
+          address_encrypted: undefined,
+        },
+      });
+    });
+
+    it('grava junto o e-mail e o endereço recifrados quando a chave mudou', async () => {
+      const emailEncrypted = faker.string.alphanumeric(40);
+      const addressEncrypted = faker.string.alphanumeric(50);
+      updateMany.mockResolvedValue({ count: 1 });
+
+      await repository.updatePassword(faker.database.mongodbObjectId(), {
+        passwordEncrypted: faker.string.alphanumeric(60),
+        encryptionKeyVersion: 2,
+        changedAt: new Date(),
+        emailEncrypted,
+        addressEncrypted,
+      });
+
+      expect(updateMany).toHaveBeenCalledWith({
+        where: expect.any(Object),
+        data: expect.objectContaining({
+          encryption_key_version: 2,
+          email_encrypted: emailEncrypted,
+          address_encrypted: addressEncrypted,
+        }),
+      });
+    });
+
+    it('devolve false quando a conta não existe mais', async () => {
+      updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        repository.updatePassword(faker.database.mongodbObjectId(), {
+          passwordEncrypted: faker.string.alphanumeric(60),
+          encryptionKeyVersion: 1,
+          changedAt: new Date(),
+        }),
+      ).resolves.toBe(false);
+    });
+  });
+
   describe('recordLogin', () => {
     it('grava a data do último login da conta', async () => {
       const userId = faker.database.mongodbObjectId();
