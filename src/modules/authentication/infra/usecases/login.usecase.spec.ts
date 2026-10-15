@@ -1,14 +1,11 @@
-import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import {
   AccessBlockReason,
   AccessBlockScope,
-  EmailTemplate,
   LoginFailureReason,
 } from '@prisma/client';
 import { UserRepository } from '@modules/accounts/domain/dtos/repositories/user.repository.js';
-import { SendTransactionalEmailUseCase } from '@modules/mailing/infra/usecases/send-transactional-email.usecase.js';
 import { AccessBlockedException } from '@modules/security/domain/dtos/errors/access-blocked.exception.js';
 import { AccessBlockRepository } from '@modules/security/domain/dtos/repositories/access-block.repository.js';
 import { EncryptionProvider } from '@shared/domain/providers/encryption.provider.js';
@@ -24,6 +21,7 @@ import { LoginAttemptRepository } from '../../domain/dtos/repositories/login-att
 import { UserSessionRepository } from '../../domain/dtos/repositories/user-session.repository.js';
 import { AccessTokenProvider } from '../../domain/providers/access-token.provider.js';
 import { LoginUseCase } from './login.usecase.js';
+import { SendSuspiciousLoginAlertUseCase } from './send-suspicious-login-alert.usecase.js';
 
 const REFRESH_LIFETIME = Duration.parse('7d');
 const LOGIN_BLOCK_MS = 15 * 60 * 1_000;
@@ -60,8 +58,8 @@ describe('LoginUseCase', () => {
   const userSessionRepository = {
     create: vi.fn<UserSessionRepository['create']>(),
   };
-  const sendTransactionalEmail = {
-    execute: vi.fn<SendTransactionalEmailUseCase['execute']>(),
+  const sendSuspiciousLoginAlert = {
+    execute: vi.fn<SendSuspiciousLoginAlertUseCase['execute']>(),
   };
   const refreshToken = {
     token: faker.string.alphanumeric(43),
@@ -98,7 +96,6 @@ describe('LoginUseCase', () => {
 
   beforeEach(async () => {
     vi.useFakeTimers({ now: faker.date.recent() });
-    vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
 
     userRepository.findCredentialsByEmailHash.mockResolvedValue(null);
     userRepository.recordLogin.mockResolvedValue(undefined);
@@ -114,9 +111,7 @@ describe('LoginUseCase', () => {
     loginAttemptRepository.recordSuccess.mockResolvedValue(undefined);
     givenFailures({});
     userSessionRepository.create.mockResolvedValue(sessionId);
-    sendTransactionalEmail.execute.mockResolvedValue(
-      faker.database.mongodbObjectId(),
-    );
+    sendSuspiciousLoginAlert.execute.mockResolvedValue(undefined);
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -130,8 +125,8 @@ describe('LoginUseCase', () => {
         { provide: LoginAttemptRepository, useValue: loginAttemptRepository },
         { provide: UserSessionRepository, useValue: userSessionRepository },
         {
-          provide: SendTransactionalEmailUseCase,
-          useValue: sendTransactionalEmail,
+          provide: SendSuspiciousLoginAlertUseCase,
+          useValue: sendSuspiciousLoginAlert,
         },
         {
           provide: ConfigService,
@@ -261,7 +256,7 @@ describe('LoginUseCase', () => {
         loginAttemptRepository.countFailuresSinceLastSuccess,
       ).not.toHaveBeenCalled();
       expect(accessBlockRepository.create).not.toHaveBeenCalled();
-      expect(sendTransactionalEmail.execute).not.toHaveBeenCalled();
+      expect(sendSuspiciousLoginAlert.execute).not.toHaveBeenCalled();
     });
 
     it('não abre sessão se o registro da tentativa falhar', async () => {
@@ -502,7 +497,7 @@ describe('LoginUseCase', () => {
       await useCase.execute(buildCommand()).catch(() => undefined);
 
       expect(accessBlockRepository.create).not.toHaveBeenCalled();
-      expect(sendTransactionalEmail.execute).not.toHaveBeenCalled();
+      expect(sendSuspiciousLoginAlert.execute).not.toHaveBeenCalled();
     });
 
     it('na quinta falha, ainda responde credenciais inválidas', async () => {
@@ -546,7 +541,7 @@ describe('LoginUseCase', () => {
       await useCase.execute(buildCommand()).catch(() => undefined);
 
       expect(accessBlockRepository.create).toHaveBeenCalledTimes(2);
-      expect(sendTransactionalEmail.execute).toHaveBeenCalledOnce();
+      expect(sendSuspiciousLoginAlert.execute).toHaveBeenCalledOnce();
     });
 
     it('recomeça a contagem a partir do último bloqueio do alvo', async () => {
@@ -566,21 +561,18 @@ describe('LoginUseCase', () => {
       ).toHaveBeenCalledTimes(2);
     });
 
-    it('alerta o titular por e-mail quando a conta é bloqueada', async () => {
+    it('alerta o titular, pelo e-mail normalizado, quando a conta é bloqueada', async () => {
       const command = buildCommand({ email: ' Titular@Exemplo.com ' });
       givenFailures({ user: 5 });
 
       await useCase.execute(command).catch(() => undefined);
 
-      expect(sendTransactionalEmail.execute).toHaveBeenCalledWith({
-        template: EmailTemplate.SUSPICIOUS_LOGIN_ALERT,
-        to: 'titular@exemplo.com',
-        context: {
-          name: account.name.split(/\s+/)[0],
-          ipAddress: command.ip,
-          occurredAt: new Date(),
-        },
+      expect(sendSuspiciousLoginAlert.execute).toHaveBeenCalledWith({
         userId: account.id,
+        name: account.name,
+        email: 'titular@exemplo.com',
+        ip: command.ip,
+        occurredAt: new Date(),
       });
     });
 
@@ -589,17 +581,7 @@ describe('LoginUseCase', () => {
 
       await useCase.execute(buildCommand()).catch(() => undefined);
 
-      expect(sendTransactionalEmail.execute).not.toHaveBeenCalled();
-    });
-
-    it('continua respondendo credenciais inválidas se o alerta não puder ser enviado', async () => {
-      givenFailures({ user: 5 });
-      sendTransactionalEmail.execute.mockRejectedValue(new Error('fila fora'));
-
-      await expect(useCase.execute(buildCommand())).rejects.toBeInstanceOf(
-        InvalidCredentialsException,
-      );
-      expect(Logger.prototype.error).toHaveBeenCalled();
+      expect(sendSuspiciousLoginAlert.execute).not.toHaveBeenCalled();
     });
 
     it('bloqueia só o IP e não alerta quando o e-mail não tem conta', async () => {
@@ -615,7 +597,7 @@ describe('LoginUseCase', () => {
           target: { scope: AccessBlockScope.IP, ip: command.ip },
         }),
       );
-      expect(sendTransactionalEmail.execute).not.toHaveBeenCalled();
+      expect(sendSuspiciousLoginAlert.execute).not.toHaveBeenCalled();
     });
 
     it('conta a falha antes de decidir o bloqueio', async () => {

@@ -9,9 +9,7 @@ import { AccessTokenProvider } from '@modules/authentication/domain/providers/ac
 import { MailProvider } from '@modules/mailing/domain/providers/mail.provider.js';
 import { ErrorResponseSchema } from '@shared/domain/dtos/errors/error-response.dto.js';
 import { QueueName } from '@shared/domain/dtos/providers/queue-job.dto.js';
-import { EncryptionProvider } from '@shared/domain/providers/encryption.provider.js';
 import { OpaqueTokenProvider } from '@shared/domain/providers/opaque-token.provider.js';
-import { PasswordProvider } from '@shared/domain/providers/password.provider.js';
 import { PrismaService } from '@shared/infra/database/prisma.service.js';
 import { Queue } from 'bullmq';
 import request from 'supertest';
@@ -19,6 +17,7 @@ import { inject } from 'vitest';
 import { buildPassword } from '../factories/shared/password.factory.js';
 import { createDatabaseTestingApp } from '../support/database-testing-app.js';
 import { faker } from '../support/faker.js';
+import { createTestAccount } from '../support/test-account.js';
 import { resetThrottleCounters } from '../support/throttle.js';
 
 const REDIS_URL = inject('testRedisUrl');
@@ -56,8 +55,6 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
     let app: INestApplication;
     let prisma: PrismaService;
     let accessTokens: AccessTokenProvider;
-    let encryption: EncryptionProvider;
-    let passwords: PasswordProvider;
     let opaqueTokens: OpaqueTokenProvider;
 
     beforeAll(async () => {
@@ -65,8 +62,6 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         builder.overrideProvider(MailProvider).useValue(mailProvider);
       }));
       accessTokens = app.get(AccessTokenProvider);
-      encryption = app.get(EncryptionProvider);
-      passwords = app.get(PasswordProvider);
       opaqueTokens = app.get(OpaqueTokenProvider);
     });
 
@@ -94,36 +89,8 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       await app.close();
     });
 
-    interface TestAccount {
-      id: string;
-      email: string;
-      password: string;
-    }
-
-    /** Grava uma conta como o cadastro grava, já confirmada ou não. */
-    async function createAccount({
-      active = true,
-      role = UserRole.USER,
-    }: { active?: boolean; role?: UserRole } = {}): Promise<TestAccount> {
-      const email = faker.internet.email().toLowerCase();
-      const password = buildPassword();
-      const emailEncrypted = encryption.encrypt(email);
-      const passwordEncrypted = await passwords.hash(password);
-
-      const { id_user } = await prisma.user.create({
-        data: {
-          user_name: faker.person.fullName(),
-          email_encrypted: emailEncrypted.ciphertext,
-          email_hash: encryption.blindIndex(email),
-          password_encrypted: passwordEncrypted.ciphertext,
-          encryption_key_version: emailEncrypted.keyVersion,
-          role,
-          is_active: active,
-        },
-      });
-
-      return { id: id_user, email, password };
-    }
+    const createAccount = (options?: { active?: boolean; role?: UserRole }) =>
+      createTestAccount(app, options);
 
     function login(email: string, password: string) {
       return request(app.getHttpServer())

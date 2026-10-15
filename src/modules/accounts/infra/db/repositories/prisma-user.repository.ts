@@ -5,6 +5,7 @@ import { PrismaService } from '@shared/infra/database/prisma.service.js';
 import {
   type AccountCredentials,
   type AccountIdentity,
+  type AccountProfile,
   type NewUser,
   UserRepository,
 } from '../../../domain/dtos/repositories/user.repository.js';
@@ -101,6 +102,31 @@ export class PrismaUserRepository
           isActive: user.is_active,
           role: user.role,
           passwordEncrypted: user.password_encrypted,
+          encryptionKeyVersion: user.encryption_key_version,
+        }
+      : null;
+  }
+
+  async findProfileById(userId: string): Promise<AccountProfile | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { id_user: userId },
+      select: {
+        id_user: true,
+        user_name: true,
+        is_active: true,
+        role: true,
+        email_encrypted: true,
+        encryption_key_version: true,
+      },
+    });
+
+    return user
+      ? {
+          id: user.id_user,
+          name: user.user_name,
+          isActive: user.is_active,
+          role: user.role,
+          emailEncrypted: user.email_encrypted,
           encryptionKeyVersion: user.encryption_key_version,
         }
       : null;
