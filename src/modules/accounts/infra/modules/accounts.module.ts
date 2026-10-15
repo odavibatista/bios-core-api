@@ -22,9 +22,10 @@ import { SendEmailConfirmationUseCase } from '../usecases/send-email-confirmatio
  * Depende da blacklist de domínios (`SecurityModule`) para recusar cadastros e
  * do envio de e-mails transacionais (`MailingModule`) para os links.
  *
- * Exporta a emissão e o consumo de tokens de uso único: os fluxos de
+ * Exporta a emissão e o consumo de tokens de uso único — os fluxos de
  * recuperação de senha e troca de e-mail pedem um link ou o gastam, sem
- * conhecer o repositório nem o formato do token.
+ * conhecer o repositório nem o formato do token — e o contrato das contas
+ * (`UserRepository`), de que a autenticação lê as credenciais.
  */
 @Module({
   imports: [SecurityModule, MailingModule],
@@ -42,6 +43,6 @@ import { SendEmailConfirmationUseCase } from '../usecases/send-email-confirmatio
     ConfirmEmailUseCase,
     ResendEmailConfirmationUseCase,
   ],
-  exports: [IssueUserTokenUseCase, ConsumeUserTokenUseCase],
+  exports: [UserRepository, IssueUserTokenUseCase, ConsumeUserTokenUseCase],
 })
 export class AccountsModule {}

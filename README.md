@@ -329,8 +329,9 @@ contrato é `EncryptionProvider`, e a implementação usa **AES-256-GCM** com `n
 | `ENCRYPTION_KEYS` | Chaves AES versionadas: `1:<chave>,2:<chave>`, cada uma com 32 bytes em base64 ou hexadecimal |
 | `BLIND_INDEX_KEY` | Chave única de 32 bytes do índice cego |
 
-Gere as duas com `npm run keys:generate` e cole a saída no `.env`. Chave ausente, de tamanho
-errado ou com versão repetida impede a aplicação de subir.
+Gere as duas com `npm run keys:generate` e cole a saída no `.env` (o comando imprime também
+`AUTH_ACCESS_TOKEN_SECRET`, descrita em [Autenticação e sessões](#autenticação-e-sessões)).
+Chave ausente, de tamanho errado ou com versão repetida impede a aplicação de subir.
 
 - **IV por operação.** Cifrar o mesmo valor duas vezes produz textos diferentes, de modo que
   dois documentos com o mesmo e-mail não são identificáveis pelo conteúdo cifrado.
@@ -375,6 +376,42 @@ senha → SHA-256 (base64) → bcrypt (BCRYPT_COST) → AES-256-GCM → banco
 
 Alterar qualquer etapa da composição invalidaria todas as senhas gravadas e exigiria um
 fluxo de reidratação no próximo login.
+
+## Autenticação e sessões
+
+O login (`POST /auth/login`, UC02) confere a senha, registra a tentativa e abre uma sessão: um
+**access token JWT** de vida curta e um **refresh token** opaco de uso único.
+
+| Variável | Conteúdo |
+| --- | --- |
+| `AUTH_ACCESS_TOKEN_SECRET` | Segredo de 32 bytes (base64 ou hexadecimal) que assina o access token com HMAC-SHA256 |
+| `AUTH_ACCESS_TOKEN_LIFETIME` | Vida do access token (1m a 60m, padrão `15m`) |
+| `AUTH_REFRESH_TOKEN_LIFETIME` | Vida do refresh token (mínimo 1h, padrão `7d`) |
+
+- **O token só identifica a sessão.** Carrega `sub` (usuário), `sid` (elo da sessão), `role` e o
+  emissor, sem dado pessoal. Quem decide se a sessão vale é o servidor, comparando o `sid` com
+  o elo no banco, o que dá efeito imediato à revogação. Trocar `AUTH_ACCESS_TOKEN_SECRET`
+  invalida os access tokens em circulação, mas não as sessões, que seguem renováveis.
+- **Algoritmo fixado na verificação.** Só `HS256` é aceito, e o emissor é exigido: o
+  `alg: none` e a troca de algoritmo não passam.
+- **Refresh token.** São 256 bits aleatórios; só o resumo SHA-256 vai ao banco
+  (`user_sessions`). Cada login abre uma família de rotação própria, um dispositivo por
+  família.
+- **Mesma resposta para e-mail inexistente e senha incorreta**, inclusive no tempo: sem conta,
+  a senha é conferida contra um hash descartável. Quem acerta a senha de uma conta não
+  confirmada recebe `ACCOUNT_NOT_CONFIRMED` (403) e pode pedir novo link.
+- **Bloqueio por tentativas (RF20, NFSE06).** Cinco senhas incorretas seguidas bloqueiam o
+  **IP** e/ou a **conta** por 15 minutos; o alvo que chega ao limite primeiro é bloqueado, e
+  o titular da conta recebe o alerta de login suspeito. Um login correto zera a contagem, e
+  um bloqueio também: as falhas que o causaram não contam de novo. Enquanto durar, nem a
+  senha certa entra (`429`, `ACCESS_TEMPORARILY_BLOCKED`, com `retry_after_seconds`).
+  Tentativas recusadas por bloqueio ou por conta não confirmada não contam como erro de
+  senha. Toda tentativa fica em `login_attempts` (RF19).
+- **Limite conhecido.** O bloqueio de conta só existe para e-mail cadastrado; cinco falhas
+  vindas de IPs diferentes revelam que a conta existe. O bloqueio por IP, que vale também
+  para e-mail desconhecido, restringe esse teste a quem controla muitos endereços.
+- **Fora desta entrega:** renovar a sessão (UC17), encerrar a sessão e o guard que valida o
+  `sid` a cada requisição (UC03).
 
 ### Retenção de dados (índices TTL)
 
