@@ -36,6 +36,44 @@ export interface AccountCredentials extends AccountIdentity {
   encryptionKeyVersion: number;
 }
 
+/** Campos cifrados da conta e a versão da chave que os cifrou, para trocar a senha. */
+export interface AccountSecrets {
+  /** Hash bcrypt da senha, cifrado com AES-256. */
+  passwordEncrypted: string;
+
+  /** E-mail cifrado com AES-256. */
+  emailEncrypted: string;
+
+  /** Endereço cifrado com AES-256; ausente quando a conta não informou. */
+  addressEncrypted: string | null;
+
+  /** Versão da chave que cifrou todos os campos acima. */
+  encryptionKeyVersion: number;
+}
+
+/**
+ * Nova senha a gravar.
+ *
+ * A conta tem **uma** versão de chave para todos os campos cifrados. Quando a
+ * senha nova é cifrada com uma chave mais recente que a do documento, o e-mail
+ * e o endereço precisam ser recifrados juntos: gravar só a senha deixaria o
+ * documento com campos de versões diferentes e uma única versão registrada.
+ */
+export interface PasswordUpdate {
+  passwordEncrypted: string;
+
+  /** Versão da chave de todos os campos cifrados do documento após a gravação. */
+  encryptionKeyVersion: number;
+
+  changedAt: Date;
+
+  /** E-mail recifrado; presente só quando a versão da chave mudou. */
+  emailEncrypted?: string;
+
+  /** Endereço recifrado; presente só quando a versão mudou e a conta tem endereço. */
+  addressEncrypted?: string;
+}
+
 /** A conta como a renovação de sessão precisa vê-la: papel vigente e e-mail para o alerta. */
 export interface AccountProfile extends AccountIdentity {
   role: UserRole;
@@ -48,7 +86,7 @@ export interface AccountProfile extends AccountIdentity {
 }
 
 /**
- * Contrato das contas de usuário (RF01, RF02, RF28).
+ * Contrato das contas de usuário (RF01, RF02, RF24, RF25, RF28).
  *
  * Classe abstrata (e não interface) para servir também como token de injeção.
  */
@@ -84,6 +122,19 @@ export abstract class UserRepository {
 
   /** Localiza a conta pelo identificador, com o papel vigente e o e-mail cifrado. */
   abstract findProfileById(userId: string): Promise<AccountProfile | null>;
+
+  /** Lê os campos cifrados da conta, com a versão da chave, para trocar a senha. */
+  abstract findSecretsById(userId: string): Promise<AccountSecrets | null>;
+
+  /**
+   * Grava a nova senha e a data da troca.
+   *
+   * Devolve `false` quando a conta não existe mais.
+   */
+  abstract updatePassword(
+    userId: string,
+    update: PasswordUpdate,
+  ): Promise<boolean>;
 
   /** Registra a data/hora do último login bem-sucedido. */
   abstract recordLogin(userId: string, loggedInAt: Date): Promise<void>;
