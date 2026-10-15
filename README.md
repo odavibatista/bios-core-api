@@ -298,12 +298,23 @@ com duas instâncias no ar.
 | Limite | Janela e teto | Contado por |
 | --- | --- | --- |
 | `default` | `THROTTLE_TTL` / `THROTTLE_LIMIT` | endereço IP |
-| `publicApi` | `THROTTLE_PUBLIC_API_TTL` / `THROTTLE_PUBLIC_API_LIMIT` | chave de API (`x-api-key`), com o IP como alternativa |
+| `publicApi` | `THROTTLE_PUBLIC_API_TTL` / `THROTTLE_PUBLIC_API_LIMIT` | resumo da chave de API (`x-api-key`), com o IP como alternativa |
 
+- **O `publicApi` só vale na API pública.** Incide apenas nos endpoints marcados com
+  `@PublicApiRoute()` (que `@ApiKeyAuth()` já aplica); nos demais é dispensado (`skipIf`). Antes
+  disso valia em todo endpoint e dividia 60 requisições por janela entre tudo o que saía do
+  mesmo IP, login inclusive. Na API pública os dois limites somam: o `default` por IP e o
+  `publicApi` por chave.
+- **A chave não vai ao Redis.** O contador usa `key:` + os 32 primeiros caracteres do SHA-256
+  da chave, nunca o segredo em claro. Cada valor inventado ganha o próprio contador (que expira
+  com a janela), e o limite por IP impede que isso vire um jeito de encher o Redis.
 - **429 padronizado.** Excedido o limite, a resposta é `RateLimitExceededException` no mesmo
   corpo `ErrorResponse` dos outros erros, com código estável `RATE_LIMIT_EXCEEDED` e o
-  cabeçalho `Retry-After`. As respostas dentro do limite trazem `X-RateLimit-Limit`,
-  `-Remaining` e `-Reset`.
+  cabeçalho `Retry-After`. A biblioteca escreve os cabeçalhos dos limites que não são o
+  `default` com o nome como sufixo (`Retry-After-publicApi`, `X-RateLimit-Limit-publicApi`); o
+  guard acrescenta o `Retry-After` padrão, que é o que clientes HTTP respeitam. As respostas
+  dentro do limite trazem `X-RateLimit-Limit`, `-Remaining` e `-Reset` (com o sufixo, no
+  `publicApi`).
 - **Janela fixa.** O prazo é definido na primeira requisição da janela (`PEXPIRE NX`) e não se
   renova a cada chamada; do contrário, quem mantivesse o ritmo nunca veria a janela expirar.
   Excedido o limite, uma chave de bloqueio responde pelas requisições seguintes até vencer.
@@ -597,7 +608,7 @@ UC08) e o próprio serviço de ingestão.
 
 `POST /api-keys`, `GET /api-keys` e `DELETE /api-keys/:id` (UC11, RF16) deixam o usuário gerar,
 listar e revogar as próprias chaves. Exigem sessão (JWT); a **autenticação por chave** nas
-rotas públicas é o UC12 e fica fora desta entrega.
+rotas públicas é o UC12, descrito mais abaixo.
 
 - **Formato.** `bios_<id público de 8 caracteres>_<segredo de 256 bits em base64url>`. O
   prefixo (`bios_` + id público) é o que a listagem mostra e o que a busca por chave usará;
@@ -612,6 +623,32 @@ rotas públicas é o UC12 e fica fora desta entrega.
   (`updateMany` filtrando `id_api_key` + `user_id` + não revogada), sem leitura prévia. Chave
   alheia, inexistente, malformada ou já revogada: o mesmo `404 API_KEY_NOT_FOUND`. O registro
   fica com `revoked_at` e some da listagem.
+
+### API pública (consulta por chave)
+
+`GET /v1/companies/:cnpj` (UC12, RF17) devolve o mesmo perfil da consulta do painel, para
+sistemas de terceiros, autenticado pelo cabeçalho `x-api-key` em vez de uma sessão. O `v1`
+reserva espaço para evoluir o contrato sem quebrar quem já integrou. A resposta cresce com as
+evidências e os índices por ODS quando o perfil ambiental (UC07) existir.
+
+- **`@ApiKeyAuth()`** é o que declara uma rota como API pública: reúne `@Public()` (dispensa a
+  sessão), o `ApiKeyGuard`, `@PublicApiRoute()` (liga o limite por chave) e o esquema
+  `api-key` no OpenAPI. Quem expõe um endpoint público importa `ApiKeysModule` e usa o
+  decorator.
+- **Conferência.** O prefixo público (`bios_` + 8) localiza a chave pelo índice único; o SHA-256
+  da chave inteira é comparado ao guardado em tempo constante. O resumo é calculado antes da
+  busca, para a chave desconhecida não responder mais depressa que a de segredo errado.
+- **`401 INVALID_API_KEY`, sempre igual.** Ausente, malformada, desconhecida, com segredo errado
+  ou revogada recebem a mesma resposta (a revogação vale na chamada seguinte). Um erro do banco
+  não vira 401: propaga como indisponibilidade.
+- **Ordem dos guards.** O limite de requisições vem antes da conferência da chave: tentativas
+  com chaves inventadas gastam cota e passam a tomar 429, em vez de martelar o banco.
+- **Último uso (`last_used_at`).** Gravado na chamada autenticada, com precisão de **1 minuto**
+  (`LAST_USED_PRECISION_MS`): dentro da janela a data não é regravada, o que evita transformar
+  cada leitura da API em escrita; a condição é da própria escrita (`updateMany`), então chamadas
+  simultâneas não gravam duas vezes. Falhar em registrar o uso não derruba uma chamada legítima.
+- **Separação das credenciais.** A sessão (JWT) não vale na API pública, e a chave de API não vale
+  nas rotas do painel, inclusive no gerenciamento das próprias chaves.
 
 ## Testes
 
