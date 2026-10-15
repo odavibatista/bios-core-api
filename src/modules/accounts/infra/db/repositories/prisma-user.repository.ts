@@ -4,6 +4,8 @@ import { PrismaRepository } from '@shared/infra/database/prisma.repository.js';
 import { PrismaService } from '@shared/infra/database/prisma.service.js';
 import {
   type AccountCredentials,
+  type AccountSecrets,
+  type PasswordUpdate,
   type AccountIdentity,
   type AccountProfile,
   type NewUser,
@@ -130,6 +132,51 @@ export class PrismaUserRepository
           encryptionKeyVersion: user.encryption_key_version,
         }
       : null;
+  }
+
+  async findSecretsById(userId: string): Promise<AccountSecrets | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { id_user: userId },
+      select: {
+        password_encrypted: true,
+        email_encrypted: true,
+        address_encrypted: true,
+        encryption_key_version: true,
+      },
+    });
+
+    return user
+      ? {
+          passwordEncrypted: user.password_encrypted,
+          emailEncrypted: user.email_encrypted,
+          addressEncrypted: user.address_encrypted,
+          encryptionKeyVersion: user.encryption_key_version,
+        }
+      : null;
+  }
+
+  async updatePassword(
+    userId: string,
+    {
+      passwordEncrypted,
+      encryptionKeyVersion,
+      changedAt,
+      emailEncrypted,
+      addressEncrypted,
+    }: PasswordUpdate,
+  ): Promise<boolean> {
+    const { count } = await this.prisma.user.updateMany({
+      where: { id_user: userId },
+      data: {
+        password_encrypted: passwordEncrypted,
+        encryption_key_version: encryptionKeyVersion,
+        password_changed_at: changedAt,
+        email_encrypted: emailEncrypted,
+        address_encrypted: addressEncrypted,
+      },
+    });
+
+    return count === 1;
   }
 
   async recordLogin(userId: string, loggedInAt: Date): Promise<void> {

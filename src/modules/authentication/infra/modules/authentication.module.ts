@@ -11,9 +11,13 @@ import { AccessTokenGuard } from '../../http/guards/access-token.guard.js';
 import { PrismaLoginAttemptRepository } from '../db/repositories/prisma-login-attempt.repository.js';
 import { PrismaUserSessionRepository } from '../db/repositories/prisma-user-session.repository.js';
 import { JwtAccessTokenProvider } from '../providers/jwt-access-token.provider.js';
+import { ChangePasswordUseCase } from '../usecases/change-password.usecase.js';
 import { LoginUseCase } from '../usecases/login.usecase.js';
 import { LogoutUseCase } from '../usecases/logout.usecase.js';
 import { RefreshSessionUseCase } from '../usecases/refresh-session.usecase.js';
+import { ReplacePasswordUseCase } from '../usecases/replace-password.usecase.js';
+import { RequestPasswordResetUseCase } from '../usecases/request-password-reset.usecase.js';
+import { ResetPasswordUseCase } from '../usecases/reset-password.usecase.js';
 import { SendSuspiciousLoginAlertUseCase } from '../usecases/send-suspicious-login-alert.usecase.js';
 
 /**
@@ -46,6 +50,10 @@ import { SendSuspiciousLoginAlertUseCase } from '../usecases/send-suspicious-log
     LoginUseCase,
     RefreshSessionUseCase,
     LogoutUseCase,
+    ReplacePasswordUseCase,
+    ChangePasswordUseCase,
+    RequestPasswordResetUseCase,
+    ResetPasswordUseCase,
 
     /* Autenticação exigida em toda rota que não seja `@Public()` */
     { provide: APP_GUARD, useClass: AccessTokenGuard },

@@ -453,6 +453,37 @@ Toda rota exige sessão, exceto as marcadas com `@Public()` (UC03, NFSE05).
   sessões dos outros dispositivos. **`POST /auth/logout-all`** revoga todas as sessões
   ativas do usuário como `LOGOUT_ALL_DEVICES`. Ambos respondem `204`.
 
+### Troca e recuperação de senha
+
+Três endpoints cobrem o UC04 (RF24, RF25). A nova senha segue a política do cadastro (8 a 128
+caracteres, com letra e número) nos dois fluxos.
+
+| Endpoint | Acesso | O que faz |
+| --- | --- | --- |
+| `POST /auth/change-password` | sessão | Exige a senha atual e troca a senha; responde `204` |
+| `POST /auth/forgot-password` | público | Envia o link de recuperação por e-mail; responde `202` |
+| `POST /auth/reset-password` | público | Define a senha nova com o token do link; responde `204` |
+
+- **Troca.** A senha atual precisa conferir (`422 INVALID_CURRENT_PASSWORD`) e a nova precisa
+  ser diferente dela (`422 PASSWORD_UNCHANGED`). É a senha atual que impede um computador
+  deixado logado, ou um access token roubado, de entregar a conta.
+- **Recuperação.** O link usa o token de uso único e vale `AUTH_PASSWORD_RESET_TOKEN_LIFETIME`
+  (padrão `2h`); pedir outro invalida o anterior. A resposta ao pedido é a mesma para qualquer
+  e-mail, e **só conta ativa recebe link**: a conta não confirmada precisa confirmar o e-mail
+  (UC01), e a recuperação a contornaria. O token é gasto antes de a senha ser gravada, mas só
+  depois de a senha nova passar na validação, então uma senha fraca não queima o link.
+- **Todas as sessões caem.** Troca e redefinição revogam as sessões ativas do usuário em todos
+  os dispositivos (`PASSWORD_CHANGE` / `PASSWORD_RESET`), inclusive a que fez o pedido. A senha
+  é gravada **antes** de as sessões serem revogadas: na ordem inversa, quem ainda soubesse a
+  senha antiga abriria uma sessão nova no intervalo e ela sobreviveria.
+- **Rotação de chave de cifragem.** O documento do usuário registra **uma** versão de chave
+  para e-mail, endereço e senha. Se a chave ativa é mais nova que a do documento, a troca
+  recifra o e-mail e o endereço na mesma gravação; gravar só a senha deixaria o e-mail
+  ilegível. Há teste contra o MongoDB real, com chaves v1 e v2.
+- **Limite conhecido.** O pedido de recuperação não iguala o tempo de resposta entre e-mail
+  existente e inexistente (a diferença é uma gravação e um enfileiramento). A resposta, por
+  outro lado, é idêntica.
+
 ### Retenção de dados (índices TTL)
 
 Tokens, sessões, bloqueios e logs são removidos automaticamente pelo MongoDB após um prazo
