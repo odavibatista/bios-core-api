@@ -548,6 +548,51 @@ adiada para a próxima inicialização. Desative com `DATA_RETENTION_SYNC_ON_BOO
 regras ficam em `src/shared/config/data-retention.config.ts`, e um teste garante que cada
 índice citado ali exista no schema Prisma correspondente.
 
+## Consulta de empresa por CNPJ
+
+`GET /companies/:cnpj` devolve o perfil cadastral (UC06, RF03, RF05, RF06): razão social, nome
+fantasia, situação cadastral, porte, endereço e CNAE principal e secundários com descrição.
+Exige sessão. Dados de sócios e administradores não existem no perfil (INL02).
+
+- **CNPJ.** Validado por formato e dígitos verificadores; aceita o numérico e o **alfanumérico**
+  (emitido pela Receita desde julho de 2026) e é normalizado (sem pontuação, em maiúsculas)
+  antes de virar chave de cache, de job e de consulta. Inválido: `422 INVALID_CNPJ`. A barra
+  da máscara deve ir codificada (`%2F`) ou omitida, pois separa segmentos da URL.
+- **O core não consulta os provedores.** BrasilAPI → OpenCNPJ → Minha Receita (+ IBGE) são
+  da responsabilidade do **serviço de ingestão do CNPJ**, que conversa com o core só por fila
+  (`14-Projeto-e-Arquitetura.md`, seção 2). Resolução, do mais barato ao mais caro:
+  1. **cache** (Redis, namespace `company-profile`), resposta imediata (NFDE02);
+  2. **banco**: cadastro guardado dentro da janela de `data_sources.cache_ttl_seconds` da
+     fonte que o respondeu, servido sem consulta externa e devolvido ao cache (NFDE01);
+  3. **fila**: publica o job e espera, com prazo (`QUEUE_WAIT_TIMEOUT_MS`).
+- **Degradação graciosa (NFCO01).** Com os provedores indisponíveis (job falho, prazo
+  estourado, Redis fora, resultado fora do contrato), o cadastro guardado é servido mesmo
+  vencido, com `refreshed_at` mostrando a idade, e **não** volta ao cache. Sem cadastro
+  guardado: `503 COMPANY_DATA_UNAVAILABLE`, que não se confunde com
+  `404 COMPANY_NOT_FOUND` (os provedores confirmaram que o CNPJ não existe).
+- **Um job por CNPJ por minuto.** O `jobId` é `company-profile-<cnpj>-<janela de 60 s>`:
+  pedidos simultâneos, e os repetidos dentro do minuto, compartilham o job **e o resultado**,
+  o que poupa o limite de requisições das fontes (NFPD01). A janela existe porque o BullMQ
+  ignora a publicação de um `jobId` que já existe e os jobs falhos são mantidos: com um id
+  fixo por CNPJ, uma única falha o bloquearia para sempre.
+
+### Contrato com o serviço de ingestão do CNPJ
+
+O serviço consome a fila `company-profile` (`QueueName.COMPANY_PROFILE`) e, por job:
+
+| Item | Valor |
+| --- | --- |
+| Nome do job | `fetch-company-profile` |
+| Payload | `{ "cnpj": "<14 caracteres canônicos>" }` |
+| Efeito | Grava/atualiza `company_profile` (`cadastral_source_id` aponta a fonte que respondeu; `refreshed_at` = agora) |
+| Retorno | `{ "outcome": "FOUND" }`, `{ "outcome": "NOT_FOUND" }` ou `{ "outcome": "SOURCES_UNAVAILABLE" }` |
+| Falha | Lançar o erro; a política de repetição é da fila (3 tentativas, backoff exponencial) |
+
+O core valida o retorno contra o schema (`CompanyProfileJobResultSchema`): resposta fora do
+contrato é tratada como fonte indisponível. Fica fora desta entrega: o perfil ambiental
+(UC07: evidências e índice por ODS), a busca por nome (UC06 fluxo 1.1, junto da pesquisa do
+UC08) e o próprio serviço de ingestão.
+
 ## Testes
 
 Vitest com a API de mocks equivalente à do Jest (`vi.fn`, `vi.spyOn`). Dependências são
