@@ -78,6 +78,7 @@ describe('RefreshSessionUseCase', () => {
       isActive: true,
       role: 'USER',
       emailEncrypted: faker.string.alphanumeric(40),
+      addressEncrypted: null,
       encryptionKeyVersion: 1,
       ...overrides,
     };

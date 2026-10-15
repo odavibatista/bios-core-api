@@ -5,7 +5,7 @@ import type { AuthenticatedUser } from '@shared/domain/dtos/authenticated-user.d
 import { PasswordProvider } from '@shared/domain/providers/password.provider.js';
 import { buildPassword } from '@test/factories/shared/password.factory.js';
 import { faker } from '@test/support/faker.js';
-import { InvalidCurrentPasswordException } from '../../domain/dtos/errors/invalid-current-password.exception.js';
+import { InvalidCurrentPasswordException } from '@modules/accounts/domain/dtos/errors/invalid-current-password.exception.js';
 import { NotAuthenticatedException } from '../../domain/dtos/errors/not-authenticated.exception.js';
 import { PasswordUnchangedException } from '../../domain/dtos/errors/password-unchanged.exception.js';
 import { ChangePasswordUseCase } from './change-password.usecase.js';
