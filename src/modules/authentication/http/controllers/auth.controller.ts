@@ -7,7 +7,15 @@ import {
   Ip,
   Post,
 } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+import type { AuthenticatedUser } from '@shared/domain/dtos/authenticated-user.dto.js';
+import { CurrentUser } from '@shared/http/decorators/current-user.decorator.js';
+import { Public } from '@shared/http/decorators/public.decorator.js';
 import {
   ErrorResponses,
   ResponseSchema,
@@ -27,6 +35,7 @@ import {
   toSessionResponse,
 } from '../../domain/dtos/requests/session.dto.js';
 import { LoginUseCase } from '../../infra/usecases/login.usecase.js';
+import { LogoutUseCase } from '../../infra/usecases/logout.usecase.js';
 import { RefreshSessionUseCase } from '../../infra/usecases/refresh-session.usecase.js';
 
 @ApiTags('Autenticação')
@@ -35,8 +44,10 @@ export class AuthController implements AuthControllerInterface {
   constructor(
     private readonly loginUseCase: LoginUseCase,
     private readonly refreshSessionUseCase: RefreshSessionUseCase,
+    private readonly logoutUseCase: LogoutUseCase,
   ) {}
 
+  @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -61,6 +72,7 @@ export class AuthController implements AuthControllerInterface {
     return toSessionResponse(session);
   }
 
+  @Public()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -86,5 +98,41 @@ export class AuthController implements AuthControllerInterface {
     });
 
     return toSessionResponse(session);
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth('jwt')
+  @ApiOperation({
+    summary: 'Encerra a sessão do dispositivo atual',
+    description:
+      'Revoga a sessão do dispositivo: o access token deixa de ser aceito de imediato, sem esperar o vencimento, e o refresh token deixa de renovar. As sessões dos outros dispositivos não são afetadas.',
+  })
+  @ApiResponse({
+    status: HttpStatus.NO_CONTENT,
+    description: 'Sessão encerrada',
+  })
+  @ErrorResponses(HttpStatus.UNAUTHORIZED, HttpStatus.TOO_MANY_REQUESTS)
+  async logout(@CurrentUser() user: AuthenticatedUser): Promise<void> {
+    await this.logoutUseCase.execute({ user, allDevices: false });
+  }
+
+  @Post('logout-all')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth('jwt')
+  @ApiOperation({
+    summary: 'Encerra as sessões de todos os dispositivos do usuário',
+    description:
+      'Revoga todas as sessões ativas do usuário, inclusive a atual, com efeito imediato sobre os tokens já emitidos.',
+  })
+  @ApiResponse({
+    status: HttpStatus.NO_CONTENT,
+    description: 'Sessões encerradas',
+  })
+  @ErrorResponses(HttpStatus.UNAUTHORIZED, HttpStatus.TOO_MANY_REQUESTS)
+  async logoutAllDevices(
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<void> {
+    await this.logoutUseCase.execute({ user, allDevices: true });
   }
 }

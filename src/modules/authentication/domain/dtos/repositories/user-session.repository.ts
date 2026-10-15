@@ -58,6 +58,9 @@ export abstract class UserSessionRepository {
    */
   abstract create(session: NewUserSession): Promise<string>;
 
+  /** Localiza o elo pelo identificador (o `sid` do access token). */
+  abstract findById(sessionId: string): Promise<UserSessionLink | null>;
+
   /** Localiza o elo pelo resumo do refresh token. */
   abstract findByRefreshTokenHash(
     refreshTokenHash: string,
@@ -73,6 +76,16 @@ export abstract class UserSessionRepository {
    * reuso. Nesse caso nada é criado.
    */
   abstract rotate(rotation: SessionRotation): Promise<string | null>;
+
+  /**
+   * Revoga os elos ativos de uma família de rotação — a sessão de um
+   * dispositivo — e devolve quantos eram.
+   */
+  abstract revokeFamily(
+    familyId: string,
+    reason: SessionRevocationReason,
+    revokedAt: Date,
+  ): Promise<number>;
 
   /**
    * Revoga todos os elos ativos do usuário, de todas as famílias, e devolve
