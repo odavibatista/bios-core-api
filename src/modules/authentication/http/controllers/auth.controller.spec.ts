@@ -1,15 +1,20 @@
+import { Reflector } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { UserRole } from '@prisma/client';
 import { buildPassword } from '@test/factories/shared/password.factory.js';
+import type { AuthenticatedUser } from '@shared/domain/dtos/authenticated-user.dto.js';
+import { IS_PUBLIC_ROUTE } from '@shared/http/decorators/public.decorator.js';
 import { faker } from '@test/support/faker.js';
 import { SessionResponseSchema } from '../../domain/dtos/requests/session.dto.js';
 import { LoginUseCase } from '../../infra/usecases/login.usecase.js';
+import { LogoutUseCase } from '../../infra/usecases/logout.usecase.js';
 import { RefreshSessionUseCase } from '../../infra/usecases/refresh-session.usecase.js';
 import { AuthController } from './auth.controller.js';
 
 describe('AuthController', () => {
   const login = { execute: vi.fn() };
   const refresh = { execute: vi.fn() };
+  const logout = { execute: vi.fn() };
   let controller: AuthController;
 
   const session = () => ({
@@ -29,6 +34,7 @@ describe('AuthController', () => {
       providers: [
         { provide: LoginUseCase, useValue: login },
         { provide: RefreshSessionUseCase, useValue: refresh },
+        { provide: LogoutUseCase, useValue: logout },
       ],
     }).compile();
 
@@ -127,5 +133,56 @@ describe('AuthController', () => {
         ),
       ).rejects.toThrow('sessão inválida');
     });
+  });
+
+  describe('logout', () => {
+    const user: AuthenticatedUser = {
+      userId: faker.database.mongodbObjectId(),
+      sessionId: faker.database.mongodbObjectId(),
+      familyId: faker.string.uuid(),
+      role: UserRole.USER,
+    };
+
+    beforeEach(() => {
+      logout.execute.mockResolvedValue(undefined);
+    });
+
+    it('encerra só o dispositivo atual', async () => {
+      await expect(controller.logout(user)).resolves.toBeUndefined();
+
+      expect(logout.execute).toHaveBeenCalledWith({ user, allDevices: false });
+    });
+
+    it('encerra todos os dispositivos no logout-all', async () => {
+      await expect(controller.logoutAllDevices(user)).resolves.toBeUndefined();
+
+      expect(logout.execute).toHaveBeenCalledWith({ user, allDevices: true });
+    });
+
+    it('propaga a falha do caso de uso', async () => {
+      logout.execute.mockRejectedValue(new Error('banco fora'));
+
+      await expect(controller.logout(user)).rejects.toThrow('banco fora');
+    });
+  });
+
+  describe('exigência de autenticação', () => {
+    const reflector = new Reflector();
+    const isPublic = (handler: object) =>
+      reflector.get<boolean | undefined>(IS_PUBLIC_ROUTE, handler as never);
+
+    it.each(['login', 'refresh'] as const)(
+      '%s é público: não há sessão antes dele',
+      (method) => {
+        expect(isPublic(AuthController.prototype[method])).toBe(true);
+      },
+    );
+
+    it.each(['logout', 'logoutAllDevices'] as const)(
+      '%s exige sessão',
+      (method) => {
+        expect(isPublic(AuthController.prototype[method])).toBeUndefined();
+      },
+    );
   });
 });

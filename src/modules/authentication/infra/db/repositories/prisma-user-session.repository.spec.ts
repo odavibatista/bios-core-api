@@ -89,6 +89,50 @@ describe('PrismaUserSessionRepository', () => {
     });
   });
 
+  describe('findById', () => {
+    it('devolve o elo no formato do domínio', async () => {
+      const stored = {
+        id_user_session: faker.database.mongodbObjectId(),
+        user_id: faker.database.mongodbObjectId(),
+        family_id: faker.string.uuid(),
+        expires_at: faker.date.future(),
+        revoked_at: null,
+        revocation_reason: null,
+      };
+      findUnique.mockResolvedValue(stored);
+
+      await expect(
+        repository.findById(stored.id_user_session),
+      ).resolves.toEqual({
+        id: stored.id_user_session,
+        userId: stored.user_id,
+        familyId: stored.family_id,
+        expiresAt: stored.expires_at,
+        revokedAt: null,
+        revocationReason: null,
+      });
+      expect(findUnique).toHaveBeenCalledWith({
+        where: { id_user_session: stored.id_user_session },
+        select: {
+          id_user_session: true,
+          user_id: true,
+          family_id: true,
+          expires_at: true,
+          revoked_at: true,
+          revocation_reason: true,
+        },
+      });
+    });
+
+    it('devolve null quando o elo não existe', async () => {
+      findUnique.mockResolvedValue(null);
+
+      await expect(
+        repository.findById(faker.database.mongodbObjectId()),
+      ).resolves.toBeNull();
+    });
+  });
+
   describe('findByRefreshTokenHash', () => {
     it('devolve o elo no formato do domínio', async () => {
       const hash = faker.string.hexadecimal({ length: 64, prefix: '' });
@@ -225,6 +269,41 @@ describe('PrismaUserSessionRepository', () => {
       await expect(repository.rotate(buildRotation())).rejects.toThrow(
         'inesperado',
       );
+    });
+  });
+
+  describe('revokeFamily', () => {
+    it('revoga só os elos ativos da família, com o motivo informado', async () => {
+      const familyId = faker.string.uuid();
+      const revokedAt = faker.date.recent();
+      updateMany.mockResolvedValue({ count: 1 });
+
+      await expect(
+        repository.revokeFamily(
+          familyId,
+          SessionRevocationReason.LOGOUT,
+          revokedAt,
+        ),
+      ).resolves.toBe(1);
+
+      expect(updateMany).toHaveBeenCalledWith({
+        where: { family_id: familyId, ...notRevoked },
+        data: {
+          revoked_at: revokedAt,
+          revocation_reason: SessionRevocationReason.LOGOUT,
+        },
+      });
+    });
+
+    it('não procura por usuário: outras famílias do mesmo usuário ficam de fora', async () => {
+      await repository.revokeFamily(
+        faker.string.uuid(),
+        SessionRevocationReason.LOGOUT,
+        new Date(),
+      );
+
+      const [{ where }] = updateMany.mock.calls[0] as [{ where: object }];
+      expect(where).not.toHaveProperty('user_id');
     });
   });
 
