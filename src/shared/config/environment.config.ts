@@ -147,6 +147,19 @@ export const environmentSchema = z.object({
   }),
   AUTH_REFRESH_TOKEN_LIFETIME: durationVariable('7d', { minimum: '1h' }),
 
+  /* Links enviados por e-mail (RF25, RF28) — de uso único e validade limitada.
+     A confirmação (de cadastro ou de novo e-mail) vive mais: o usuário pode abrir
+     a caixa de entrada no dia seguinte. A redefinição de senha é curta de
+     propósito, pois quem tem o link troca a senha da conta. */
+  AUTH_EMAIL_CONFIRMATION_TOKEN_LIFETIME: durationVariable('24h', {
+    minimum: '1h',
+    maximum: '7d',
+  }),
+  AUTH_PASSWORD_RESET_TOKEN_LIFETIME: durationVariable('2h', {
+    minimum: '5m',
+    maximum: '24h',
+  }),
+
   /* Retenção de dados (índices TTL) — ver data-retention.config.ts */
   DATA_RETENTION_SYNC_ON_BOOT: z.stringbool().default(true),
   DATA_RETENTION_USER_TOKENS: retentionDuration('7d'),
