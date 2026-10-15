@@ -36,6 +36,17 @@ export interface AccountCredentials extends AccountIdentity {
   encryptionKeyVersion: number;
 }
 
+/** A conta como a renovação de sessão precisa vê-la: papel vigente e e-mail para o alerta. */
+export interface AccountProfile extends AccountIdentity {
+  role: UserRole;
+
+  /** E-mail cifrado com AES-256. */
+  emailEncrypted: string;
+
+  /** Versão da chave que cifrou `emailEncrypted`. */
+  encryptionKeyVersion: number;
+}
+
 /**
  * Contrato das contas de usuário (RF01, RF02, RF28).
  *
@@ -70,6 +81,9 @@ export abstract class UserRepository {
   abstract findCredentialsByEmailHash(
     emailHash: string,
   ): Promise<AccountCredentials | null>;
+
+  /** Localiza a conta pelo identificador, com o papel vigente e o e-mail cifrado. */
+  abstract findProfileById(userId: string): Promise<AccountProfile | null>;
 
   /** Registra a data/hora do último login bem-sucedido. */
   abstract recordLogin(userId: string, loggedInAt: Date): Promise<void>;

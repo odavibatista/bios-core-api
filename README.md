@@ -410,8 +410,26 @@ O login (`POST /auth/login`, UC02) confere a senha, registra a tentativa e abre 
 - **Limite conhecido.** O bloqueio de conta só existe para e-mail cadastrado; cinco falhas
   vindas de IPs diferentes revelam que a conta existe. O bloqueio por IP, que vale também
   para e-mail desconhecido, restringe esse teste a quem controla muitos endereços.
-- **Fora desta entrega:** renovar a sessão (UC17), encerrar a sessão e o guard que valida o
-  `sid` a cada requisição (UC03).
+
+### Renovação de sessão
+
+`POST /auth/refresh` troca um refresh token válido por um novo par de tokens (UC17, RF32).
+
+- **Rotação de uso único e atômica.** A troca revoga o elo atual como `ROTATED` e cria o
+  seguinte na mesma família, numa transação, só se o elo ainda estiver ativo e dentro da
+  validade. O elo antigo guarda `replaced_by_session_id` e permanece até a retenção expirar,
+  para que o reuso continue detectável. O novo access token traz o papel vigente do usuário.
+- **Reuso é indício de vazamento.** Reapresentar um token já rotacionado revoga **todas** as
+  sessões ativas do usuário (`REUSE_DETECTED`, todos os dispositivos) e avisa o titular por
+  e-mail. Perder a disputa pelo mesmo token contra outro pedido simultâneo recebe o mesmo
+  tratamento (fluxo 4.1): o MongoDB aborta a transação de quem chega depois (`P2034`), e o
+  repositório converte isso em "elo já consumido".
+- **Sem cascata quando não há indício de roubo.** Token desconhecido, expirado ou revogado
+  por outro motivo (logout, troca de senha) é só recusado.
+- **Uma única resposta para toda recusa** (`401 SESSION_INVALID`), sem revelar se o token é
+  desconhecido, expirado, revogado ou reutilizado.
+- **Fora desta entrega:** encerrar a sessão e o guard que valida o `sid` a cada requisição
+  (UC03).
 
 ### Retenção de dados (índices TTL)
 

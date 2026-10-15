@@ -1,4 +1,3 @@
-import { UserRole } from '@prisma/client';
 import { z } from 'zod';
 
 /**
@@ -24,30 +23,3 @@ export const LoginRequestSchema = z
   .describe('Credenciais de acesso');
 
 export type LoginRequest = z.infer<typeof LoginRequestSchema>;
-
-/** Sessão aberta pelo login: o par de tokens e quem entrou. */
-export const LoginResponseSchema = z
-  .object({
-    access_token: z
-      .string()
-      .describe('JWT de vida curta, enviado em `Authorization: Bearer`'),
-    refresh_token: z
-      .string()
-      .describe('Token opaco de uso único para renovar a sessão'),
-    token_type: z.literal('Bearer').describe('Esquema do access token'),
-    expires_in: z
-      .number()
-      .int()
-      .positive()
-      .describe('Vida do access token, em segundos'),
-    user: z
-      .object({
-        id: z.string().describe('Identificador do usuário'),
-        name: z.string().describe('Nome de exibição'),
-        role: z.enum(UserRole).describe('Papel de acesso'),
-      })
-      .describe('Usuário autenticado'),
-  })
-  .describe('Sessão aberta');
-
-export type LoginResponse = z.infer<typeof LoginResponseSchema>;

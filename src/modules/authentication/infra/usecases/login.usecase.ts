@@ -1,16 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   AccessBlockReason,
   AccessBlockScope,
-  EmailTemplate,
   LoginFailureReason,
-  type UserRole,
 } from '@prisma/client';
 import { UserRepository } from '@modules/accounts/domain/dtos/repositories/user.repository.js';
 import type { AccountCredentials } from '@modules/accounts/domain/dtos/repositories/user.repository.js';
-import { SendTransactionalEmailUseCase } from '@modules/mailing/infra/usecases/send-transactional-email.usecase.js';
 import { AccessBlockedException } from '@modules/security/domain/dtos/errors/access-blocked.exception.js';
 import {
   type AccessBlockTarget,
@@ -24,10 +21,7 @@ import {
 } from '@shared/domain/providers/encryption.provider.js';
 import { OpaqueTokenProvider } from '@shared/domain/providers/opaque-token.provider.js';
 import { PasswordProvider } from '@shared/domain/providers/password.provider.js';
-import {
-  firstNameOf,
-  normalizeEmail,
-} from '@shared/domain/value-objects/email-address.js';
+import { normalizeEmail } from '@shared/domain/value-objects/email-address.js';
 import { AccountNotConfirmedException } from '../../domain/dtos/errors/account-not-confirmed.exception.js';
 import { InvalidCredentialsException } from '../../domain/dtos/errors/invalid-credentials.exception.js';
 import { LoginAttemptRepository } from '../../domain/dtos/repositories/login-attempt.repository.js';
@@ -37,9 +31,9 @@ import {
   MAX_CONSECUTIVE_LOGIN_FAILURES,
 } from '../../domain/login-protection.js';
 import { AccessTokenProvider } from '../../domain/providers/access-token.provider.js';
-
-/** User-agent acima disso é truncado: o cabeçalho é livre e não deve inflar o banco. */
-const USER_AGENT_MAX_LENGTH = 512;
+import type { AuthenticatedSession } from '../../domain/dtos/requests/session.dto.js';
+import { truncateUserAgent } from '../../domain/user-agent.js';
+import { SendSuspiciousLoginAlertUseCase } from './send-suspicious-login-alert.usecase.js';
 
 /** Credenciais e origem da tentativa. */
 export interface LoginCommand {
@@ -50,17 +44,6 @@ export interface LoginCommand {
   ip: string;
 
   userAgent?: string;
-}
-
-/** Sessão aberta pelo login. */
-export interface AuthenticatedSession {
-  accessToken: string;
-  refreshToken: string;
-
-  /** Vida do access token, em segundos. */
-  expiresIn: number;
-
-  user: { id: string; name: string; role: UserRole };
 }
 
 /**
@@ -90,7 +73,6 @@ export interface AuthenticatedSession {
  */
 @Injectable()
 export class LoginUseCase extends UseCase<LoginCommand, AuthenticatedSession> {
-  private readonly logger = new Logger(LoginUseCase.name);
   private decoyPassword?: Promise<EncryptedValue>;
 
   constructor(
@@ -102,7 +84,7 @@ export class LoginUseCase extends UseCase<LoginCommand, AuthenticatedSession> {
     private readonly accessBlockRepository: AccessBlockRepository,
     private readonly loginAttemptRepository: LoginAttemptRepository,
     private readonly userSessionRepository: UserSessionRepository,
-    private readonly sendTransactionalEmailUseCase: SendTransactionalEmailUseCase,
+    private readonly sendSuspiciousLoginAlertUseCase: SendSuspiciousLoginAlertUseCase,
     private readonly configService: ConfigService<Environment, true>,
   ) {
     super();
@@ -241,38 +223,14 @@ export class LoginUseCase extends UseCase<LoginCommand, AuthenticatedSession> {
       });
 
       if (target.scope === AccessBlockScope.USER && account) {
-        await this.alertAccountHolder(account, email, ip, now);
+        await this.sendSuspiciousLoginAlertUseCase.execute({
+          userId: account.id,
+          name: account.name,
+          email,
+          ip,
+          occurredAt: now,
+        });
       }
-    }
-  }
-
-  /**
-   * Avisa o titular do bloqueio da conta (UC02, fluxo 3.2). Falha no envio não
-   * muda a resposta: o usuário que errou a senha recebe "credenciais
-   * inválidas", não um erro interno por causa do e-mail.
-   */
-  private async alertAccountHolder(
-    account: AccountCredentials,
-    email: string,
-    ip: string,
-    occurredAt: Date,
-  ): Promise<void> {
-    try {
-      await this.sendTransactionalEmailUseCase.execute({
-        template: EmailTemplate.SUSPICIOUS_LOGIN_ALERT,
-        to: email,
-        context: {
-          name: firstNameOf(account.name),
-          ipAddress: ip,
-          occurredAt,
-        },
-        userId: account.id,
-      });
-    } catch (error) {
-      this.logger.error(
-        `Alerta de login suspeito não enviado para a conta ${account.id}`,
-        error instanceof Error ? error.stack : String(error),
-      );
     }
   }
 
@@ -294,7 +252,7 @@ export class LoginUseCase extends UseCase<LoginCommand, AuthenticatedSession> {
       familyId: randomUUID(),
       refreshTokenHash: refresh.hash,
       ip,
-      userAgent: userAgent?.slice(0, USER_AGENT_MAX_LENGTH),
+      userAgent: truncateUserAgent(userAgent),
       expiresAt: new Date(now.getTime() + refreshLifetime.toMilliseconds()),
     });
     const access = this.accessTokenProvider.sign({
