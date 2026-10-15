@@ -1,11 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import type { SessionRevocationReason } from '@prisma/client';
-import {
-  type PasswordUpdate,
-  UserRepository,
-} from '@modules/accounts/domain/dtos/repositories/user.repository.js';
+import { UserUpdateOutcome } from '@modules/accounts/domain/dtos/repositories/user.repository.js';
+import { UpdateAccountUseCase } from '@modules/accounts/infra/usecases/update-account.usecase.js';
 import { UseCase } from '@shared/domain/protocols/use-case.protocol.js';
-import { EncryptionProvider } from '@shared/domain/providers/encryption.provider.js';
 import { PasswordProvider } from '@shared/domain/providers/password.provider.js';
 import { NotAuthenticatedException } from '../../domain/dtos/errors/not-authenticated.exception.js';
 import { UserSessionRepository } from '../../domain/dtos/repositories/user-session.repository.js';
@@ -30,10 +27,8 @@ export interface ReplacePasswordCommand {
  * revogação e a gravação, e ela sobreviveria. Todas as sessões ativas são
  * revogadas, de todos os dispositivos, inclusive a que originou a troca.
  *
- * **Uma versão de chave por documento.** Se a chave ativa não é a que cifrou o
- * documento, o e-mail e o endereço são recifrados na mesma gravação; do
- * contrário o documento ficaria com campos de versões diferentes sob uma única
- * versão registrada, e o e-mail deixaria de poder ser lido.
+ * A coerência dos campos cifrados com a versão da chave é de
+ * `UpdateAccountUseCase`.
  *
  * @throws {NotAuthenticatedException} quando a conta não existe mais.
  */
@@ -43,10 +38,9 @@ export class ReplacePasswordUseCase extends UseCase<
   void
 > {
   constructor(
-    private readonly userRepository: UserRepository,
+    private readonly updateAccountUseCase: UpdateAccountUseCase,
     private readonly userSessionRepository: UserSessionRepository,
     private readonly passwordProvider: PasswordProvider,
-    private readonly encryptionProvider: EncryptionProvider,
   ) {
     super();
   }
@@ -56,43 +50,20 @@ export class ReplacePasswordUseCase extends UseCase<
     newPassword,
     reason,
   }: ReplacePasswordCommand): Promise<void> {
-    const changedAt = new Date();
-    const secrets = await this.userRepository.findSecretsById(userId);
-
-    if (!secrets) throw new NotAuthenticatedException();
-
     const hashed = await this.passwordProvider.hash(newPassword);
-    const update: PasswordUpdate = {
-      passwordEncrypted: hashed.ciphertext,
-      encryptionKeyVersion: hashed.keyVersion,
-      changedAt,
-    };
+    const outcome = await this.updateAccountUseCase.execute({
+      userId,
+      changes: { password: hashed },
+    });
 
-    if (secrets.encryptionKeyVersion !== hashed.keyVersion) {
-      update.emailEncrypted = this.reencrypt(
-        secrets.emailEncrypted,
-        secrets.encryptionKeyVersion,
-      );
-
-      if (secrets.addressEncrypted !== null) {
-        update.addressEncrypted = this.reencrypt(
-          secrets.addressEncrypted,
-          secrets.encryptionKeyVersion,
-        );
-      }
-    }
-
-    if (!(await this.userRepository.updatePassword(userId, update))) {
+    if (outcome !== UserUpdateOutcome.UPDATED) {
       throw new NotAuthenticatedException();
     }
 
-    await this.userSessionRepository.revokeAllActive(userId, reason, changedAt);
-  }
-
-  /** Decifra com a versão antiga e cifra de novo com a chave ativa. */
-  private reencrypt(ciphertext: string, keyVersion: number): string {
-    return this.encryptionProvider.encrypt(
-      this.encryptionProvider.decrypt({ ciphertext, keyVersion }),
-    ).ciphertext;
+    await this.userSessionRepository.revokeAllActive(
+      userId,
+      reason,
+      new Date(),
+    );
   }
 }

@@ -4,7 +4,7 @@ import { UserRepository } from '@modules/accounts/domain/dtos/repositories/user.
 import type { AuthenticatedUser } from '@shared/domain/dtos/authenticated-user.dto.js';
 import { UseCase } from '@shared/domain/protocols/use-case.protocol.js';
 import { PasswordProvider } from '@shared/domain/providers/password.provider.js';
-import { InvalidCurrentPasswordException } from '../../domain/dtos/errors/invalid-current-password.exception.js';
+import { InvalidCurrentPasswordException } from '@modules/accounts/domain/dtos/errors/invalid-current-password.exception.js';
 import { NotAuthenticatedException } from '../../domain/dtos/errors/not-authenticated.exception.js';
 import { PasswordUnchangedException } from '../../domain/dtos/errors/password-unchanged.exception.js';
 import { ReplacePasswordUseCase } from './replace-password.usecase.js';

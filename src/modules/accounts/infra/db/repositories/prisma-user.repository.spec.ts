@@ -10,6 +10,19 @@ describe('PrismaUserRepository', () => {
   const findUnique = vi.fn();
   const updateMany = vi.fn();
   const update = vi.fn();
+  const deleteMany = vi.fn();
+  const deleteLogs = vi.fn();
+  const transactionClient = {
+    user: { deleteMany },
+    emailDispatchLog: { deleteMany: deleteLogs },
+  };
+  const prisma = {
+    user: { create, findUnique, updateMany, update },
+    $transaction: vi.fn(
+      (operation: (client: typeof transactionClient) => Promise<unknown>) =>
+        operation(transactionClient),
+    ),
+  };
   let repository: PrismaUserRepository;
 
   function buildNewUser(): NewUser {
@@ -26,10 +39,7 @@ describe('PrismaUserRepository', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         PrismaUserRepository,
-        {
-          provide: PrismaService,
-          useValue: { user: { create, findUnique, updateMany, update } },
-        },
+        { provide: PrismaService, useValue: prisma },
       ],
     }).compile();
 
@@ -201,6 +211,7 @@ describe('PrismaUserRepository', () => {
         is_active: true,
         role: UserRole.ADMIN,
         email_encrypted: faker.string.alphanumeric(40),
+        address_encrypted: faker.string.alphanumeric(60),
         encryption_key_version: 2,
       };
       findUnique.mockResolvedValue(user);
@@ -211,6 +222,7 @@ describe('PrismaUserRepository', () => {
         isActive: true,
         role: UserRole.ADMIN,
         emailEncrypted: user.email_encrypted,
+        addressEncrypted: user.address_encrypted,
         encryptionKeyVersion: 2,
       });
       expect(findUnique).toHaveBeenCalledWith({
@@ -221,6 +233,7 @@ describe('PrismaUserRepository', () => {
           is_active: true,
           role: true,
           email_encrypted: true,
+          address_encrypted: true,
           encryption_key_version: true,
         },
       });
@@ -287,65 +300,137 @@ describe('PrismaUserRepository', () => {
     });
   });
 
-  describe('updatePassword', () => {
-    it('grava a senha, a versão da chave e a data da troca', async () => {
+  describe('update', () => {
+    it('grava só o que foi informado', async () => {
       const userId = faker.database.mongodbObjectId();
-      const update = {
-        passwordEncrypted: faker.string.alphanumeric(60),
-        encryptionKeyVersion: 1,
-        changedAt: faker.date.recent(),
-      };
       updateMany.mockResolvedValue({ count: 1 });
 
-      await expect(repository.updatePassword(userId, update)).resolves.toBe(
-        true,
-      );
+      await expect(
+        repository.update(userId, { name: 'Novo Nome' }),
+      ).resolves.toBe('UPDATED');
 
       expect(updateMany).toHaveBeenCalledWith({
         where: { id_user: userId },
         data: {
-          password_encrypted: update.passwordEncrypted,
-          encryption_key_version: 1,
-          password_changed_at: update.changedAt,
+          user_name: 'Novo Nome',
           email_encrypted: undefined,
+          email_hash: undefined,
+          email_confirmed_at: undefined,
+          password_encrypted: undefined,
+          password_changed_at: undefined,
           address_encrypted: undefined,
+          encryption_key_version: undefined,
         },
       });
     });
 
-    it('grava junto o e-mail e o endereço recifrados quando a chave mudou', async () => {
-      const emailEncrypted = faker.string.alphanumeric(40);
-      const addressEncrypted = faker.string.alphanumeric(50);
+    it('grava todos os campos cifrados e a versão da chave juntos', async () => {
+      const update = {
+        emailEncrypted: faker.string.alphanumeric(40),
+        emailHash: faker.string.hexadecimal({ length: 64, prefix: '' }),
+        emailConfirmedAt: faker.date.recent(),
+        passwordEncrypted: faker.string.alphanumeric(60),
+        passwordChangedAt: faker.date.recent(),
+        addressEncrypted: faker.string.alphanumeric(50),
+        encryptionKeyVersion: 2,
+      };
       updateMany.mockResolvedValue({ count: 1 });
 
-      await repository.updatePassword(faker.database.mongodbObjectId(), {
-        passwordEncrypted: faker.string.alphanumeric(60),
-        encryptionKeyVersion: 2,
-        changedAt: new Date(),
-        emailEncrypted,
-        addressEncrypted,
+      await repository.update(faker.database.mongodbObjectId(), update);
+
+      expect(updateMany).toHaveBeenCalledWith({
+        where: expect.any(Object),
+        data: {
+          user_name: undefined,
+          email_encrypted: update.emailEncrypted,
+          email_hash: update.emailHash,
+          email_confirmed_at: update.emailConfirmedAt,
+          password_encrypted: update.passwordEncrypted,
+          password_changed_at: update.passwordChangedAt,
+          address_encrypted: update.addressEncrypted,
+          encryption_key_version: 2,
+        },
+      });
+    });
+
+    it('remove o endereço quando recebe null', async () => {
+      updateMany.mockResolvedValue({ count: 1 });
+
+      await repository.update(faker.database.mongodbObjectId(), {
+        addressEncrypted: null,
       });
 
       expect(updateMany).toHaveBeenCalledWith({
         where: expect.any(Object),
-        data: expect.objectContaining({
-          encryption_key_version: 2,
-          email_encrypted: emailEncrypted,
-          address_encrypted: addressEncrypted,
-        }),
+        data: expect.objectContaining({ address_encrypted: null }),
       });
     });
 
-    it('devolve false quando a conta não existe mais', async () => {
+    it('devolve NOT_FOUND quando a conta não existe mais', async () => {
       updateMany.mockResolvedValue({ count: 0 });
 
       await expect(
-        repository.updatePassword(faker.database.mongodbObjectId(), {
-          passwordEncrypted: faker.string.alphanumeric(60),
-          encryptionKeyVersion: 1,
-          changedAt: new Date(),
+        repository.update(faker.database.mongodbObjectId(), { name: 'Nome' }),
+      ).resolves.toBe('NOT_FOUND');
+    });
+
+    it('devolve EMAIL_TAKEN quando o índice único do e-mail já tem esse valor', async () => {
+      updateMany.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+          code: 'P2002',
+          clientVersion: faker.system.semver(),
         }),
+      );
+
+      await expect(
+        repository.update(faker.database.mongodbObjectId(), {
+          emailHash: faker.string.hexadecimal({ length: 64, prefix: '' }),
+        }),
+      ).resolves.toBe('EMAIL_TAKEN');
+    });
+
+    it('propaga qualquer outra falha do banco', async () => {
+      updateMany.mockRejectedValue(new Error('banco fora'));
+
+      await expect(
+        repository.update(faker.database.mongodbObjectId(), { name: 'Nome' }),
+      ).rejects.toThrow('banco fora');
+    });
+  });
+
+  describe('delete', () => {
+    it('apaga os registros de e-mails do titular e depois a conta, na mesma transação', async () => {
+      const userId = faker.database.mongodbObjectId();
+      deleteMany.mockResolvedValue({ count: 1 });
+      deleteLogs.mockResolvedValue({ count: 3 });
+
+      await expect(repository.delete(userId)).resolves.toBe(true);
+
+      expect(deleteLogs).toHaveBeenCalledWith({ where: { user_id: userId } });
+      expect(deleteMany).toHaveBeenCalledWith({ where: { id_user: userId } });
+      expect(deleteLogs.mock.invocationCallOrder[0]).toBeLessThan(
+        deleteMany.mock.invocationCallOrder[0],
+      );
+      expect(prisma.$transaction).toHaveBeenCalledOnce();
+    });
+
+    it('devolve false quando a conta já não existia', async () => {
+      deleteMany.mockResolvedValue({ count: 0 });
+      deleteLogs.mockResolvedValue({ count: 0 });
+
+      await expect(
+        repository.delete(faker.database.mongodbObjectId()),
       ).resolves.toBe(false);
+    });
+
+    it('não apaga a conta se a limpeza dos registros de e-mail falhar', async () => {
+      deleteLogs.mockRejectedValue(new Error('banco fora'));
+
+      await expect(
+        repository.delete(faker.database.mongodbObjectId()),
+      ).rejects.toThrow('banco fora');
+
+      expect(deleteMany).not.toHaveBeenCalled();
     });
   });
 
