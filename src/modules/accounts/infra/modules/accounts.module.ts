@@ -6,12 +6,18 @@ import { UserRepository } from '../../domain/dtos/repositories/user.repository.j
 import { AccountsController } from '../../http/controllers/accounts.controller.js';
 import { PrismaUserTokenRepository } from '../db/repositories/prisma-user-token.repository.js';
 import { PrismaUserRepository } from '../db/repositories/prisma-user.repository.js';
+import { ConfirmEmailChangeUseCase } from '../usecases/confirm-email-change.usecase.js';
 import { ConfirmEmailUseCase } from '../usecases/confirm-email.usecase.js';
 import { ConsumeUserTokenUseCase } from '../usecases/consume-user-token.usecase.js';
+import { DeleteOwnAccountUseCase } from '../usecases/delete-own-account.usecase.js';
+import { GetOwnAccountUseCase } from '../usecases/get-own-account.usecase.js';
 import { IssueUserTokenUseCase } from '../usecases/issue-user-token.usecase.js';
 import { RegisterUserUseCase } from '../usecases/register-user.usecase.js';
+import { RequestEmailChangeUseCase } from '../usecases/request-email-change.usecase.js';
 import { ResendEmailConfirmationUseCase } from '../usecases/resend-email-confirmation.usecase.js';
 import { SendEmailConfirmationUseCase } from '../usecases/send-email-confirmation.usecase.js';
+import { UpdateAccountUseCase } from '../usecases/update-account.usecase.js';
+import { UpdateOwnAccountUseCase } from '../usecases/update-own-account.usecase.js';
 
 /**
  * Contas de usuário: cadastro, confirmação de e-mail, edição, exclusão e
@@ -42,7 +48,18 @@ import { SendEmailConfirmationUseCase } from '../usecases/send-email-confirmatio
     RegisterUserUseCase,
     ConfirmEmailUseCase,
     ResendEmailConfirmationUseCase,
+    UpdateAccountUseCase,
+    GetOwnAccountUseCase,
+    UpdateOwnAccountUseCase,
+    RequestEmailChangeUseCase,
+    ConfirmEmailChangeUseCase,
+    DeleteOwnAccountUseCase,
   ],
-  exports: [UserRepository, IssueUserTokenUseCase, ConsumeUserTokenUseCase],
+  exports: [
+    UserRepository,
+    IssueUserTokenUseCase,
+    ConsumeUserTokenUseCase,
+    UpdateAccountUseCase,
+  ],
 })
 export class AccountsModule {}

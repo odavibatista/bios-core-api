@@ -484,6 +484,40 @@ caracteres, com letra e número) nos dois fluxos.
   existente e inexistente (a diferença é uma gravação e um enfileiramento). A resposta, por
   outro lado, é idêntica.
 
+### Manutenção da própria conta
+
+O UC05 (RF26, RF27) cobre a leitura, a edição, a troca de e-mail e a exclusão. Todas as rotas
+exigem sessão, exceto a confirmação da troca de e-mail.
+
+| Endpoint | Acesso | O que faz |
+| --- | --- | --- |
+| `GET /accounts/me` | sessão | Devolve nome, e-mail, endereço e papel, decifrados só nesta resposta |
+| `PATCH /accounts/me` | sessão | Edita o nome e/ou o endereço (`address: null` remove); ao menos um campo |
+| `POST /accounts/me/email-change` | sessão | Pede a troca de e-mail; exige a senha atual; responde `202` |
+| `POST /accounts/confirm-email-change` | público | Efetiva a troca com o token do link; responde `200` |
+| `DELETE /accounts/me` | sessão | Exclui a conta, confirmada com a senha no corpo; responde `204` |
+
+- **Endereço.** CEP, logradouro, número, complemento (opcional), bairro, cidade e UF. É
+  serializado em JSON e cifrado; o CEP é guardado só com os dígitos.
+- **Troca de e-mail.** O link vai ao **novo** endereço (template `EMAIL_CHANGE_CONFIRMATION`),
+  e o e-mail atual vale até ele ser aberto. Exige a senha atual, porque o e-mail é o canal de
+  recuperação da conta (um acréscimo ao UC05: sem isso, uma sessão roubada bastaria para
+  tomá-la). Domínios da blacklist são recusados. **Se o novo e-mail já é de outra conta, a
+  resposta é a mesma do sucesso e nada é enviado**; só o e-mail da própria conta é recusado
+  (`EMAIL_UNCHANGED`). Se o endereço passar a ser de outra conta enquanto o link esperava, a
+  confirmação responde `409 EMAIL_ALREADY_IN_USE`. As sessões abertas continuam valendo.
+- **Versão da chave no token.** O token de troca guarda o novo e-mail cifrado como
+  `<versão>:<texto cifrado>`: o link vale por horas, e uma rotação de chave nesse intervalo não
+  pode deixar o e-mail indecifrável.
+- **Coerência da chave.** Edição de endereço, troca de e-mail e troca de senha passam todas
+  pelo `UpdateAccountUseCase`, que recifra os demais campos quando a chave ativa é mais nova
+  que a do documento. Há e2e contra o MongoDB real com chaves v1 e v2.
+- **Exclusão (LGPD).** Remove a conta e, por cascata do Prisma, sessões, tokens, chaves de API
+  e bloqueios; as tentativas de login ficam com IP e data/hora, sem vínculo com o titular
+  (`user_id` anulado); os registros de e-mails enviados a ele (que guardam o hash do
+  destinatário) são **apagados**. Não há remoção lógica. O access token usado deixa de valer
+  na requisição seguinte, porque a sessão sumiu.
+
 ### Retenção de dados (índices TTL)
 
 Tokens, sessões, bloqueios e logs são removidos automaticamente pelo MongoDB após um prazo

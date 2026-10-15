@@ -5,7 +5,8 @@ import { PrismaService } from '@shared/infra/database/prisma.service.js';
 import {
   type AccountCredentials,
   type AccountSecrets,
-  type PasswordUpdate,
+  type UserUpdate,
+  UserUpdateOutcome,
   type AccountIdentity,
   type AccountProfile,
   type NewUser,
@@ -118,6 +119,7 @@ export class PrismaUserRepository
         is_active: true,
         role: true,
         email_encrypted: true,
+        address_encrypted: true,
         encryption_key_version: true,
       },
     });
@@ -129,6 +131,7 @@ export class PrismaUserRepository
           isActive: user.is_active,
           role: user.role,
           emailEncrypted: user.email_encrypted,
+          addressEncrypted: user.address_encrypted,
           encryptionKeyVersion: user.encryption_key_version,
         }
       : null;
@@ -155,28 +158,62 @@ export class PrismaUserRepository
       : null;
   }
 
-  async updatePassword(
+  async update(
     userId: string,
     {
-      passwordEncrypted,
-      encryptionKeyVersion,
-      changedAt,
+      name,
       emailEncrypted,
+      emailHash,
+      emailConfirmedAt,
+      passwordEncrypted,
+      passwordChangedAt,
       addressEncrypted,
-    }: PasswordUpdate,
-  ): Promise<boolean> {
-    const { count } = await this.prisma.user.updateMany({
-      where: { id_user: userId },
-      data: {
-        password_encrypted: passwordEncrypted,
-        encryption_key_version: encryptionKeyVersion,
-        password_changed_at: changedAt,
-        email_encrypted: emailEncrypted,
-        address_encrypted: addressEncrypted,
-      },
-    });
+      encryptionKeyVersion,
+    }: UserUpdate,
+  ): Promise<UserUpdateOutcome> {
+    try {
+      const { count } = await this.prisma.user.updateMany({
+        where: { id_user: userId },
+        data: {
+          user_name: name,
+          email_encrypted: emailEncrypted,
+          email_hash: emailHash,
+          email_confirmed_at: emailConfirmedAt,
+          password_encrypted: passwordEncrypted,
+          password_changed_at: passwordChangedAt,
+          address_encrypted: addressEncrypted,
+          encryption_key_version: encryptionKeyVersion,
+        },
+      });
 
-    return count === 1;
+      return count === 1
+        ? UserUpdateOutcome.UPDATED
+        : UserUpdateOutcome.NOT_FOUND;
+    } catch (error) {
+      if (isEmailAlreadyRegistered(error)) return UserUpdateOutcome.EMAIL_TAKEN;
+
+      throw error;
+    }
+  }
+
+  async delete(userId: string): Promise<boolean> {
+    return this.transaction(async (transaction) => {
+      // Os registros de e-mails enviados guardam o hash do destinatário. A
+      // relação só os desvincularia da conta; para a eliminação do titular
+      // (LGPD) eles são apagados.
+      await transaction.emailDispatchLog.deleteMany({
+        where: { user_id: userId },
+      });
+
+      // As ações referenciais do schema (cascata em sessões, tokens, chaves de
+      // API e bloqueios; anulação nas tentativas de login) são emuladas pelo
+      // Prisma dentro desta mesma transação.
+      const { count } = await transaction.user.deleteMany({
+        where: { id_user: userId },
+      });
+
+      return count === 1;
+    });
   }
 
   async recordLogin(userId: string, loggedInAt: Date): Promise<void> {
