@@ -16,15 +16,26 @@ import type { AuthControllerInterface } from '../../domain/dtos/controllers/auth
 import {
   type LoginRequest,
   LoginRequestSchema,
-  type LoginResponse,
-  LoginResponseSchema,
 } from '../../domain/dtos/requests/login.dto.js';
+import {
+  type RefreshSessionRequest,
+  RefreshSessionRequestSchema,
+} from '../../domain/dtos/requests/refresh-session.dto.js';
+import {
+  type SessionResponse,
+  SessionResponseSchema,
+  toSessionResponse,
+} from '../../domain/dtos/requests/session.dto.js';
 import { LoginUseCase } from '../../infra/usecases/login.usecase.js';
+import { RefreshSessionUseCase } from '../../infra/usecases/refresh-session.usecase.js';
 
 @ApiTags('Autenticação')
 @Controller('auth')
 export class AuthController implements AuthControllerInterface {
-  constructor(private readonly loginUseCase: LoginUseCase) {}
+  constructor(
+    private readonly loginUseCase: LoginUseCase,
+    private readonly refreshSessionUseCase: RefreshSessionUseCase,
+  ) {}
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
@@ -33,7 +44,7 @@ export class AuthController implements AuthControllerInterface {
     description:
       'Devolve um access token JWT de vida curta e um refresh token opaco de uso único. Cinco senhas incorretas seguidas bloqueiam o IP ou a conta por 15 minutos.',
   })
-  @ResponseSchema(LoginResponseSchema, { description: 'Sessão aberta' })
+  @ResponseSchema(SessionResponseSchema, { description: 'Sessão aberta' })
   @ErrorResponses(
     HttpStatus.UNAUTHORIZED,
     HttpStatus.FORBIDDEN,
@@ -44,15 +55,36 @@ export class AuthController implements AuthControllerInterface {
     @Body({ schema: LoginRequestSchema }) body: LoginRequest,
     @Ip() ip: string,
     @Headers('user-agent') userAgent: string | undefined,
-  ): Promise<LoginResponse> {
+  ): Promise<SessionResponse> {
     const session = await this.loginUseCase.execute({ ...body, ip, userAgent });
 
-    return {
-      access_token: session.accessToken,
-      refresh_token: session.refreshToken,
-      token_type: 'Bearer',
-      expires_in: session.expiresIn,
-      user: session.user,
-    };
+    return toSessionResponse(session);
+  }
+
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Troca o refresh token por um novo par de tokens',
+    description:
+      'O refresh token é de uso único: a renovação o invalida e devolve outro. Reapresentar um refresh token já usado derruba todas as sessões do usuário e avisa o titular por e-mail. Toda recusa tem a mesma resposta.',
+  })
+  @ResponseSchema(SessionResponseSchema, { description: 'Sessão renovada' })
+  @ErrorResponses(
+    HttpStatus.UNAUTHORIZED,
+    HttpStatus.UNPROCESSABLE_ENTITY,
+    HttpStatus.TOO_MANY_REQUESTS,
+  )
+  async refresh(
+    @Body({ schema: RefreshSessionRequestSchema }) body: RefreshSessionRequest,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string | undefined,
+  ): Promise<SessionResponse> {
+    const session = await this.refreshSessionUseCase.execute({
+      refreshToken: body.refresh_token,
+      ip,
+      userAgent,
+    });
+
+    return toSessionResponse(session);
   }
 }

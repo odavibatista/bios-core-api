@@ -10,10 +10,13 @@ import { PrismaLoginAttemptRepository } from '../db/repositories/prisma-login-at
 import { PrismaUserSessionRepository } from '../db/repositories/prisma-user-session.repository.js';
 import { JwtAccessTokenProvider } from '../providers/jwt-access-token.provider.js';
 import { LoginUseCase } from '../usecases/login.usecase.js';
+import { RefreshSessionUseCase } from '../usecases/refresh-session.usecase.js';
+import { SendSuspiciousLoginAlertUseCase } from '../usecases/send-suspicious-login-alert.usecase.js';
 
 /**
- * Autenticação: login com bloqueio por tentativas, sessões JWT revogáveis
- * e encerramento de sessão (UC02, UC03, UC04 — alteração de senha).
+ * Autenticação: login com bloqueio por tentativas, renovação de sessão com
+ * rotação do refresh token, sessões JWT revogáveis e encerramento de sessão
+ * (UC02, UC17, UC03, UC04 — alteração de senha).
  *
  * Entidades (schemas Prisma em `../../entity`): `UserSession`, `LoginAttempt`.
  *
@@ -33,7 +36,9 @@ import { LoginUseCase } from '../usecases/login.usecase.js';
     { provide: AccessTokenProvider, useClass: JwtAccessTokenProvider },
 
     /* Casos de uso */
+    SendSuspiciousLoginAlertUseCase,
     LoginUseCase,
+    RefreshSessionUseCase,
   ],
 })
 export class AuthenticationModule {}
