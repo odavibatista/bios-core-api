@@ -52,6 +52,9 @@ export default defineConfig({
       DATA_RETENTION_SYNC_ON_BOOT: 'false',
       // Sem agendamento no boot: as suítes registram o que precisam testar.
       QUEUE_SCHEDULES_SYNC_ON_BOOT: 'false',
+      // Prazo curto da espera por jobs: os cenários de "serviço de ingestão
+      // não responde" terminam em segundos, e não nos 10s do padrão.
+      QUEUE_WAIT_TIMEOUT_MS: '3000',
       // Chaves de teste: valores fixos, nunca usados fora das suítes.
       ENCRYPTION_KEYS: `1:${'e'.repeat(43)}=`,
       BLIND_INDEX_KEY: `${'b'.repeat(43)}=`,
