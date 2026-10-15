@@ -12,6 +12,15 @@ type DurationUnit = keyof typeof SECONDS_PER_UNIT;
 /** Duração textual: inteiro seguido de unidade obrigatória (ex.: `45s`, `30m`, `12h`, `7d`, `4w`). */
 export type DurationText = `${number}${DurationUnit}`;
 
+/** Nome de cada unidade por extenso, no singular e no plural. */
+const UNIT_NAMES = {
+  w: ['semana', 'semanas'],
+  d: ['dia', 'dias'],
+  h: ['hora', 'horas'],
+  m: ['minuto', 'minutos'],
+  s: ['segundo', 'segundos'],
+} as const satisfies Record<DurationUnit, readonly [string, string]>;
+
 const DURATION_PATTERN = /^(\d+)(w|d|h|m|s)$/;
 
 /**
@@ -93,5 +102,31 @@ export class Duration {
     ) as DurationUnit;
 
     return `${this.seconds / SECONDS_PER_UNIT[unit]}${unit}`;
+  }
+
+  /**
+   * Forma por extenso em português, para mensagens ao usuário (ex.: `2 horas`,
+   * `90 minutos`, `3 dias`).
+   *
+   * Usa a maior unidade que representa a duração exatamente, exceto quando a
+   * contagem seria 1 em dias ou semanas: "1 dia" e "1 semana" soam menos
+   * precisos que "24 horas" e "7 dias" numa validade de link, então desce uma
+   * unidade.
+   */
+  toLongText(): string {
+    const units = Object.keys(SECONDS_PER_UNIT) as DurationUnit[];
+    const exact = units.filter(
+      (candidate) => this.seconds % SECONDS_PER_UNIT[candidate] === 0,
+    );
+    const largest = exact[0];
+    const unit =
+      this.seconds === SECONDS_PER_UNIT[largest] &&
+      (largest === 'w' || largest === 'd')
+        ? exact[1]
+        : largest;
+    const amount = this.seconds / SECONDS_PER_UNIT[unit];
+    const [singular, plural] = UNIT_NAMES[unit];
+
+    return `${amount} ${amount === 1 ? singular : plural}`;
   }
 }

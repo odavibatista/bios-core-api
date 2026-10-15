@@ -51,6 +51,20 @@ describe('Duration', () => {
     expect(Duration.ofSeconds(seconds).toString()).toBe(text);
   });
 
+  it.each([
+    [7_200, '2 horas'],
+    [3_600, '1 hora'],
+    [86_400, '24 horas'],
+    [172_800, '2 dias'],
+    [604_800, '7 dias'],
+    [1_209_600, '2 semanas'],
+    [5_400, '90 minutos'],
+    [60, '1 minuto'],
+    [45, '45 segundos'],
+  ])('descreve %i segundos por extenso como "%s"', (seconds, text) => {
+    expect(Duration.ofSeconds(seconds).toLongText()).toBe(text);
+  });
+
   it('compara durações', () => {
     const days = faker.number.int({ min: 1, max: 365 });
     const duration = Duration.parse(`${days}d`);
