@@ -13,6 +13,10 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import {
+  type AccountMessageResponse,
+  AccountMessageResponseSchema,
+} from '@modules/accounts/domain/dtos/requests/account-message.dto.js';
 import type { AuthenticatedUser } from '@shared/domain/dtos/authenticated-user.dto.js';
 import { CurrentUser } from '@shared/http/decorators/current-user.decorator.js';
 import { Public } from '@shared/http/decorators/public.decorator.js';
@@ -26,6 +30,14 @@ import {
   LoginRequestSchema,
 } from '../../domain/dtos/requests/login.dto.js';
 import {
+  type ChangePasswordRequest,
+  ChangePasswordRequestSchema,
+  type ForgotPasswordRequest,
+  ForgotPasswordRequestSchema,
+  type ResetPasswordRequest,
+  ResetPasswordRequestSchema,
+} from '../../domain/dtos/requests/password.dto.js';
+import {
   type RefreshSessionRequest,
   RefreshSessionRequestSchema,
 } from '../../domain/dtos/requests/refresh-session.dto.js';
@@ -34,9 +46,20 @@ import {
   SessionResponseSchema,
   toSessionResponse,
 } from '../../domain/dtos/requests/session.dto.js';
+import { ChangePasswordUseCase } from '../../infra/usecases/change-password.usecase.js';
 import { LoginUseCase } from '../../infra/usecases/login.usecase.js';
 import { LogoutUseCase } from '../../infra/usecases/logout.usecase.js';
 import { RefreshSessionUseCase } from '../../infra/usecases/refresh-session.usecase.js';
+import { RequestPasswordResetUseCase } from '../../infra/usecases/request-password-reset.usecase.js';
+import { ResetPasswordUseCase } from '../../infra/usecases/reset-password.usecase.js';
+
+/**
+ * Mensagem do pedido de recuperação. É a mesma exista a conta ou não: a tela de
+ * recuperação não pode servir para descobrir quais e-mails estão cadastrados
+ * (UC04, regra de negócio 2).
+ */
+export const PASSWORD_RESET_REQUESTED_MESSAGE =
+  'Se houver uma conta ativa com este e-mail, enviamos um link para redefinir a senha.';
 
 @ApiTags('Autenticação')
 @Controller('auth')
@@ -45,6 +68,9 @@ export class AuthController implements AuthControllerInterface {
     private readonly loginUseCase: LoginUseCase,
     private readonly refreshSessionUseCase: RefreshSessionUseCase,
     private readonly logoutUseCase: LogoutUseCase,
+    private readonly changePasswordUseCase: ChangePasswordUseCase,
+    private readonly requestPasswordResetUseCase: RequestPasswordResetUseCase,
+    private readonly resetPasswordUseCase: ResetPasswordUseCase,
   ) {}
 
   @Public()
@@ -134,5 +160,74 @@ export class AuthController implements AuthControllerInterface {
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<void> {
     await this.logoutUseCase.execute({ user, allDevices: true });
+  }
+
+  @Post('change-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth('jwt')
+  @ApiOperation({
+    summary: 'Troca a senha do usuário autenticado',
+    description:
+      'Exige a senha atual. Ao concluir, todas as sessões do usuário, inclusive a atual, são encerradas e é preciso entrar de novo com a senha nova.',
+  })
+  @ApiResponse({ status: HttpStatus.NO_CONTENT, description: 'Senha trocada' })
+  @ErrorResponses(
+    HttpStatus.UNAUTHORIZED,
+    HttpStatus.UNPROCESSABLE_ENTITY,
+    HttpStatus.TOO_MANY_REQUESTS,
+  )
+  async changePassword(
+    @Body({ schema: ChangePasswordRequestSchema }) body: ChangePasswordRequest,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<void> {
+    await this.changePasswordUseCase.execute({
+      user,
+      currentPassword: body.current_password,
+      newPassword: body.new_password,
+    });
+  }
+
+  @Public()
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiOperation({
+    summary: 'Envia o link de recuperação de senha por e-mail',
+    description:
+      'O link vale por tempo limitado e só pode ser usado uma vez; pedir outro invalida o anterior. A resposta é a mesma para qualquer e-mail.',
+  })
+  @ResponseSchema(AccountMessageResponseSchema, {
+    status: HttpStatus.ACCEPTED,
+    description: 'Pedido de recuperação recebido',
+  })
+  @ErrorResponses(HttpStatus.UNPROCESSABLE_ENTITY, HttpStatus.TOO_MANY_REQUESTS)
+  async forgotPassword(
+    @Body({ schema: ForgotPasswordRequestSchema }) body: ForgotPasswordRequest,
+  ): Promise<AccountMessageResponse> {
+    await this.requestPasswordResetUseCase.execute(body);
+
+    return { message: PASSWORD_RESET_REQUESTED_MESSAGE };
+  }
+
+  @Public()
+  @Post('reset-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Define a nova senha a partir do link de recuperação',
+    description:
+      'Gasta o token do link e encerra todas as sessões da conta. Depois, é preciso entrar com a senha nova.',
+  })
+  @ApiResponse({
+    status: HttpStatus.NO_CONTENT,
+    description: 'Senha redefinida',
+  })
+  @ErrorResponses(
+    HttpStatus.BAD_REQUEST,
+    HttpStatus.UNPROCESSABLE_ENTITY,
+    HttpStatus.TOO_MANY_REQUESTS,
+  )
+  async resetPassword(
+    @Body({ schema: ResetPasswordRequestSchema }) body: ResetPasswordRequest,
+  ): Promise<void> {
+    await this.resetPasswordUseCase.execute(body);
   }
 }
