@@ -617,6 +617,21 @@ iniciais que o provedor perdeu ao mandar número voltam), UF em 2 letras, vazio 
   vem pela descrição ou, na falta, pelo código da Receita. A descrição do CNAE pode vir
   vazia: o IBGE a completa (RF06).
 
+`OpenCnpjDataSource` (`opencnpj/`, slug `OPEN_CNPJ`, prioridade 2, primeiro fallback) segue
+o mesmo molde: `GET {base_url}/{cnpj}`, lista de campos permitidos (o `QSA`, e-mail e
+telefones nunca são lidos) e rejeição de resposta de outro CNPJ. Diferenças do provedor:
+
+- **Registro anonimizado é rejeitado.** O OpenCNPJ mascara os dados de empresas cujo titular é
+  pessoa física e marca `lgpd_anonimizado`; um cadastro mascarado não é cadastro, então o
+  resultado é `UNAVAILABLE`.
+- **Sem código IBGE.** O `codigo_municipio` dele é o da Receita (outra tabela): `cityIbgeCode`
+  fica `null`.
+- **Descrições de CNAE** vêm da lista `cnaes` quando existe; `cnaes_secundarios` traz só os
+  códigos. Sem a lista, a descrição fica vazia e o IBGE a completa (RF06).
+- **Porte unificado.** `normalizeCompanySize` escreve o porte do mesmo jeito para qualquer
+  provedor (`Demais` → `DEMAIS`, `Microempresa` → `MICRO EMPRESA`, `EPP` → `EMPRESA DE PEQUENO
+  PORTE`), para trocar de provedor não alterar o cadastro nem o hash de conteúdo.
+
 Um adapter novo declara o `slug` da fonte (que o seeder cria), chama
 `RequestDataSourceUseCase.execute({ slug, segments, cnpj, context })` e passa a resposta por
 `toLookupResult` com o seu *parser*. Fontes que não se consultam item a item, como o dump

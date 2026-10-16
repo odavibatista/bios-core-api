@@ -3,6 +3,7 @@ import {
   cleanUpperText,
   joinStreet,
   normalizeCnaeCode,
+  normalizeCompanySize,
   normalizeIbgeCode,
   normalizeRegistrationStatus,
   normalizeUf,
@@ -10,6 +11,44 @@ import {
 } from './cadastral-normalizers.js';
 
 describe('normalizadores cadastrais', () => {
+  describe('normalizeCompanySize', () => {
+    it.each([
+      ['Demais', 'DEMAIS'],
+      ['DEMAIS', 'DEMAIS'],
+      ['  demais ', 'DEMAIS'],
+      ['MICRO EMPRESA', 'MICRO EMPRESA'],
+      ['Microempresa', 'MICRO EMPRESA'],
+      ['MICROEMPRESA', 'MICRO EMPRESA'],
+      ['Micro-Empresa', 'MICRO EMPRESA'],
+      ['ME', 'MICRO EMPRESA'],
+      ['EMPRESA DE PEQUENO PORTE', 'EMPRESA DE PEQUENO PORTE'],
+      ['Empresa de Pequeno Porte', 'EMPRESA DE PEQUENO PORTE'],
+      ['EPP', 'EMPRESA DE PEQUENO PORTE'],
+      ['Pequeno Porte', 'EMPRESA DE PEQUENO PORTE'],
+    ])('escreve %j como %j', (value, expected) => {
+      expect(normalizeCompanySize(value)).toBe(expected);
+    });
+
+    it.each([['NÃO INFORMADO'], ['Nao Informado'], ['NAO-INFORMADO']])(
+      'trata %j como porte não informado',
+      (value) => {
+        expect(normalizeCompanySize(value)).toBeNull();
+      },
+    );
+
+    it.each([[''], ['   '], [null], [undefined]])(
+      'trata %j como ausente',
+      (value) => {
+        expect(normalizeCompanySize(value)).toBeNull();
+      },
+    );
+
+    it('mantém, em maiúsculas e sem acento, um porte que não conhece', () => {
+      expect(normalizeCompanySize('Grande Porte')).toBe('GRANDE PORTE');
+      expect(normalizeCompanySize('Média Empresa')).toBe('MEDIA EMPRESA');
+    });
+  });
+
   describe('cleanText', () => {
     it.each([
       ['  ACME  ', 'ACME'],
