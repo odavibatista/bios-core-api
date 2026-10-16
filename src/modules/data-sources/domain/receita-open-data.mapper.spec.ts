@@ -1,15 +1,18 @@
-import { brasilApiCnpjFactory } from '@test/factories/data-sources/brasil-api-cnpj.factory.js';
-import { toCadastralRecord } from './brasil-api-cnpj.mapper.js';
+import { receitaOpenDataCnpjFactory } from '@test/factories/data-sources/receita-open-data-cnpj.factory.js';
+import { toCadastralRecord } from './receita-open-data.mapper.js';
 
 const CNPJ = '11222333000181';
 
-describe('toCadastralRecord (BrasilAPI)', () => {
+describe('toCadastralRecord (formato dos dados abertos da Receita)', () => {
   const map = (overrides: Record<string, unknown> = {}) =>
-    toCadastralRecord({ ...brasilApiCnpjFactory.build(), ...overrides }, CNPJ);
+    toCadastralRecord(
+      { ...receitaOpenDataCnpjFactory.build(), ...overrides },
+      CNPJ,
+    );
 
   describe('resposta completa', () => {
     it('converte para o cadastro do BIOS', () => {
-      const body = brasilApiCnpjFactory.build({
+      const body = receitaOpenDataCnpjFactory.build({
         razao_social: 'ACME SERVICOS LTDA',
         nome_fantasia: 'ACME',
       });
@@ -82,13 +85,13 @@ describe('toCadastralRecord (BrasilAPI)', () => {
     it('aceita o CNPJ com máscara, em qualquer caixa', () => {
       expect(
         toCadastralRecord(
-          brasilApiCnpjFactory.build({ cnpj: '11.222.333/0001-81' }),
+          receitaOpenDataCnpjFactory.build({ cnpj: '11.222.333/0001-81' }),
           CNPJ,
         ),
       ).not.toBeNull();
       expect(
         toCadastralRecord(
-          brasilApiCnpjFactory.build({ cnpj: '12abc34501de35' }),
+          receitaOpenDataCnpjFactory.build({ cnpj: '12abc34501de35' }),
           '12ABC34501DE35',
         ),
       ).not.toBeNull();
@@ -201,7 +204,7 @@ describe('toCadastralRecord (BrasilAPI)', () => {
   });
 
   describe('CNAEs secundários', () => {
-    it('o item de código 0 da BrasilAPI significa "sem secundários"', () => {
+    it('o item de código 0 do provedor significa "sem secundários"', () => {
       expect(
         map({ cnaes_secundarios: [{ codigo: 0, descricao: '' }] })
           ?.secondaryCnaes,

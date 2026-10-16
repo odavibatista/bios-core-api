@@ -2,7 +2,7 @@ import { Test } from '@nestjs/testing';
 import { RequestTrigger } from '@prisma/client';
 import { SourceOutcome } from '@modules/data-sources/domain/dtos/providers/data-source-request.dto.js';
 import { RequestDataSourceUseCase } from '@modules/data-sources/infra/usecases/request/request-data-source.usecase.js';
-import { brasilApiCnpjFactory } from '@test/factories/data-sources/brasil-api-cnpj.factory.js';
+import { receitaOpenDataCnpjFactory } from '@test/factories/data-sources/receita-open-data-cnpj.factory.js';
 import {
   BRASIL_API_SLUG,
   BrasilApiDataSource,
@@ -51,7 +51,7 @@ describe('BrasilApiDataSource', () => {
     requestDataSource.execute.mockResolvedValue({
       outcome: SourceOutcome.SUCCESS,
       status: 200,
-      body: brasilApiCnpjFactory.build({ razao_social: 'ACME LTDA' }),
+      body: receitaOpenDataCnpjFactory.build({ razao_social: 'ACME LTDA' }),
     });
 
     const result = await dataSource.fetch(CNPJ, context);
@@ -66,7 +66,7 @@ describe('BrasilApiDataSource', () => {
     requestDataSource.execute.mockResolvedValue({
       outcome: SourceOutcome.SUCCESS,
       status: 200,
-      body: brasilApiCnpjFactory.build({ cnpj: '00000000000191' }),
+      body: receitaOpenDataCnpjFactory.build({ cnpj: '00000000000191' }),
     });
 
     await expect(dataSource.fetch(CNPJ, context)).resolves.toMatchObject({
