@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import {
   cleanText,
-  cleanUpperText,
+  normalizeCompanySize,
   joinStreet,
   normalizeCnaeCode,
   normalizeIbgeCode,
@@ -102,7 +102,7 @@ export function toCadastralRecord(
     legalName,
     tradeName: cleanText(raw.nome_fantasia),
     registrationStatus,
-    companySize: cleanUpperText(raw.porte),
+    companySize: normalizeCompanySize(raw.porte),
     address: {
       street: joinStreet(raw.descricao_tipo_de_logradouro, raw.logradouro),
       number: cleanText(raw.numero),
