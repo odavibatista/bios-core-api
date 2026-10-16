@@ -1,14 +1,21 @@
 import { Module } from '@nestjs/common';
+import { BrasilApiModule } from '@modules/brasil-api/infra/modules/brasil-api.module.js';
 import { DataSourcesModule } from '@modules/data-sources/infra/modules/data-sources.module.js';
 import { EvidencesModule } from '@modules/evidences/infra/modules/evidences.module.js';
 import { CompaniesModule } from '@modules/companies/infra/modules/companies.module.js';
 import { ScoringModule } from '@modules/scoring/infra/modules/scoring.module.js';
 
 /**
- * Agregador do domínio de inteligência socioambiental: fontes de dados,
- * evidências, perfis de empresas e índices de aderência aos ODS.
+ * Agregador do domínio de inteligência socioambiental: fontes de dados e seus
+ * adapters, evidências, perfis de empresas e índices de aderência aos ODS.
  */
 @Module({
-  imports: [DataSourcesModule, EvidencesModule, CompaniesModule, ScoringModule],
+  imports: [
+    DataSourcesModule,
+    BrasilApiModule,
+    EvidencesModule,
+    CompaniesModule,
+    ScoringModule,
+  ],
 })
 export class SustainabilityIntelligenceModule {}
