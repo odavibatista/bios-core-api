@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { DataSourcesModule } from '@modules/data-sources/infra/modules/data-sources.module.js';
 import { EvidencesModule } from '@modules/evidences/infra/modules/evidences.module.js';
+import { IbgeCnaeModule } from '@modules/ibge-cnae/infra/modules/ibge-cnae.module.js';
 import { ReceitaModule } from '@modules/receita/infra/modules/receita.module.js';
 import { CompaniesModule } from '@modules/companies/infra/modules/companies.module.js';
 import { ScoringModule } from '@modules/scoring/infra/modules/scoring.module.js';
@@ -16,6 +17,7 @@ import { ScoringModule } from '@modules/scoring/infra/modules/scoring.module.js'
   imports: [
     DataSourcesModule,
     ReceitaModule,
+    IbgeCnaeModule,
     EvidencesModule,
     CompaniesModule,
     ScoringModule,
