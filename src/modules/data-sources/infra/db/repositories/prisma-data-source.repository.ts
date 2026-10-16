@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { DataSourceRole } from '@prisma/client';
 import { PrismaRepository } from '@shared/infra/database/prisma.repository.js';
 import { PrismaService } from '@shared/infra/database/prisma.service.js';
 import type { DataSourceRequestConfig } from '../../../domain/dtos/providers/data-source-request.dto.js';
@@ -50,5 +51,19 @@ export class PrismaDataSourceRepository
           requestTimeoutMs: source.request_timeout_ms,
         }
       : null;
+  }
+
+  async findCadastralChain(): Promise<string[]> {
+    const sources = await this.prisma.dataSource.findMany({
+      where: {
+        role: DataSourceRole.CADASTRAL,
+        is_enabled: true,
+        fallback_priority: { not: null },
+      },
+      orderBy: { fallback_priority: 'asc' },
+      select: { slug: true },
+    });
+
+    return sources.map(({ slug }) => slug);
   }
 }

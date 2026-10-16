@@ -7,13 +7,17 @@ import { PrismaDataSourceRepository } from './prisma-data-source.repository.js';
 
 describe('PrismaDataSourceRepository', () => {
   const findUnique = vi.fn();
+  const findMany = vi.fn();
   let repository: PrismaDataSourceRepository;
 
   beforeEach(async () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         PrismaDataSourceRepository,
-        { provide: PrismaService, useValue: { dataSource: { findUnique } } },
+        {
+          provide: PrismaService,
+          useValue: { dataSource: { findUnique, findMany } },
+        },
       ],
     }).compile();
 
@@ -114,6 +118,44 @@ describe('PrismaDataSourceRepository', () => {
       findUnique.mockResolvedValue(null);
 
       await expect(repository.findRequestConfig('NADA')).resolves.toBeNull();
+    });
+  });
+
+  describe('findCadastralChain', () => {
+    it('busca só as fontes cadastrais habilitadas e com prioridade, da primeira à última', async () => {
+      findMany.mockResolvedValue([]);
+
+      await repository.findCadastralChain();
+
+      expect(findMany).toHaveBeenCalledWith({
+        where: {
+          role: 'CADASTRAL',
+          is_enabled: true,
+          fallback_priority: { not: null },
+        },
+        orderBy: { fallback_priority: 'asc' },
+        select: { slug: true },
+      });
+    });
+
+    it('devolve os slugs na ordem recebida', async () => {
+      findMany.mockResolvedValue([
+        { slug: 'BRASIL_API' },
+        { slug: 'OPEN_CNPJ' },
+        { slug: 'MINHA_RECEITA' },
+      ]);
+
+      await expect(repository.findCadastralChain()).resolves.toEqual([
+        'BRASIL_API',
+        'OPEN_CNPJ',
+        'MINHA_RECEITA',
+      ]);
+    });
+
+    it('devolve lista vazia quando não há fonte cadastral habilitada', async () => {
+      findMany.mockResolvedValue([]);
+
+      await expect(repository.findCadastralChain()).resolves.toEqual([]);
     });
   });
 });
