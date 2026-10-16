@@ -20,10 +20,10 @@ import { RedisModule } from './redis.module.js';
 /**
  * Módulo global de mensageria (NFCO01, NFPD02).
  *
- * Toda a comunicação entre o core e os serviços de ingestão passa por aqui: o
+ * Toda a comunicação entre quem pede e quem processa passa por aqui: o
  * core publica jobs e, quando a consulta do usuário exige resposta imediata,
- * aguarda a conclusão com prazo. Não há consumidor nesta aplicação — cada fila
- * é processada pelo serviço dono do fluxo.
+ * aguarda a conclusão com prazo. Os consumidores ficam nos módulos donos do fluxo
+ * (`@Processor`), e não aqui.
  *
  * A conexão de apoio do Redis (health check e cache) fica no `RedisModule`: o
  * BullMQ administra as próprias conexões a partir das opções de

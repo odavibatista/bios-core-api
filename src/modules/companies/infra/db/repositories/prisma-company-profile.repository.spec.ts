@@ -7,6 +7,8 @@ import { PrismaCompanyProfileRepository } from './prisma-company-profile.reposit
 
 describe('PrismaCompanyProfileRepository', () => {
   const findUnique = vi.fn();
+  const upsert = vi.fn();
+  const findSourceOrThrow = vi.fn();
   let repository: PrismaCompanyProfileRepository;
 
   function buildDocument(overrides: Record<string, unknown> = {}) {
@@ -55,7 +57,10 @@ describe('PrismaCompanyProfileRepository', () => {
         PrismaCompanyProfileRepository,
         {
           provide: PrismaService,
-          useValue: { companyProfile: { findUnique } },
+          useValue: {
+            companyProfile: { findUnique, upsert },
+            dataSource: { findUniqueOrThrow: findSourceOrThrow },
+          },
         },
       ],
     }).compile();
@@ -90,6 +95,8 @@ describe('PrismaCompanyProfileRepository', () => {
     expect(stored).toMatchObject({
       cadastralSourceSlug: 'OPEN_CNPJ',
       refreshedAt: document.refreshed_at,
+      contentHash: document.content_hash,
+      previousContentHash: document.previous_content_hash,
     });
     expect(stored?.profile).toEqual({
       cnpj: document.cnpj,
@@ -145,6 +152,133 @@ describe('PrismaCompanyProfileRepository', () => {
     const stored = await repository.findByCnpj(buildCnpj());
 
     expect(stored?.profile.secondary_cnaes).toEqual([]);
+  });
+
+  it('perfil que nunca mudou não tem hash anterior', async () => {
+    findUnique.mockResolvedValue(
+      buildDocument({ previous_content_hash: null }),
+    );
+
+    const stored = await repository.findByCnpj(buildCnpj());
+
+    expect(stored?.previousContentHash).toBeNull();
+  });
+
+  it('o campo ausente do documento (MongoDB) também vale como sem hash anterior', async () => {
+    const document: Record<string, unknown> = buildDocument();
+    delete document.previous_content_hash;
+    findUnique.mockResolvedValue(document);
+
+    const stored = await repository.findByCnpj(buildCnpj());
+
+    expect(stored?.previousContentHash).toBeNull();
+  });
+
+  describe('save', () => {
+    const sourceId = faker.database.mongodbObjectId();
+    const record = {
+      cnpj: '11222333000181',
+      legalName: 'ACME LTDA',
+      tradeName: null,
+      registrationStatus: 'ATIVA',
+      companySize: null,
+      address: {
+        street: 'AVENIDA PAULISTA',
+        number: '1578',
+        complement: null,
+        neighborhood: 'BELA VISTA',
+        city: 'SAO PAULO',
+        cityIbgeCode: null,
+        uf: 'SP',
+        zipcode: '01310200',
+      },
+      mainCnae: { code: '6201501', description: 'DESENVOLVIMENTO' },
+      secondaryCnaes: [{ code: '6202300', description: 'OUTRA' }],
+    };
+    const input = {
+      record,
+      sourceSlug: 'OPEN_CNPJ',
+      contentHash: 'novo-hash',
+      previousContentHash: 'hash-antigo',
+      refreshedAt: new Date('2026-10-16T12:00:00.000Z'),
+    };
+
+    beforeEach(() => {
+      findSourceOrThrow.mockResolvedValue({ id_data_source: sourceId });
+    });
+
+    it('resolve a fonte pelo slug', async () => {
+      await repository.save(input);
+
+      expect(findSourceOrThrow).toHaveBeenCalledWith({
+        where: { slug: 'OPEN_CNPJ' },
+        select: { id_data_source: true },
+      });
+    });
+
+    it('cria ou atualiza o perfil pelo CNPJ, com os dados do cadastro', async () => {
+      await repository.save(input);
+
+      const expected = {
+        legal_name: 'ACME LTDA',
+        trade_name: null,
+        registration_status: 'ATIVA',
+        company_size: null,
+        address: {
+          street: 'AVENIDA PAULISTA',
+          number: '1578',
+          complement: null,
+          neighborhood: 'BELA VISTA',
+          city: 'SAO PAULO',
+          city_ibge_code: null,
+          uf: 'SP',
+          zipcode: '01310200',
+        },
+        main_cnae: { code: '6201501', description: 'DESENVOLVIMENTO' },
+        secondary_cnaes: [{ code: '6202300', description: 'OUTRA' }],
+        cadastral_source_id: sourceId,
+        content_hash: 'novo-hash',
+        previous_content_hash: 'hash-antigo',
+        refreshed_at: input.refreshedAt,
+      };
+      expect(upsert).toHaveBeenCalledWith({
+        where: { cnpj: '11222333000181' },
+        create: { cnpj: '11222333000181', ...expected },
+        update: expected,
+      });
+    });
+
+    it('um campo que deixou de existir na fonte é gravado como null, e não omitido', async () => {
+      await repository.save({ ...input, previousContentHash: null });
+
+      const [{ update }] = upsert.mock.calls[0] as [
+        { update: Record<string, unknown> },
+      ];
+      expect(update).toHaveProperty('trade_name', null);
+      expect(update).toHaveProperty('company_size', null);
+      expect(update).toHaveProperty('previous_content_hash', null);
+    });
+
+    it('não grava nada que não seja dado de pessoa jurídica', async () => {
+      await repository.save(input);
+
+      const serialized = JSON.stringify(upsert.mock.calls[0]);
+      expect(serialized).not.toContain('qsa');
+      expect(serialized).not.toContain('socio');
+    });
+
+    it('propaga a falha quando a fonte não existe no catálogo', async () => {
+      findSourceOrThrow.mockRejectedValue(new Error('fonte inexistente'));
+
+      await expect(repository.save(input)).rejects.toThrow('fonte inexistente');
+      expect(upsert).not.toHaveBeenCalled();
+    });
+
+    it('propaga a falha do banco', async () => {
+      upsert.mockRejectedValue(new Error('banco fora'));
+
+      await expect(repository.save(input)).rejects.toThrow('banco fora');
+    });
   });
 
   it('não devolve campos internos da coleção', async () => {

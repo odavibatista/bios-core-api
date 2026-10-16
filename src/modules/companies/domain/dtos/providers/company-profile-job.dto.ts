@@ -7,27 +7,36 @@ export const FETCH_COMPANY_PROFILE_JOB = 'fetch-company-profile';
 export const COMPANY_PROFILE_JOB_DEDUP_WINDOW_SECONDS = 60;
 
 /**
- * O que o core envia ao serviço de ingestão do CNPJ.
+ * O que quem consulta envia ao consumidor da fila (`CompanyProfileProcessor`).
  *
- * Só o CNPJ canônico (14 caracteres): o serviço não precisa de mais nada, e
- * nenhum dado de quem consulta sai do core.
+ * Só o CNPJ canônico (14 caracteres): o consumidor não precisa de mais nada, e
+ * nenhum dado de quem consulta entra na fila.
  */
 export interface CompanyProfileJobPayload {
   cnpj: string;
 }
 
 /**
- * O que o serviço de ingestão devolve ao concluir o job.
+ * Schema do payload, que o consumidor confere antes de agir: o que vem da fila
+ * é entrada externa, ainda que o produtor seja o próprio core.
+ */
+export const CompanyProfileJobPayloadSchema = z.object({
+  cnpj: z.string(),
+});
+
+/**
+ * O que o consumidor devolve ao concluir o job.
  *
  *  - `FOUND`: um provedor respondeu e `company_profile` foi gravado/atualizado;
- *  - `NOT_FOUND`: os provedores confirmaram que o CNPJ não existe;
+ *  - `NOT_FOUND`: todos os provedores consultados confirmaram que o CNPJ não existe;
  *  - `SOURCES_UNAVAILABLE`: nenhum provedor da cadeia (BrasilAPI → OpenCNPJ →
- *    Minha Receita) respondeu.
+ *    Minha Receita) pôde responder.
  *
- * É o contrato entre o core e o serviço de ingestão, que conversam só por fila
- * (`14-Projeto-e-Arquitetura.md`, seção 2). O core confere o resultado contra
- * este schema: um serviço fora do contrato é tratado como fonte indisponível,
- * nunca como dado.
+ * É o contrato entre quem pede (`GetCompanyProfileUseCase`) e quem consome a
+ * fila, que conversam só por ela (`14-Projeto-e-Arquitetura.md`, seção 2),
+ * ainda que hoje vivam no mesmo processo. Quem pede confere o resultado contra
+ * este schema: um consumidor fora do contrato é tratado como fonte
+ * indisponível, nunca como dado.
  */
 export const CompanyProfileJobResultSchema = z.object({
   outcome: z.enum(['FOUND', 'NOT_FOUND', 'SOURCES_UNAVAILABLE']),

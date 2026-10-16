@@ -57,6 +57,8 @@ export const storedCompanyProfileFactory = defineFactory<StoredCompanyProfile>(
       }),
       cadastralSourceSlug: 'BRASIL_API',
       refreshedAt,
+      contentHash: faker.string.hexadecimal({ length: 64, prefix: '' }),
+      previousContentHash: null,
     };
   },
 );
