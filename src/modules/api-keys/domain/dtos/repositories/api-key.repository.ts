@@ -23,8 +23,17 @@ export interface ActiveApiKey {
   lastUsedAt: Date | null;
 }
 
+/** O que a autenticação precisa de uma chave ativa: quem é e o resumo a conferir. */
+export interface ApiKeyCredential {
+  id: string;
+  userId: string;
+
+  /** Resumo SHA-256 da chave completa. */
+  hash: string;
+}
+
 /**
- * Contrato das chaves de API (RF16, NFSE01).
+ * Contrato das chaves de API (RF16, RF17, NFSE01).
  *
  * Classe abstrata (e não interface) para servir também como token de injeção.
  */
@@ -56,4 +65,26 @@ export abstract class ApiKeyRepository {
     apiKeyId: string,
     revokedAt: Date,
   ): Promise<boolean>;
+
+  /**
+   * Chave ainda não revogada com o prefixo público informado, ou `null`.
+   *
+   * A busca pelo prefixo (índice único) evita varrer resumos; a conferência do
+   * segredo é do chamador, contra `hash`.
+   */
+  abstract findActiveByPrefix(prefix: string): Promise<ApiKeyCredential | null>;
+
+  /**
+   * Registra o uso da chave em `usedAt`, se o último registrado for anterior a
+   * `staleBefore` (ou se não houver).
+   *
+   * O registro tem precisão limitada de propósito: gravar a cada chamada faria
+   * de toda leitura da API uma escrita no banco. A condição é da própria
+   * escrita, então chamadas simultâneas não gravam duas vezes.
+   */
+  abstract markUsed(
+    apiKeyId: string,
+    usedAt: Date,
+    staleBefore: Date,
+  ): Promise<void>;
 }
