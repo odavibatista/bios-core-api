@@ -4,6 +4,7 @@ import { PrismaRepository } from '@shared/infra/database/prisma.repository.js';
 import { PrismaService } from '@shared/infra/database/prisma.service.js';
 import {
   type ActiveApiKey,
+  type ApiKeyCredential,
   ApiKeyRepository,
   type NewApiKey,
 } from '../../../domain/dtos/repositories/api-key.repository.js';
@@ -110,6 +111,36 @@ export class PrismaApiKeyRepository
     });
 
     return count === 1;
+  }
+
+  async findActiveByPrefix(prefix: string): Promise<ApiKeyCredential | null> {
+    const key = await this.prisma.apiKey.findFirst({
+      where: { key_prefix: prefix, ...NOT_REVOKED },
+      select: { id_api_key: true, user_id: true, key_hash: true },
+    });
+
+    return key
+      ? { id: key.id_api_key, userId: key.user_id, hash: key.key_hash }
+      : null;
+  }
+
+  async markUsed(
+    apiKeyId: string,
+    usedAt: Date,
+    staleBefore: Date,
+  ): Promise<void> {
+    await this.prisma.apiKey.updateMany({
+      where: {
+        id_api_key: apiKeyId,
+        // Ausente (nunca usada), nulo ou anterior ao limite.
+        OR: [
+          { last_used_at: null },
+          { last_used_at: { isSet: false } },
+          { last_used_at: { lt: staleBefore } },
+        ],
+      },
+      data: { last_used_at: usedAt },
+    });
   }
 }
 

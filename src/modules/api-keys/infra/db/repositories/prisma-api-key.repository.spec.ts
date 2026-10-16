@@ -8,6 +8,7 @@ describe('PrismaApiKeyRepository', () => {
   const create = vi.fn();
   const count = vi.fn();
   const findMany = vi.fn();
+  const findFirst = vi.fn();
   const updateMany = vi.fn();
   let repository: PrismaApiKeyRepository;
 
@@ -39,7 +40,9 @@ describe('PrismaApiKeyRepository', () => {
         PrismaApiKeyRepository,
         {
           provide: PrismaService,
-          useValue: { apiKey: { create, count, findMany, updateMany } },
+          useValue: {
+            apiKey: { create, count, findMany, findFirst, updateMany },
+          },
         },
       ],
     }).compile();
@@ -177,6 +180,76 @@ describe('PrismaApiKeyRepository', () => {
           new Date(),
         ),
       ).resolves.toBe(false);
+    });
+  });
+
+  describe('findActiveByPrefix', () => {
+    it('busca pelo prefixo entre as chaves não revogadas, trazendo só o necessário para conferir', async () => {
+      const prefix = `bios_${faker.string.alphanumeric(8)}`;
+      findFirst.mockResolvedValue(null);
+
+      await repository.findActiveByPrefix(prefix);
+
+      expect(findFirst).toHaveBeenCalledWith({
+        where: { key_prefix: prefix, ...notRevoked },
+        select: { id_api_key: true, user_id: true, key_hash: true },
+      });
+    });
+
+    it('converte o documento para a credencial do domínio', async () => {
+      const document = {
+        id_api_key: faker.database.mongodbObjectId(),
+        user_id: faker.database.mongodbObjectId(),
+        key_hash: faker.string.hexadecimal({ length: 64, prefix: '' }),
+      };
+      findFirst.mockResolvedValue(document);
+
+      await expect(repository.findActiveByPrefix('bios_x')).resolves.toEqual({
+        id: document.id_api_key,
+        userId: document.user_id,
+        hash: document.key_hash,
+      });
+    });
+
+    it('devolve null quando não há chave ativa com o prefixo', async () => {
+      findFirst.mockResolvedValue(null);
+
+      await expect(repository.findActiveByPrefix('bios_x')).resolves.toBeNull();
+    });
+  });
+
+  describe('markUsed', () => {
+    it('grava o uso só se o último registrado é anterior ao limite, ou não existe', async () => {
+      const apiKeyId = faker.database.mongodbObjectId();
+      const usedAt = faker.date.recent();
+      const staleBefore = faker.date.past();
+      updateMany.mockResolvedValue({ count: 1 });
+
+      await repository.markUsed(apiKeyId, usedAt, staleBefore);
+
+      expect(updateMany).toHaveBeenCalledWith({
+        where: {
+          id_api_key: apiKeyId,
+          OR: [
+            { last_used_at: null },
+            { last_used_at: { isSet: false } },
+            { last_used_at: { lt: staleBefore } },
+          ],
+        },
+        data: { last_used_at: usedAt },
+      });
+    });
+
+    it('não é erro quando o uso recente dispensa a gravação', async () => {
+      updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        repository.markUsed(
+          faker.database.mongodbObjectId(),
+          new Date(),
+          faker.date.past(),
+        ),
+      ).resolves.toBeUndefined();
     });
   });
 });

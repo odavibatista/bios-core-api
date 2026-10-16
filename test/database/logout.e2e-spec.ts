@@ -1,5 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { SessionRevocationReason } from '@prisma/client';
+import type { Environment } from '@shared/config/environment.config.js';
 import { MailProvider } from '@modules/mailing/domain/providers/mail.provider.js';
 import { ErrorResponseSchema } from '@shared/domain/dtos/errors/error-response.dto.js';
 import { QueueName } from '@shared/domain/dtos/providers/queue-job.dto.js';
@@ -257,8 +259,13 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         // Se a autenticação rodasse primeiro, toda requisição com token falso
         // chegaria ao banco e nunca tomaria 429.
         const statuses: number[] = [];
+        // O teto desta rota é o limite geral (por IP); o da API pública, por
+        // chave, só incide nas rotas marcadas como tal.
+        const limit = app
+          .get<ConfigService<Environment, true>>(ConfigService)
+          .get('THROTTLE_LIMIT', { infer: true });
 
-        for (let attempt = 0; attempt < 70; attempt += 1) {
+        for (let attempt = 0; attempt < limit + 5; attempt += 1) {
           const response = await logout(faker.string.alphanumeric(120));
           statuses.push(response.status);
         }
