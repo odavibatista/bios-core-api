@@ -593,6 +593,30 @@ Cada fonte externa fica atrás de um adapter próprio, que implementa o contrato
   ou `UNAVAILABLE`, com o motivo). Corpo 2xx fora do formato esperado vira `UNAVAILABLE`,
   nunca dado.
 
+### Cadastro: `CadastralRecord` e o adapter da BrasilAPI
+
+Os três provedores do cadastro (BrasilAPI, OpenCNPJ, Minha Receita) entregam o mesmo
+`CadastralRecord` (`data-sources/domain/dtos/providers/cadastral-record.dto.ts`): CNPJ
+canônico, razão social, nome fantasia, situação e porte em maiúsculas, endereço, CNAE
+principal e secundários. Os normalizadores comuns (`cadastral-normalizers.ts`) fazem o mesmo
+cadastro sair igual de qualquer um: código CNAE e IBGE com 7 dígitos e CEP com 8 (os zeros
+iniciais que o provedor perdeu ao mandar número voltam), UF em 2 letras, vazio vira `null`.
+
+`BrasilApiDataSource` (`brasil-api/`, slug `BRASIL_API`, prioridade 1 da cadeia) consulta
+`GET {base_url}/{cnpj}` pelo `RequestDataSourceUseCase` e converte a resposta:
+
+- **Lista de campos permitidos.** O schema só lê o que o perfil usa. O quadro societário
+  (`qsa`: nomes e CPFs de sócios e representantes), o e-mail, o telefone, o regime tributário
+  e o capital social nunca são lidos, então não há como chegarem ao BIOS (INL02).
+- **Resposta de outro CNPJ é rejeitada.** Se o CNPJ do corpo não é o consultado, o resultado é
+  `UNAVAILABLE`: gravar o cadastro de outra empresa sob o CNPJ pedido seria pior que não ter
+  dado. O mesmo vale para corpo sem razão social, situação, CNAE principal, município ou UF.
+- **Particularidades do provedor.** O item de CNAE secundário com código `0` significa "sem
+  secundários" e é descartado (como os repetidos e o igual ao principal). O tipo do
+  logradouro (`AVENIDA`) vem à parte do nome (`PAULISTA`) e é juntado a ele. A situação
+  vem pela descrição ou, na falta, pelo código da Receita. A descrição do CNAE pode vir
+  vazia: o IBGE a completa (RF06).
+
 Um adapter novo declara o `slug` da fonte (que o seeder cria), chama
 `RequestDataSourceUseCase.execute({ slug, segments, cnpj, context })` e passa a resposta por
 `toLookupResult` com o seu *parser*. Fontes que não se consultam item a item, como o dump
