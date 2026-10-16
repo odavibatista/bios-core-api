@@ -7,7 +7,7 @@ import {
 import type { CadastralRecord } from '@modules/data-sources/domain/dtos/providers/cadastral-record.dto.js';
 import type { SourceCallContext } from '@modules/data-sources/domain/dtos/providers/data-source-request.dto.js';
 import { RequestDataSourceUseCase } from '@modules/data-sources/infra/usecases/request/request-data-source.usecase.js';
-import { toCadastralRecord } from '../../domain/brasil-api-cnpj.mapper.js';
+import { toCadastralRecord } from '@modules/data-sources/domain/receita-open-data.mapper.js';
 
 /** Identificador da BrasilAPI no catálogo de fontes (`data_sources.slug`). */
 export const BRASIL_API_SLUG = 'BRASIL_API';

@@ -9,17 +9,23 @@ import {
   normalizeUf,
   normalizeZipcode,
   type RawValue,
-} from '@modules/data-sources/domain/cadastral-normalizers.js';
+} from './cadastral-normalizers.js';
 import type {
   CadastralCnae,
   CadastralRecord,
-} from '@modules/data-sources/domain/dtos/providers/cadastral-record.dto.js';
+} from './dtos/providers/cadastral-record.dto.js';
 
-/** Campo que a BrasilAPI manda como texto, número ou `null`, conforme o registro. */
+/** Campo que os provedores mandam como texto, número ou `null`, conforme o registro. */
 const field = z.union([z.string(), z.number()]).nullish();
 
 /**
- * Os campos da resposta da BrasilAPI (`GET /cnpj/v1/{cnpj}`) que o BIOS usa.
+ * Os campos da resposta que o BIOS usa, no formato dos dados abertos da Receita
+ * (`GET /{cnpj}` da BrasilAPI e do Minha Receita, que servem os mesmos dados no
+ * mesmo formato).
+ *
+ * Fica em `data-sources`, e não em um adapter, para que os dois provedores
+ * compartilhem a leitura sem que um módulo dependa do outro (NFPD02). Se um
+ * deles divergir do formato, o mapper dele passa a ser próprio.
  *
  * É uma **lista de campos permitidos**: o `z.object` descarta o que não está
  * aqui. A resposta traz também o quadro societário (`qsa`: nomes e CPFs de
@@ -27,7 +33,7 @@ const field = z.union([z.string(), z.number()]).nullish();
  * nada disso chega ao BIOS (INL02) — não porque o código o filtre depois, mas
  * porque nunca é lido.
  */
-const BrasilApiCnpjSchema = z.object({
+const ReceitaOpenDataSchema = z.object({
   cnpj: z.string(),
   razao_social: field,
   nome_fantasia: field,
@@ -56,7 +62,7 @@ function canonical(cnpj: string): string {
 }
 
 /**
- * Converte a resposta da BrasilAPI para o cadastro do BIOS, ou `null` quando
+ * Converte a resposta de um provedor do formato dos dados abertos da Receita para o cadastro do BIOS, ou `null` quando
  * ela não é utilizável.
  *
  * É `null` quando o corpo não tem o formato esperado, quando faltam os campos
@@ -65,14 +71,14 @@ function canonical(cnpj: string): string {
  * gravar o cadastro de outra empresa sob o CNPJ pedido seria pior do que não
  * ter dado.
  *
- * A BrasilAPI indica "sem CNAE secundário" com um item de código `0`; esses
+ * O provedor indica "sem CNAE secundário" com um item de código `0`; esses
  * itens, e os repetidos, são descartados.
  */
 export function toCadastralRecord(
   body: unknown,
   expectedCnpj: string,
 ): CadastralRecord | null {
-  const parsed = BrasilApiCnpjSchema.safeParse(body);
+  const parsed = ReceitaOpenDataSchema.safeParse(body);
 
   if (!parsed.success) return null;
 
