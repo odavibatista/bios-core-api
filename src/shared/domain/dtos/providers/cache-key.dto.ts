@@ -14,6 +14,13 @@ export const CacheNamespace = {
 
   /** Índice e confiança por ODS de uma empresa. */
   COMPANY_SCORES: 'company-scores',
+
+  /**
+   * Descrição oficial de uma subclasse da CNAE (IBGE). O identificador é o
+   * código CNAE, e não um CNPJ: a descrição é da taxonomia, igual para toda
+   * empresa.
+   */
+  CNAE_DESCRIPTION: 'cnae-description',
 } as const;
 
 export type CacheNamespace =
