@@ -632,6 +632,15 @@ telefones nunca são lidos) e rejeição de resposta de outro CNPJ. Diferenças 
   provedor (`Demais` → `DEMAIS`, `Microempresa` → `MICRO EMPRESA`, `EPP` → `EMPRESA DE PEQUENO
   PORTE`), para trocar de provedor não alterar o cadastro nem o hash de conteúdo.
 
+`MinhaReceitaDataSource` (`minha-receita/`, slug `MINHA_RECEITA`, prioridade 3, fallback
+final) fecha a cadeia. A BrasilAPI e o Minha Receita servem os mesmos dados da Receita **no
+mesmo formato**, então os dois leem a resposta pelo mapper comum
+`data-sources/domain/receita-open-data.mapper.ts`: assim nenhum módulo de adapter depende do
+outro (NFPD02), e, se um deles divergir do formato, o mapper dele passa a ser próprio. O
+OpenCNPJ tem formato próprio e mapper próprio. Um teste de consistência garante que a mesma
+empresa resulte no mesmo `CadastralRecord` em qualquer provedor (salvo o código IBGE, que o
+OpenCNPJ não informa).
+
 Um adapter novo declara o `slug` da fonte (que o seeder cria), chama
 `RequestDataSourceUseCase.execute({ slug, segments, cnpj, context })` e passa a resposta por
 `toLookupResult` com o seu *parser*. Fontes que não se consultam item a item, como o dump

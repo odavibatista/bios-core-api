@@ -6,7 +6,7 @@ import { CATALOG_SEEDERS } from '@app/database/catalog.seeders.js';
 import { BrasilApiDataSource } from '@modules/brasil-api/infra/providers/brasil-api.data-source.js';
 import { PrismaService } from '@shared/infra/database/prisma.service.js';
 import { inject } from 'vitest';
-import { brasilApiCnpjFactory } from '../factories/data-sources/brasil-api-cnpj.factory.js';
+import { receitaOpenDataCnpjFactory } from '../factories/data-sources/receita-open-data-cnpj.factory.js';
 import { createDatabaseTestingApp } from '../support/database-testing-app.js';
 import { resetSourceRateLimits } from '../support/source-rate-limit.js';
 
@@ -62,7 +62,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       requested.length = 0;
       handler = () => ({
         status: 200,
-        body: JSON.stringify(brasilApiCnpjFactory.build()),
+        body: JSON.stringify(receitaOpenDataCnpjFactory.build()),
       });
       await prisma.reset(['data_sources', 'data_source_request_logs']);
       await prisma.seed(CATALOG_SEEDERS);
@@ -95,7 +95,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       handler = () => ({
         status: 200,
         body: JSON.stringify(
-          brasilApiCnpjFactory.build({
+          receitaOpenDataCnpjFactory.build({
             razao_social: 'ACME SERVICOS LTDA',
             nome_fantasia: 'ACME',
           }),
@@ -203,7 +203,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       handler = () => ({
         status: 200,
         body: JSON.stringify(
-          brasilApiCnpjFactory.build({ cnpj: '00000000000191' }),
+          receitaOpenDataCnpjFactory.build({ cnpj: '00000000000191' }),
         ),
       });
 
