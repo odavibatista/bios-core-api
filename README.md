@@ -666,6 +666,27 @@ cadastro **e o provedor que o respondeu** (`{ record, sourceSlug }`): é o `sour
 - **Defeito de um adapter não derruba a cadeia.** Uma exceção inesperada é registrada como erro
   e tratada como indisponibilidade daquele provedor.
 
+### Descrição dos CNAEs: IBGE
+
+`IbgeCnaeDataSource` (`ibge-cnae/`, slug `IBGE_CNAE`, papel `CNAE_TAXONOMY`, fora da cadeia
+cadastral) devolve a descrição oficial de uma subclasse da CNAE (RF06):
+`GET {base_url}/subclasses/{código de 7 dígitos}` → `CnaeDescription { code, description }`.
+Os provedores do cadastro informam o código e, às vezes, uma descrição própria (o OpenCNPJ pode
+não trazer nenhuma); o IBGE é a fonte da taxonomia.
+
+- **Só a subclasse pedida vale.** A resposta pode vir como objeto ou como lista, e o adapter só
+  aceita a subclasse de **código igual ao consultado**: de outro modo, a descrição de uma
+  atividade seria gravada na empresa errada. Resposta bem formada sem o código (lista vazia, 404)
+  é `NOT_FOUND`: o código não existe na taxonomia. Já resposta fora do formato, ou subclasse sem
+  descrição, é `UNAVAILABLE`.
+- **Grafia do IBGE.** A descrição vem em maiúsculas, como o IBGE a publica, e não é reescrita.
+  A hierarquia (classe, grupo, divisão, seção), as atividades e as notas explicativas são
+  descartadas.
+- **Código que não é CNAE** (`abc`, `0`, 8 dígitos) é `NOT_FOUND`, sem chamar o IBGE.
+- **Quem consome deve guardar a descrição.** Ela quase não muda: a janela do catálogo é de 30
+  dias (`cache_ttl_seconds`). O adapter não guarda nada; a gravação no perfil, com a descrição
+  do IBGE no lugar da do provedor, é da issue de persistência do perfil.
+
 Um adapter novo declara o `slug` da fonte (que o seeder cria), chama
 `RequestDataSourceUseCase.execute({ slug, segments, cnpj, context })` e passa a resposta por
 `toLookupResult` com o seu *parser*. Fontes que não se consultam item a item, como o dump
