@@ -6,8 +6,7 @@ import { faker } from '@test/support/faker.js';
 import { PrismaDataSourceRepository } from './prisma-data-source.repository.js';
 
 describe('PrismaDataSourceRepository', () => {
-  const findUnique =
-    vi.fn<() => Promise<{ cache_ttl_seconds: number | null } | null>>();
+  const findUnique = vi.fn();
   let repository: PrismaDataSourceRepository;
 
   beforeEach(async () => {
@@ -50,5 +49,71 @@ describe('PrismaDataSourceRepository', () => {
     await expect(
       repository.findCacheTtlSeconds(faker.string.alpha(8)),
     ).resolves.toBeNull();
+  });
+
+  describe('findRequestConfig', () => {
+    it('busca só o que as chamadas respeitam, pelo slug', async () => {
+      findUnique.mockResolvedValue(null);
+
+      await repository.findRequestConfig('BRASIL_API');
+
+      expect(findUnique).toHaveBeenCalledWith({
+        where: { slug: 'BRASIL_API' },
+        select: {
+          id_data_source: true,
+          slug: true,
+          base_url: true,
+          is_enabled: true,
+          rate_limit_per_minute: true,
+          request_timeout_ms: true,
+        },
+      });
+    });
+
+    it('converte o documento para a configuração do domínio', async () => {
+      const id = faker.database.mongodbObjectId();
+      findUnique.mockResolvedValue({
+        id_data_source: id,
+        slug: 'CGU_CEIS',
+        base_url: 'https://api.portaldatransparencia.gov.br/api-de-dados/ceis',
+        is_enabled: true,
+        rate_limit_per_minute: 90,
+        request_timeout_ms: 5_000,
+      });
+
+      await expect(repository.findRequestConfig('CGU_CEIS')).resolves.toEqual({
+        id,
+        slug: 'CGU_CEIS',
+        baseUrl: 'https://api.portaldatransparencia.gov.br/api-de-dados/ceis',
+        isEnabled: true,
+        rateLimitPerMinute: 90,
+        requestTimeoutMs: 5_000,
+      });
+    });
+
+    it('mantém null nos limites que a fonte não declara', async () => {
+      findUnique.mockResolvedValue({
+        id_data_source: faker.database.mongodbObjectId(),
+        slug: 'IBAMA',
+        base_url: 'https://dadosabertos.ibama.gov.br',
+        is_enabled: false,
+        rate_limit_per_minute: null,
+        request_timeout_ms: null,
+      });
+
+      await expect(
+        repository.findRequestConfig('IBAMA'),
+      ).resolves.toMatchObject({
+        isEnabled: false,
+        rateLimitPerMinute: null,
+        requestTimeoutMs: null,
+      });
+    });
+
+    it('devolve null quando a fonte não existe', async () => {
+      findUnique.mockResolvedValue(null);
+
+      await expect(repository.findRequestConfig('NADA')).resolves.toBeNull();
+    });
   });
 });

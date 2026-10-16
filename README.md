@@ -559,6 +559,45 @@ adiada para a próxima inicialização. Desative com `DATA_RETENTION_SYNC_ON_BOO
 regras ficam em `src/shared/config/data-retention.config.ts`, e um teste garante que cada
 índice citado ali exista no schema Prisma correspondente.
 
+## Fontes externas (adapters)
+
+Cada fonte externa fica atrás de um adapter próprio, que implementa o contrato
+`DataSourceInterface` (`data-sources/domain/data-source.interface.ts`, NFPD02). O adapter diz
+**o que** consultar e como ler a resposta; o que é comum a todas as fontes está no
+`RequestDataSourceUseCase`, exportado pelo `DataSourcesModule`.
+
+- **Tudo vem do catálogo** (`data_sources`), lido a cada chamada: URL base, `is_enabled`,
+  `rate_limit_per_minute` e `request_timeout_ms`. Desabilitar uma fonte ou mudar seu limite
+  vale na chamada seguinte, sem novo deploy.
+- **Limite por minuto (NFPD01).** Janela **móvel** de 1 minuto em Redis, atômica (script Lua) e
+  compartilhada por todas as instâncias e workers. Janela fixa permitiria um pico no fim de um
+  minuto somado a outro no começo do seguinte, o dobro do que a fonte aceita. Atingido o teto,
+  a fonte não é chamada (`RATE_LIMITED`). **Sem o contador (Redis fora), também não é
+  chamada**: ao contrário do limite da API, que libera a requisição, aqui o custo de errar é
+  o bloqueio do BIOS pela fonte.
+- **Tempo máximo.** `request_timeout_ms` da fonte (padrão de 10 s) vale para a chamada
+  inteira, corpo incluído; esgotado, `TIMEOUT`.
+- **Cliente HTTP.** `fetch` do Node, sem redirecionamentos (o endereço vem do catálogo, e
+  seguir um `Location` levaria a chamada para onde a fonte mandasse) e com corpo limitado a
+  5 MiB, lido em fluxo. Os segmentos do caminho são codificados na montagem da URL: um
+  valor como `../admin` não escapa do caminho da fonte.
+- **Log de requisições.** Cada chamada vira uma linha em `data_source_request_logs`: fonte,
+  CNPJ, origem (`trigger`), resultado, status HTTP e duração. As recusadas pelo limite entram
+  também, sem status. Cabeçalhos (a chave de API da fonte, por exemplo) nunca são gravados.
+  Falhar ao gravar o log não perde a chamada.
+- **Falhas são resposta, não exceção.** O caso de uso devolve `SUCCESS`, `NOT_FOUND`
+  (HTTP 404, uma resposta válida), `FAILURE`, `TIMEOUT`, `RATE_LIMITED` ou `DISABLED`, e quem
+  chama (a cadeia de fallback, o job) decide o que fazer. A exceção é a fonte inexistente no
+  catálogo, que é erro de programação (`UnknownDataSourceError`).
+- **`toLookupResult`.** Converte a resposta para o resultado do adapter (`FOUND`, `NOT_FOUND`
+  ou `UNAVAILABLE`, com o motivo). Corpo 2xx fora do formato esperado vira `UNAVAILABLE`,
+  nunca dado.
+
+Um adapter novo declara o `slug` da fonte (que o seeder cria), chama
+`RequestDataSourceUseCase.execute({ slug, segments, cnpj, context })` e passa a resposta por
+`toLookupResult` com o seu *parser*. Fontes que não se consultam item a item, como o dump
+diário do IBAMA, definem o próprio fluxo de ingestão.
+
 ## Consulta de empresa por CNPJ
 
 `GET /companies/:cnpj` devolve o perfil cadastral (UC06, RF03, RF05, RF06): razão social, nome
