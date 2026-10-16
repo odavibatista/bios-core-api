@@ -25,6 +25,41 @@ export function cleanUpperText(value: RawValue): string | null {
   return cleanText(value)?.toUpperCase() ?? null;
 }
 
+/** Portes da Receita Federal, na grafia que o BIOS adota. */
+const COMPANY_SIZE_BY_LETTERS: Readonly<Record<string, string | null>> = {
+  MICROEMPRESA: 'MICRO EMPRESA',
+  ME: 'MICRO EMPRESA',
+  EMPRESADEPEQUENOPORTE: 'EMPRESA DE PEQUENO PORTE',
+  PEQUENOPORTE: 'EMPRESA DE PEQUENO PORTE',
+  EPP: 'EMPRESA DE PEQUENO PORTE',
+  DEMAIS: 'DEMAIS',
+  NAOINFORMADO: null,
+};
+
+/**
+ * Porte da empresa na grafia única do BIOS (`MICRO EMPRESA`,
+ * `EMPRESA DE PEQUENO PORTE`, `DEMAIS`), ou `null` quando não informado.
+ *
+ * Os provedores escrevem o mesmo porte de jeitos diferentes (`Demais`,
+ * `MICROEMPRESA`, `Micro Empresa`); sem unificar, trocar de provedor mudaria o
+ * cadastro — e o hash de conteúdo que detecta mudança cadastral — sem que a
+ * empresa tivesse mudado. Um porte desconhecido é mantido, em maiúsculas e sem
+ * acento, em vez de descartado.
+ */
+export function normalizeCompanySize(value: RawValue): string | null {
+  const text = cleanUpperText(value)
+    ?.normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '');
+
+  if (!text) return null;
+
+  const letters = text.replace(/[^A-Z]/g, '');
+
+  return letters in COMPANY_SIZE_BY_LETTERS
+    ? COMPANY_SIZE_BY_LETTERS[letters]
+    : text;
+}
+
 /**
  * Número de `length` dígitos com zeros à esquerda, ou `null`.
  *
