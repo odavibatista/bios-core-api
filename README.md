@@ -641,6 +641,31 @@ OpenCNPJ tem formato próprio e mapper próprio. Um teste de consistência garan
 empresa resulte no mesmo `CadastralRecord` em qualquer provedor (salvo o código IBGE, que o
 OpenCNPJ não informa).
 
+### Cadeia de fallback cadastral
+
+`ReceitaDataSource` (`receita/`) consulta os três provedores em sequência e devolve o
+cadastro **e o provedor que o respondeu** (`{ record, sourceSlug }`): é o `sourceSlug` que
+`company_profile.cadastral_source_id` guarda, e é do catálogo dele que vem a janela do cache.
+
+- **A cadeia é do catálogo.** A ordem é `fallback_priority` das fontes `CADASTRAL` habilitadas
+  em `data_sources`: reordenar ou desabilitar um provedor é uma alteração no banco, valendo na
+  consulta seguinte. O código só conhece os adapters registrados (`CADASTRAL_DATA_SOURCES`).
+  Slug do catálogo sem adapter é registrado como erro e ignorado; se o catálogo não puder ser
+  lido, vale a ordem de registro.
+- **Um provedor por vez.** O seguinte só é chamado quando o anterior não serve, o que poupa o
+  limite de cada fonte (NFPD01). Serve para ir ao próximo: indisponibilidade (erro, tempo
+  esgotado, limite atingido, resposta fora do formato ou de outro CNPJ) **e também "não
+  encontrado"**, porque os espelhos da Receita se atualizam em ritmos diferentes e uma empresa
+  recém-aberta pode constar em um e ainda não em outro.
+- **"Não encontrado" só quando todos dizem isso.** Se algum provedor consultado não pôde
+  responder, o resultado é `UNAVAILABLE` (503 para o usuário), nunca "a empresa não existe":
+  seria uma informação falsa. Provedores desabilitados não contam; com todos desabilitados, o
+  motivo é `DISABLED`.
+- **O histórico vem na mensagem** (`BRASIL_API: TIMEOUT; OPEN_CNPJ: FAILURE; ...`), e cada
+  tentativa está em `data_source_request_logs`, por provedor.
+- **Defeito de um adapter não derruba a cadeia.** Uma exceção inesperada é registrada como erro
+  e tratada como indisponibilidade daquele provedor.
+
 Um adapter novo declara o `slug` da fonte (que o seeder cria), chama
 `RequestDataSourceUseCase.execute({ slug, segments, cnpj, context })` e passa a resposta por
 `toLookupResult` com o seu *parser*. Fontes que não se consultam item a item, como o dump
