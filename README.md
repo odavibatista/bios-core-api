@@ -702,13 +702,15 @@ Exige sessão. Dados de sócios e administradores não existem no perfil (INL02)
   (emitido pela Receita desde julho de 2026) e é normalizado (sem pontuação, em maiúsculas)
   antes de virar chave de cache, de job e de consulta. Inválido: `422 INVALID_CNPJ`. A barra
   da máscara deve ir codificada (`%2F`) ou omitida, pois separa segmentos da URL.
-- **O core não consulta os provedores.** BrasilAPI → OpenCNPJ → Minha Receita (+ IBGE) são
-  da responsabilidade do **serviço de ingestão do CNPJ**, que conversa com o core só por fila
-  (`14-Projeto-e-Arquitetura.md`, seção 2). Resolução, do mais barato ao mais caro:
+- **A consulta não fala com os provedores: pede à fila.** Resolução, do mais barato ao mais
+  caro:
   1. **cache** (Redis, namespace `company-profile`), resposta imediata (NFDE02);
   2. **banco**: cadastro guardado dentro da janela de `data_sources.cache_ttl_seconds` da
      fonte que o respondeu, servido sem consulta externa e devolvido ao cache (NFDE01);
-  3. **fila**: publica o job e espera, com prazo (`QUEUE_WAIT_TIMEOUT_MS`).
+  3. **fila**: publica o job e espera, com prazo (`QUEUE_WAIT_TIMEOUT_MS`). Quem atende é o
+     `CompanyProfileProcessor`, hospedado no core (descrito abaixo). Os dois lados conversam
+     só pela fila (`14-Projeto-e-Arquitetura.md`, seção 2), o que permite movê-lo para um
+     processo próprio sem tocar na consulta.
 - **Degradação graciosa (NFCO01).** Com os provedores indisponíveis (job falho, prazo
   estourado, Redis fora, resultado fora do contrato), o cadastro guardado é servido mesmo
   vencido, com `refreshed_at` mostrando a idade, e **não** volta ao cache. Sem cadastro
@@ -720,22 +722,51 @@ Exige sessão. Dados de sócios e administradores não existem no perfil (INL02)
   ignora a publicação de um `jobId` que já existe e os jobs falhos são mantidos: com um id
   fixo por CNPJ, uma única falha o bloquearia para sempre.
 
-### Contrato com o serviço de ingestão do CNPJ
+### Consumidor da fila e contrato do job
 
-O serviço consome a fila `company-profile` (`QueueName.COMPANY_PROFILE`) e, por job:
+`CompanyProfileProcessor` (`companies/infra/queue/`) consome a fila `company-profile`
+(`QueueName.COMPANY_PROFILE`), com até 5 CNPJs ao mesmo tempo. Por job:
 
 | Item | Valor |
 | --- | --- |
 | Nome do job | `fetch-company-profile` |
 | Payload | `{ "cnpj": "<14 caracteres canônicos>" }` |
-| Efeito | Grava/atualiza `company_profile` (`cadastral_source_id` aponta a fonte que respondeu; `refreshed_at` = agora) |
+| Efeito | Percorre a cadeia de provedores, completa os CNAEs com a descrição do IBGE, mascara CPF e grava `company_profile` |
 | Retorno | `{ "outcome": "FOUND" }`, `{ "outcome": "NOT_FOUND" }` ou `{ "outcome": "SOURCES_UNAVAILABLE" }` |
-| Falha | Lançar o erro; a política de repetição é da fila (3 tentativas, backoff exponencial) |
+| Falha | Erro nosso (ex.: banco fora): propaga, e a fila repete (3 tentativas, backoff exponencial) |
+| Job malformado | Nome desconhecido ou CNPJ que não é canônico e válido: `UnrecoverableError`, **sem repetição** |
 
-O core valida o retorno contra o schema (`CompanyProfileJobResultSchema`): resposta fora do
-contrato é tratada como fonte indisponível. Fica fora desta entrega: o perfil ambiental
-(UC07: evidências e índice por ODS), a busca por nome (UC06 fluxo 1.1, junto da pesquisa do
-UC08) e o próprio serviço de ingestão.
+"Provedores indisponíveis" é **resultado**, e não erro: quem espera é um usuário, e repetir por
+trás dele não ajuda. Quem pede valida o retorno contra o schema
+(`CompanyProfileJobResultSchema`): resposta fora do contrato é tratada como fonte indisponível.
+
+O `RefreshCompanyProfileUseCase` faz, nesta ordem:
+
+1. **Cadeia de provedores** (`ReceitaDataSource`): cadastro e provedor que respondeu.
+2. **Descrição oficial dos CNAEs** (`ResolveCnaeDescriptionsUseCase`, IBGE): substitui a do
+   provedor, para a mesma atividade ter o mesmo texto qualquer que seja a fonte. As descrições
+   ficam em cache (namespace `cnae-description`, janela de `IBGE_CNAE`, 30 dias no seed), então
+   uma empresa nova com CNAEs conhecidos não chama o IBGE. Ao primeiro "indisponível", a
+   rodada para de consultar os demais códigos; sem a descrição oficial, vale a do provedor, e o
+   cadastro é gravado do mesmo jeito.
+3. **CPF mascarado (INL02).** A Receita grava a razão social de empresário individual e de MEI
+   como `NOME 12345678901`. Toda sequência de 11 dígitos (com ou sem a pontuação do CPF) vira
+   `***` na razão social e no nome fantasia. O nome do empresário é público por lei; o CPF não
+   precisa ser. Só pessoa jurídica chega ao banco: o quadro societário, o e-mail e os telefones
+   nunca são lidos pelos adapters.
+4. **Hash do conteúdo.** `content_hash` é o SHA-256 de nome, situação, porte, endereço e
+   atividades (CNAEs em ordem de código). Ficam **fora** dele o provedor, o instante e o código
+   IBGE do município (só alguns provedores o informam), então trocar de provedor não muda o hash.
+   Se o conteúdo mudou, o hash que estava gravado vira `previous_content_hash`; reatualizar um
+   cadastro igual preserva o histórico da última mudança.
+5. **Código IBGE do município.** O OpenCNPJ não o informa; se o município é o mesmo do perfil
+   já gravado, o código conhecido é mantido.
+6. **Grava e descarta o cache** do perfil, para a próxima leitura trazer o dado novo. Um campo
+   que deixou de existir na fonte (o nome fantasia, por exemplo) é gravado como `null`, e não
+   omitido, para não sobrar o valor antigo.
+
+Fica fora desta entrega: o perfil ambiental (UC07: evidências e índice por ODS) e a busca por
+nome (UC06 fluxo 1.1, junto da pesquisa do UC08).
 
 ## Chaves de API
 

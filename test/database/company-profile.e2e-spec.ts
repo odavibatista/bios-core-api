@@ -9,6 +9,7 @@ import { Queue, Worker } from 'bullmq';
 import request from 'supertest';
 import { inject } from 'vitest';
 import { CompanyProfileResponseSchema } from '@modules/companies/domain/dtos/requests/company-profile.dto.js';
+import { CompanyProfileProcessor } from '@modules/companies/infra/queue/company-profile.processor.js';
 import { createDatabaseTestingApp } from '../support/database-testing-app.js';
 import { resetCache } from '../support/cache.js';
 import { faker } from '../support/faker.js';
@@ -30,9 +31,10 @@ const SEVEN_DAYS_MS = 7 * 86_400_000;
 
 /**
  * Consulta de empresa por CNPJ ponta a ponta (UC06): HTTP, guard, cache em
- * Redis, MongoDB e a fila BullMQ. O serviço de ingestão do CNPJ — que vive fora
- * do core — é simulado por um *worker* real na fila `company-profile`, que
- * grava `company_profile` e devolve o resultado do contrato.
+ * Redis, MongoDB e a fila BullMQ. O consumidor da fila é simulado por um
+ * *worker* real na fila `company-profile`, que grava `company_profile` e devolve
+ * o resultado do contrato — o que permite provocar cada resposta e até
+ * respostas fora do contrato.
  */
 describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
   'Consulta de empresa por CNPJ (e2e)',
@@ -94,7 +96,12 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
     }
 
     beforeAll(async () => {
-      ({ app, prisma } = await createDatabaseTestingApp());
+      // O consumidor real da fila fica de fora: aqui o consumidor é o *worker*
+      // simulado abaixo, que permite provocar cada resposta do contrato. O
+      // consumidor real tem a suíte própria `company-profile-ingestion`.
+      ({ app, prisma } = await createDatabaseTestingApp((builder) => {
+        builder.overrideProvider(CompanyProfileProcessor).useValue({});
+      }));
       cache = app.get(CacheProvider);
       await prisma.seed(CATALOG_SEEDERS);
       sourceId = (

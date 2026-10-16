@@ -41,8 +41,8 @@ type RefreshOutcome = 'FOUND' | 'NOT_FOUND' | 'UNAVAILABLE';
  *  1. **Cache** (Redis): resposta imediata (NFDE02);
  *  2. **Banco**: se o cadastro guardado ainda está dentro da janela de validade
  *     da fonte, é servido e volta ao cache — sem chamada externa (NFDE01);
- *  3. **Fila**: o core não fala com os provedores. Publica o job na fila
- *     `company-profile` e espera, com prazo, o serviço de ingestão percorrer a
+ *  3. **Fila**: a consulta não fala com os provedores. Publica o job na fila
+ *     `company-profile` e espera, com prazo, o consumidor (`CompanyProfileProcessor`) percorrer a
  *     cadeia BrasilAPI → OpenCNPJ → Minha Receita e gravar `company_profile`.
  *
  * **Degradação graciosa (NFCO01).** Se os provedores estão indisponíveis — job
@@ -111,7 +111,7 @@ export class GetCompanyProfileUseCase extends UseCase<
 
       // O serviço disse que gravou e não há registro: contrato violado.
       this.logger.error(
-        `O serviço de ingestão informou FOUND para ${cnpj}, mas company_profile não tem o registro.`,
+        `O consumidor da fila informou FOUND para ${cnpj}, mas company_profile não tem o registro.`,
       );
     }
 
@@ -160,7 +160,7 @@ export class GetCompanyProfileUseCase extends UseCase<
   }
 
   /**
-   * Pede ao serviço de ingestão que atualize o cadastro e espera o resultado.
+   * Pede ao consumidor da fila que atualize o cadastro e espera o resultado.
    *
    * Todo desfecho que não seja resposta clara dos provedores — prazo, falha do
    * job, Redis fora do ar, resultado fora do contrato — vira `UNAVAILABLE`.
