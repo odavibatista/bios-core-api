@@ -8,6 +8,7 @@ import { PrismaDataSourceRepository } from '../db/repositories/prisma-data-sourc
 import { FetchSourceHttpClient } from '../providers/fetch-source-http-client.provider.js';
 import { RedisSourceRateLimiter } from '../providers/redis-source-rate-limiter.provider.js';
 import { ResolveSourceCacheTtlUseCase } from '../usecases/cache/resolve-source-cache-ttl.usecase.js';
+import { ListCadastralChainUseCase } from '../usecases/chain/list-cadastral-chain.usecase.js';
 import { RequestDataSourceUseCase } from '../usecases/request/request-data-source.usecase.js';
 
 /**
@@ -20,7 +21,9 @@ import { RequestDataSourceUseCase } from '../usecases/request/request-data-sourc
  *  - `RequestDataSourceUseCase`: a chamada à fonte com limite por minuto,
  *    tempo máximo e log de requisições, tudo vindo do catálogo;
  *  - `ResolveSourceCacheTtlUseCase`: por quanto tempo a consulta a cada fonte
- *    permanece válida (NFDE01).
+ *    permanece válida (NFDE01);
+ *  - `ListCadastralChainUseCase`: a ordem da cadeia de fallback cadastral, que
+ *    é do catálogo.
  *
  * O contrato que os adapters implementam é `DataSourceInterface`
  * (`../../domain/data-source.interface.ts`).
@@ -41,7 +44,12 @@ import { RequestDataSourceUseCase } from '../usecases/request/request-data-sourc
     /* Casos de uso */
     ResolveSourceCacheTtlUseCase,
     RequestDataSourceUseCase,
+    ListCadastralChainUseCase,
   ],
-  exports: [ResolveSourceCacheTtlUseCase, RequestDataSourceUseCase],
+  exports: [
+    ResolveSourceCacheTtlUseCase,
+    RequestDataSourceUseCase,
+    ListCadastralChainUseCase,
+  ],
 })
 export class DataSourcesModule {}

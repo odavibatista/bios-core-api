@@ -21,4 +21,11 @@ export abstract class DataSourceRepository {
   abstract findRequestConfig(
     slug: string,
   ): Promise<DataSourceRequestConfig | null>;
+
+  /**
+   * Slugs das fontes cadastrais habilitadas, na ordem da cadeia de fallback
+   * (`fallback_priority` crescente). Fontes desabilitadas ou sem prioridade
+   * definida ficam de fora.
+   */
+  abstract findCadastralChain(): Promise<string[]>;
 }
