@@ -112,6 +112,12 @@ jobs:
       - name: Infraestrutura de teste (MongoDB em replica set e Redis)
         run: docker compose up --detach --wait mongodb redis
 
+      # Se um contêiner sair com erro, o `--wait` só informa o código de saída;
+      # o motivo está no log do próprio serviço.
+      - name: Logs da infraestrutura (somente em falha)
+        if: failure()
+        run: docker compose logs --no-color --tail=200 mongodb redis
+
       - name: Testes e2e (pipeline HTTP e banco real)
         run: npm run test:e2e
 
