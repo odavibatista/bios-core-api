@@ -5,6 +5,9 @@
 ///  - os índices de aderência por ODS ficam em `company_ods_scores`;
 ///  - `content_hash` e `previous_content_hash` formam o snapshot leve: detectam mudança
 ///    cadastral sem motor de diff;
+///  - a busca por nome (UC06, fluxo 1.1) casa início de palavra por expressão regular, o que
+///    um índice de texto do MongoDB não atende (ele só casa palavras inteiras); a base são as
+///    empresas já consultadas, então a varredura é aceitável;
 ///  - mapeado para a coleção `company_profile`.
 model CompanyProfile {
   /// Identificador do perfil.
@@ -57,7 +60,6 @@ model CompanyProfile {
 
   @@index([address.uf, address.city], map: "idx_company_profile_uf_city")
   @@index([main_cnae.code], map: "idx_company_profile_main_cnae")
-  @@fulltext([legal_name, trade_name], map: "idx_company_profile_name_text")
   @@map("company_profile")
 }
 
