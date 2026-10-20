@@ -1,5 +1,6 @@
 import type { CadastralRecord } from '@modules/data-sources/domain/dtos/providers/cadastral-record.dto.js';
 import type { CompanyProfileResponse } from '../requests/company-profile.dto.js';
+import type { CompanySearchItem } from '../requests/search-companies.dto.js';
 
 /** Perfil cadastral guardado, com o que a política de cache precisa saber dele. */
 export interface StoredCompanyProfile {
@@ -31,6 +32,24 @@ export interface SaveCompanyProfileInput {
   refreshedAt: Date;
 }
 
+/** Busca por nome já traduzida: palavras normalizadas (`company-name-terms`) e janela. */
+export interface SearchByNameInput {
+  /** Palavras normalizadas; a empresa precisa casar com todas. */
+  terms: string[];
+
+  /** Posição inicial da janela (itens a pular). */
+  skip: number;
+
+  /** Tamanho da janela. */
+  take: number;
+}
+
+/** Janela de resultados da busca por nome e o total que atende à consulta. */
+export interface SearchByNameResult {
+  items: CompanySearchItem[];
+  total: number;
+}
+
 /**
  * Contrato do perfil cadastral guardado (RF05).
  *
@@ -42,6 +61,15 @@ export interface SaveCompanyProfileInput {
 export abstract class CompanyProfileRepository {
   /** Localiza o perfil pelo CNPJ canônico. */
   abstract findByCnpj(cnpj: string): Promise<StoredCompanyProfile | null>;
+
+  /**
+   * Procura entre os perfis guardados as empresas cuja razão social ou nome
+   * fantasia tem uma palavra começando por cada um dos termos (UC06, fluxo 1.1).
+   *
+   * Os mais próximos da frase digitada vêm primeiro; o desempate é a razão
+   * social e o CNPJ, para que a paginação seja estável.
+   */
+  abstract searchByName(input: SearchByNameInput): Promise<SearchByNameResult>;
 
   /**
    * Grava o cadastro, criando o perfil ou atualizando o existente (chave: CNPJ).

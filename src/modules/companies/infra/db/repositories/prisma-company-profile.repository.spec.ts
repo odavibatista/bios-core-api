@@ -3,11 +3,13 @@ import { PrismaService } from '@shared/infra/database/prisma.service.js';
 import { buildCnpj } from '@test/factories/companies/company-profile.factory.js';
 import { faker } from '@test/support/faker.js';
 import { CompanyProfileResponseSchema } from '../../../domain/dtos/requests/company-profile.dto.js';
+import { buildNameSearchPipeline } from './company-name-search.pipeline.js';
 import { PrismaCompanyProfileRepository } from './prisma-company-profile.repository.js';
 
 describe('PrismaCompanyProfileRepository', () => {
   const findUnique = vi.fn();
   const upsert = vi.fn();
+  const aggregateRaw = vi.fn();
   const findSourceOrThrow = vi.fn();
   let repository: PrismaCompanyProfileRepository;
 
@@ -58,7 +60,7 @@ describe('PrismaCompanyProfileRepository', () => {
         {
           provide: PrismaService,
           useValue: {
-            companyProfile: { findUnique, upsert },
+            companyProfile: { findUnique, upsert, aggregateRaw },
             dataSource: { findUniqueOrThrow: findSourceOrThrow },
           },
         },
@@ -172,6 +174,92 @@ describe('PrismaCompanyProfileRepository', () => {
     const stored = await repository.findByCnpj(buildCnpj());
 
     expect(stored?.previousContentHash).toBeNull();
+  });
+
+  describe('searchByName', () => {
+    const item = {
+      cnpj: '11222333000181',
+      legal_name: 'ACME LTDA',
+      trade_name: null,
+      registration_status: 'ATIVA',
+      city: 'SAO PAULO',
+      uf: 'SP',
+      main_cnae: { code: '6201501', description: 'DESENVOLVIMENTO' },
+    };
+
+    it('monta o pipeline com as palavras e a janela pedidas', async () => {
+      aggregateRaw.mockResolvedValue([{ items: [], total: [] }]);
+
+      await repository.searchByName({
+        terms: ['ACME', 'LTDA'],
+        skip: 20,
+        take: 10,
+      });
+
+      expect(aggregateRaw).toHaveBeenCalledWith({
+        pipeline: buildNameSearchPipeline(['ACME', 'LTDA'], 20, 10),
+      });
+    });
+
+    it('devolve a janela e o total do $facet', async () => {
+      aggregateRaw.mockResolvedValue([
+        { items: [item], total: [{ count: 31 }] },
+      ]);
+
+      await expect(
+        repository.searchByName({ terms: ['ACME'], skip: 0, take: 20 }),
+      ).resolves.toEqual({ items: [item], total: 31 });
+    });
+
+    it('sem correspondência o $facet traz a contagem vazia: total 0', async () => {
+      aggregateRaw.mockResolvedValue([{ items: [], total: [] }]);
+
+      await expect(
+        repository.searchByName({ terms: ['NADA'], skip: 0, take: 20 }),
+      ).resolves.toEqual({ items: [], total: 0 });
+    });
+
+    it('resposta sem o $facet (coleção vazia) vale como nada encontrado', async () => {
+      aggregateRaw.mockResolvedValue([]);
+
+      await expect(
+        repository.searchByName({ terms: ['NADA'], skip: 0, take: 20 }),
+      ).resolves.toEqual({ items: [], total: 0 });
+    });
+
+    it('só devolve os campos do resumo, mesmo que o banco traga mais', async () => {
+      aggregateRaw.mockResolvedValue([
+        {
+          items: [{ ...item, content_hash: 'segredo', qsa: ['socio'] }],
+          total: [{ count: 1 }],
+        },
+      ]);
+
+      const { items } = await repository.searchByName({
+        terms: ['ACME'],
+        skip: 0,
+        take: 20,
+      });
+
+      expect(items).toEqual([item]);
+      expect(JSON.stringify(items)).not.toContain('segredo');
+    });
+
+    it('resposta fora do formato é recusada em vez de repassada', async () => {
+      aggregateRaw.mockResolvedValue([{ items: [{ cnpj: 1 }], total: [] }]);
+
+      await expect(
+        repository.searchByName({ terms: ['ACME'], skip: 0, take: 20 }),
+      ).rejects.toThrow();
+    });
+
+    it('propaga a falha do banco', async () => {
+      aggregateRaw.mockRejectedValue(new Error('banco fora'));
+
+      await expect(
+        repository.searchByName({ terms: ['ACME'], skip: 0, take: 20 }),
+      ).rejects.toThrow('banco fora');
+    });
   });
 
   describe('save', () => {

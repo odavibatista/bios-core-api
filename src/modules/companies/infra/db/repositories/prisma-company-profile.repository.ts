@@ -2,11 +2,22 @@ import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaRepository } from '@shared/infra/database/prisma.repository.js';
 import { PrismaService } from '@shared/infra/database/prisma.service.js';
+import { z } from 'zod';
 import {
   CompanyProfileRepository,
   type SaveCompanyProfileInput,
+  type SearchByNameInput,
+  type SearchByNameResult,
   type StoredCompanyProfile,
 } from '../../../domain/dtos/repositories/company-profile.repository.js';
+import { CompanySearchItemSchema } from '../../../domain/dtos/requests/search-companies.dto.js';
+import { buildNameSearchPipeline } from './company-name-search.pipeline.js';
+
+/** Resposta do `$facet` da busca por nome: a janela e a contagem total. */
+const SearchFacetsSchema = z.object({
+  items: z.array(CompanySearchItemSchema),
+  total: z.array(z.object({ count: z.number().int() })),
+});
 
 /**
  * Perfil cadastral das empresas no MongoDB.
@@ -63,6 +74,23 @@ export class PrismaCompanyProfileRepository
         ),
         refreshed_at: company.refreshed_at.toISOString(),
       },
+    };
+  }
+
+  async searchByName({
+    terms,
+    skip,
+    take,
+  }: SearchByNameInput): Promise<SearchByNameResult> {
+    // O Prisma não expressa expressão regular com `$facet`; o pipeline vai cru.
+    const raw = await this.prisma.companyProfile.aggregateRaw({
+      pipeline: buildNameSearchPipeline(terms, skip, take),
+    });
+    const [facets] = z.array(SearchFacetsSchema).parse(raw);
+
+    return {
+      items: facets?.items ?? [],
+      total: facets?.total[0]?.count ?? 0,
     };
   }
 
