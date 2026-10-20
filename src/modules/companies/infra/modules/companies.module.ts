@@ -11,6 +11,7 @@ import { CompanyProfileProcessor } from '../queue/company-profile.processor.js';
 import { GetCompanyProfileUseCase } from '../usecases/get-company-profile.usecase.js';
 import { RefreshCompanyProfileUseCase } from '../usecases/refresh-company-profile.usecase.js';
 import { ResolveCnaeDescriptionsUseCase } from '../usecases/resolve-cnae-descriptions.usecase.js';
+import { SearchCompaniesByNameUseCase } from '../usecases/search-companies-by-name.usecase.js';
 
 /**
  * Perfil cadastral de pessoas jurídicas: consulta por CNPJ e por nome,
@@ -41,6 +42,7 @@ import { ResolveCnaeDescriptionsUseCase } from '../usecases/resolve-cnae-descrip
     GetCompanyProfileUseCase,
     RefreshCompanyProfileUseCase,
     ResolveCnaeDescriptionsUseCase,
+    SearchCompaniesByNameUseCase,
 
     /* Consumidor da fila */
     CompanyProfileProcessor,
