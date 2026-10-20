@@ -765,8 +765,49 @@ O `RefreshCompanyProfileUseCase` faz, nesta ordem:
    que deixou de existir na fonte (o nome fantasia, por exemplo) é gravado como `null`, e não
    omitido, para não sobrar o valor antigo.
 
-Fica fora desta entrega: o perfil ambiental (UC07: evidências e índice por ODS) e a busca por
-nome (UC06 fluxo 1.1, junto da pesquisa do UC08).
+Fica fora desta entrega: o perfil ambiental (UC07: evidências e índice por ODS).
+
+## Busca de empresa por nome
+
+`GET /companies?name=<texto>&page=<n>&page_size=<n>` lista as empresas pela razão social ou pelo
+nome fantasia (UC06 fluxo 1.1, RF04) para quem não conhece o CNPJ; o usuário escolhe uma e abre o
+perfil em `GET /companies/:cnpj`. Exige sessão, como a consulta por CNPJ.
+
+- **Só a base local.** Nenhuma fonte cadastral (BrasilAPI, OpenCNPJ, Minha Receita) oferece busca
+  por nome, então a busca opera **apenas sobre os perfis já guardados**: uma empresa que ninguém
+  consultou pelo CNPJ não aparece. A busca nunca chama provedor nem publica job
+  (`SearchCompaniesByNameUseCase`); quem a abre depois pelo CNPJ dispara a atualização, se o
+  cadastro venceu.
+- **O que casa.** Aproximação por **início de palavra**: a empresa entra quando *cada* palavra
+  digitada começa alguma palavra da razão social ou do nome fantasia, em qualquer ordem. `petro`
+  acha `PETROLEO BRASILEIRO S A PETROBRAS`; `limpeza urbana` acha `URBANA LIMPEZA LTDA`; `leo`
+  (meio de palavra) não acha. Caixa, acentos e pontuação (`S.A.`) são ignorados nos dois lados:
+  o texto digitado é normalizado (`extractNameTerms`: sem acento, maiúsculas, só `A-Z`/`0-9`) e
+  cada letra vira a classe que aceita as formas acentuadas do cadastro. Como as palavras só têm
+  letras e dígitos, nada do que o usuário digita vira metacaractere da expressão regular.
+- **Por que expressão regular e não o índice de texto do MongoDB.** O índice de texto só casa
+  palavras inteiras (`petro` não acharia `PETROBRAS`), o que é fraco para "aproximação de nome".
+  O índice `@@fulltext` que o schema tinha foi **removido** (schema e DBML), por não ser usado.
+  O custo é uma varredura da coleção; aceitável porque a base são só as empresas já consultadas.
+  Se ela crescer, o caminho é um campo de busca normalizado e indexado.
+- **Limites da consulta.** O texto tem até 100 caracteres, no máximo 8 palavras contam, e é
+  preciso **ao menos uma palavra com 3 caracteres ou mais** (`a b do` é recusado): sem isso, a
+  busca varreria a base inteira. Fora disso: `422 VALIDATION_FAILED`.
+- **Ordem.** Primeiro quem *começa* pela frase digitada (as palavras na ordem digitada, no início
+  da razão social ou do nome fantasia); depois as demais. Desempate pela razão social e pelo
+  CNPJ, o que torna a paginação estável. `ambev` lista `AMBEV S.A.` antes de
+  `DISTRIBUIDORA AMBEV`.
+- **Resposta.** `{ data, pagination }`, com `pagination = { page, page_size, total,
+  total_pages }` (padrão das listagens, em `pagination.dto.ts`; `page_size` até 100, padrão 20).
+  Cada item é o resumo para reconhecer a empresa: `cnpj`, `legal_name`, `trade_name`,
+  `registration_status`, `city`, `uf` e o CNAE principal. Nada achado é `200` com `data: []`, e
+  não `404`; página além do fim traz a lista vazia e o `total` correto.
+- **Dados pessoais (INL02).** A busca lê a razão social já gravada, que tem o CPF do empresário
+  individual/MEI mascarado (`***`). Logo, digitar um CPF não encontra o titular, e o nome dele
+  (público por lei) continua achável.
+- **Uma agregação só.** O `$facet` do pipeline (`company-name-search.pipeline.ts`) devolve a
+  janela e a contagem total numa única ida ao banco; a resposta é validada contra o schema antes
+  de sair do repositório.
 
 ## Chaves de API
 
