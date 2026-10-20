@@ -121,6 +121,66 @@ describe('PrismaDataSourceRepository', () => {
     });
   });
 
+  describe('findEvidenceSource', () => {
+    const odsId = faker.database.mongodbObjectId();
+    const sourceId = faker.database.mongodbObjectId();
+    const evidenceDocument = {
+      id_data_source: sourceId,
+      slug: 'IBAMA',
+      role: 'EVIDENCE',
+      evidence_category: 'INFRACAO_AMBIENTAL',
+      ods_id: odsId,
+      ods: { ods_number: 15 },
+    };
+
+    it('busca a categoria e o ODS da fonte pelo slug', async () => {
+      findUnique.mockResolvedValue(null);
+
+      await repository.findEvidenceSource('IBAMA');
+
+      expect(findUnique).toHaveBeenCalledWith({
+        where: { slug: 'IBAMA' },
+        select: {
+          id_data_source: true,
+          slug: true,
+          role: true,
+          evidence_category: true,
+          ods_id: true,
+          ods: { select: { ods_number: true } },
+        },
+      });
+    });
+
+    it('converte o documento para a configuração do domínio', async () => {
+      findUnique.mockResolvedValue(evidenceDocument);
+
+      await expect(repository.findEvidenceSource('IBAMA')).resolves.toEqual({
+        id: sourceId,
+        slug: 'IBAMA',
+        category: 'INFRACAO_AMBIENTAL',
+        odsId,
+        odsNumber: 15,
+      });
+    });
+
+    it('devolve null quando a fonte não existe', async () => {
+      findUnique.mockResolvedValue(null);
+
+      await expect(repository.findEvidenceSource('NADA')).resolves.toBeNull();
+    });
+
+    it.each([
+      ['não é de evidências', { role: 'CADASTRAL' }],
+      ['está sem categoria', { evidence_category: null }],
+      ['está sem ODS (id)', { ods_id: null }],
+      ['está sem ODS (documento)', { ods: null }],
+    ])('devolve null quando a fonte %s', async (_caso, override) => {
+      findUnique.mockResolvedValue({ ...evidenceDocument, ...override });
+
+      await expect(repository.findEvidenceSource('IBAMA')).resolves.toBeNull();
+    });
+  });
+
   describe('findCadastralChain', () => {
     it('busca só as fontes cadastrais habilitadas e com prioridade, da primeira à última', async () => {
       findMany.mockResolvedValue([]);
