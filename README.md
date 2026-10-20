@@ -809,6 +809,59 @@ perfil em `GET /companies/:cnpj`. Exige sessão, como a consulta por CNPJ.
   janela e a contagem total numa única ida ao banco; a resposta é validada contra o schema antes
   de sair do repositório.
 
+## Evidências (modelo e persistência)
+
+`EvidencesModule` guarda o resultado de consultar cada fonte de evidências para cada empresa
+(RF08, UC14). Ainda não há rota: quem grava são as ingestões de cada fonte (IBAMA, CGU, GHG), e
+quem lê é o perfil ambiental (UC07). O módulo exporta dois casos de uso.
+
+**Estados (`EvidenceState`).** Nunca um booleano (IND02):
+
+| Estado | Quer dizer | Pontua? |
+| --- | --- | --- |
+| `CONFIRMED` | a fonte tem um registro da empresa | sim, com o sinal da categoria |
+| `NOT_FOUND` | a fonte foi consultada e **não tem** registro | não é sinal negativo |
+| `UNKNOWN` | **não foi possível saber** (fonte fora do ar, job em andamento) | não; só reduz a confiança |
+| `OUTDATED` | passou da validade; aguarda nova coleta | decidido no cálculo do índice |
+
+- **`OUTDATED` é derivado na leitura**, e não gravado: `ListCompanyEvidencesUseCase` devolve
+  `OUTDATED` para a evidência `CONFIRMED` ou `NOT_FOUND` cuja `valid_until` passou. Não há job que
+  vire o estado, e uma fonte fora do ar não mantém evidência "viva" além do prazo. `UNKNOWN` não
+  envelhece (não há dado a ficar velho) e tem janela própria de nova tentativa de **15 minutos**
+  (`UNKNOWN_RETRY_WINDOW_SECONDS`), para não martelar uma fonte que acabou de falhar.
+- **Validade.** `valid_until = coletada em + data_sources.cache_ttl_seconds` da fonte; sem janela
+  no catálogo vale `CACHE_DEFAULT_TTL`. O seed do IBAMA ganhou 2 dias (o job diário renova; uma
+  execução perdida não vence a base). O seed não altera fontes que já existem: um banco antigo
+  mantém a janela dele até ser ajustada em `data_sources`.
+- **Categoria e ODS vêm do catálogo** (`data_sources.evidence_category` e `ods_id`, via
+  `ResolveEvidenceSourceUseCase`), e o **sinal vem da categoria** (`signalForCategory`: emissão de
+  GEE positivo; infração e sanção negativos). Quem normaliza um registro só diz a fonte e o que
+  encontrou; nunca escolhe categoria, ODS ou sinal.
+
+**Gravação: `RecordEvidenceCollectionUseCase`.** Recebe `{ cnpj, sourceSlug, result }`, em que
+`result` é `COLLECTED` (com zero ou mais registros) ou `UNAVAILABLE`. O resultado é um **retrato da
+fonte para a empresa**:
+
+- com registros: cada um vira uma evidência `CONFIRMED`; o que a fonte tinha antes e agora não lista
+  (inclusive um `NOT_FOUND` ou `UNKNOWN` antigo) é removido. Sem isso, a empresa teria ao mesmo
+  tempo uma infração confirmada e um "nada encontrado";
+- sem registros: uma evidência `NOT_FOUND` substitui as anteriores da fonte;
+- fonte indisponível: **nada é apagado**. Havendo coleta anterior que respondeu, ela fica e
+  envelhece até `OUTDATED`; não havendo, grava-se `UNKNOWN`.
+
+**Idempotência.** A `evidence_key` é determinística: `<fonte>:<cnpj>:<referência>` para um registro
+e `<fonte>:<cnpj>#NOT_FOUND` / `#UNKNOWN` para o resultado da consulta. O CNPJ entra na chave para
+que a mesma referência em duas empresas (um auto com mais de um autuado) nunca sobrescreva a
+evidência da outra. Repetir uma coleta atualiza em vez de duplicar, preserva `created_at`, renova
+a data e a validade e **limpa** o campo que a fonte deixou de informar (grava `null`, e não omite).
+O índice único da chave decide a disputa entre gravações simultâneas: quem perde a criação repete
+uma vez, agora como atualização. O fluxo não usa transação: cada passo é idempotente, e uma falha
+no meio se corrige repetindo a coleta (a fila já repete).
+
+Erros de configuração (fonte que não é de evidências, CNPJ não canônico, registro sem referência)
+são falhas de programação, e não exceções de domínio: `EvidenceSourceNotFoundError` e
+`InvalidEvidenceError`.
+
 ## Chaves de API
 
 `POST /api-keys`, `GET /api-keys` e `DELETE /api-keys/:id` (UC11, RF16) deixam o usuário gerar,
@@ -961,7 +1014,10 @@ e `main`, sem etapa de deploy:
 - **Lint**: mensagens de commit e título do PR, schema Prisma, ESLint, Prettier e typecheck;
 - **Testes**: unitários com limite de cobertura de 75%, e2e contra o MongoDB e o Redis do
   `docker-compose.yml` (aguardados por `docker compose up --wait`), resumo de cobertura no
-  job e relatório completo como artefato.
+  job e relatório completo como artefato. A imagem do MongoDB é **fixada no patch**
+  (`mongo:8.3.11`), para o CI e cada máquina rodarem o mesmo banco; subir a versão é uma
+  mudança deliberada no `docker-compose.yml`. Se a infraestrutura falhar ao subir, um passo
+  imprime o log dos contêineres.
 
 As actions são fixadas por SHA de commit e atualizadas pelo Dependabot
 (`.github/dependabot.yml`), que também abre PRs semanais de dependências npm contra o
