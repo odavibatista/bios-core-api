@@ -2,8 +2,13 @@
 /// ODS, estado e datas (RF07, RF08).
 ///
 /// Observações:
-///  - `evidence_key` é determinística (`<slug>:<referência>` ou `<slug>:<cnpj>:NOT_FOUND`),
+///  - `evidence_key` é determinística (`<slug>:<cnpj>:<referência>` para um registro, e
+///    `<slug>:<cnpj>#NOT_FOUND` ou `<slug>:<cnpj>#UNKNOWN` para o resultado da consulta),
 ///    permitindo upsert idempotente ao reprocessar um dump;
+///  - `state` guarda o estado da coleta (CONFIRMED, NOT_FOUND, UNKNOWN); OUTDATED é derivado
+///    na leitura, quando `valid_until` passa (UNKNOWN não envelhece);
+///  - cada coleta de uma fonte para uma empresa é um retrato: ao gravá-la, o que a fonte não
+///    lista mais é removido, e uma fonte que não respondeu não apaga o que já se sabia;
 ///  - `cnpj` é referência lógica a `company_profile`: a ingestão em lote cria evidências
 ///    para CNPJs ainda sem perfil cadastral, por isso não há relação Prisma;
 ///  - mapeado para a coleção `evidence_normalized`.

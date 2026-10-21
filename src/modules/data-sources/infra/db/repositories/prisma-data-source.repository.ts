@@ -3,6 +3,7 @@ import { DataSourceRole } from '@prisma/client';
 import { PrismaRepository } from '@shared/infra/database/prisma.repository.js';
 import { PrismaService } from '@shared/infra/database/prisma.service.js';
 import type { DataSourceRequestConfig } from '../../../domain/dtos/providers/data-source-request.dto.js';
+import type { EvidenceSourceConfig } from '../../../domain/dtos/providers/evidence-source.dto.js';
 import { DataSourceRepository } from '../../../domain/dtos/repositories/data-source.repository.js';
 
 /**
@@ -65,5 +66,37 @@ export class PrismaDataSourceRepository
     });
 
     return sources.map(({ slug }) => slug);
+  }
+
+  async findEvidenceSource(slug: string): Promise<EvidenceSourceConfig | null> {
+    const source = await this.prisma.dataSource.findUnique({
+      where: { slug },
+      select: {
+        id_data_source: true,
+        slug: true,
+        role: true,
+        evidence_category: true,
+        ods_id: true,
+        ods: { select: { ods_number: true } },
+      },
+    });
+
+    if (
+      !source ||
+      source.role !== DataSourceRole.EVIDENCE ||
+      !source.evidence_category ||
+      !source.ods_id ||
+      !source.ods
+    ) {
+      return null;
+    }
+
+    return {
+      id: source.id_data_source,
+      slug: source.slug,
+      category: source.evidence_category,
+      odsId: source.ods_id,
+      odsNumber: source.ods.ods_number,
+    };
   }
 }
