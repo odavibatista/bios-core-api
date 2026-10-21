@@ -9,6 +9,12 @@ import {
   type IbamaIngestionJobResult,
   INGEST_IBAMA_DUMPS_JOB,
 } from '../../domain/dtos/providers/ibama-ingestion-job.dto.js';
+import {
+  IbamaCompanyJobPayloadSchema,
+  type IbamaCompanyJobResult,
+  INGEST_IBAMA_COMPANY_JOB,
+} from '../../domain/dtos/providers/ibama-company-job.dto.js';
+import { IngestIbamaCompanyUseCase } from '../usecases/ingest-ibama-company.usecase.js';
 import { IngestIbamaDumpsUseCase } from '../usecases/ingest-ibama-dumps.usecase.js';
 import { IBAMA_SLUG } from '../providers/ibama.data-source.js';
 
@@ -16,9 +22,8 @@ import { IBAMA_SLUG } from '../providers/ibama.data-source.js';
  * Consome a fila `environmental-evidences` no core: executa o lote diário do
  * IBAMA publicado pelo agendador (UC14; ver `QUEUE_SCHEDULES`).
  *
- * Despacha pelo nome do job. Hoje a fila só tem o lote diário; os demais jobs
- * dela (o avulso por CNPJ e a consolidação por CNPJ) entram aqui ou, quando a
- * consolidação chegar, num despachante acima deste módulo. Um nome que ninguém
+ * Despacha lote diário e coleta avulsa por CNPJ pelo nome do job. A futura
+ * consolidação entra aqui ou num despachante acima deste módulo. Um nome que ninguém
  * conhece, ou um payload fora do contrato, falha **sem repetição**
  * (`UnrecoverableError`): repetir não o consertaria.
  *
@@ -37,24 +42,39 @@ export class IbamaIngestionProcessor extends WorkerHost {
 
   constructor(
     private readonly ingestIbamaDumps: IngestIbamaDumpsUseCase,
+    private readonly ingestIbamaCompany: IngestIbamaCompanyUseCase,
     private readonly failIngestionRun: FailIngestionRunUseCase,
   ) {
     super();
   }
 
-  async process(job: Job<unknown>): Promise<IbamaIngestionJobResult> {
-    if (job.name !== INGEST_IBAMA_DUMPS_JOB) {
-      throw new UnrecoverableError(`Job desconhecido: "${job.name}".`);
+  async process(
+    job: Job<unknown>,
+  ): Promise<IbamaIngestionJobResult | IbamaCompanyJobResult> {
+    const companyJob = job.name === INGEST_IBAMA_COMPANY_JOB;
+    if (!companyJob && job.name !== INGEST_IBAMA_DUMPS_JOB) {
+      throw new UnrecoverableError('Job desconhecido: "' + job.name + '".');
     }
-
-    // O agendador publica o job sem carga; um valor que não é objeto é malformado.
-    if (!IbamaIngestionJobPayloadSchema.safeParse(job.data ?? {}).success) {
+    const companyPayload = companyJob
+      ? IbamaCompanyJobPayloadSchema.safeParse(job.data)
+      : undefined;
+    if (
+      companyJob
+        ? !companyPayload?.success
+        : !IbamaIngestionJobPayloadSchema.safeParse(job.data ?? {}).success
+    ) {
       throw new UnrecoverableError('Payload do job fora do contrato.');
     }
 
     if (!job.id) throw new UnrecoverableError('Job sem identificador.');
 
     try {
+      if (companyPayload?.success) {
+        return await this.ingestIbamaCompany.execute({
+          jobId: job.id,
+          cnpj: companyPayload.data.cnpj,
+        });
+      }
       return await this.ingestIbamaDumps.execute({ jobId: job.id });
     } catch (error) {
       const message = describe(error);
@@ -63,7 +83,7 @@ export class IbamaIngestionProcessor extends WorkerHost {
       const attempts = job.opts.attempts ?? 1;
 
       this.logger.warn(
-        `Lote do IBAMA falhou (tentativa ${attempt} de ${attempts}): ${message}`,
+        `Coleta do IBAMA falhou (tentativa ${attempt} de ${attempts}): ${message}`,
       );
 
       if (!retryable || attempt >= attempts) {
