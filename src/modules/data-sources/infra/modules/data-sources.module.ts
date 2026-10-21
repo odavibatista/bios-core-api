@@ -9,6 +9,7 @@ import { FetchSourceHttpClient } from '../providers/fetch-source-http-client.pro
 import { RedisSourceRateLimiter } from '../providers/redis-source-rate-limiter.provider.js';
 import { ResolveSourceCacheTtlUseCase } from '../usecases/cache/resolve-source-cache-ttl.usecase.js';
 import { ListCadastralChainUseCase } from '../usecases/chain/list-cadastral-chain.usecase.js';
+import { ResolveEvidenceSourceUseCase } from '../usecases/evidence/resolve-evidence-source.usecase.js';
 import { RequestDataSourceUseCase } from '../usecases/request/request-data-source.usecase.js';
 
 /**
@@ -23,7 +24,9 @@ import { RequestDataSourceUseCase } from '../usecases/request/request-data-sourc
  *  - `ResolveSourceCacheTtlUseCase`: por quanto tempo a consulta a cada fonte
  *    permanece válida (NFDE01);
  *  - `ListCadastralChainUseCase`: a ordem da cadeia de fallback cadastral, que
- *    é do catálogo.
+ *    é do catálogo;
+ *  - `ResolveEvidenceSourceUseCase`: a categoria e o ODS das evidências de uma
+ *    fonte, também do catálogo (RF08).
  *
  * O contrato que os adapters implementam é `DataSourceInterface`
  * (`../../domain/data-source.interface.ts`).
@@ -45,11 +48,13 @@ import { RequestDataSourceUseCase } from '../usecases/request/request-data-sourc
     ResolveSourceCacheTtlUseCase,
     RequestDataSourceUseCase,
     ListCadastralChainUseCase,
+    ResolveEvidenceSourceUseCase,
   ],
   exports: [
     ResolveSourceCacheTtlUseCase,
     RequestDataSourceUseCase,
     ListCadastralChainUseCase,
+    ResolveEvidenceSourceUseCase,
   ],
 })
 export class DataSourcesModule {}
