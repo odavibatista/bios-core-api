@@ -78,6 +78,15 @@ export abstract class EvidenceRepository {
   ): Promise<number>;
 
   /**
+   * Remove as evidências da fonte, de **qualquer empresa**, coletadas antes de
+   * `before`: o que uma carga em lote não renovou. Devolve quantas removeu.
+   */
+  abstract deleteNotCollectedSince(
+    dataSourceId: string,
+    before: Date,
+  ): Promise<number>;
+
+  /**
    * Indica se há, para a empresa e a fonte, alguma coleta que de fato
    * respondeu (`CONFIRMED` ou `NOT_FOUND`), isto é, algo além de `UNKNOWN`.
    */
