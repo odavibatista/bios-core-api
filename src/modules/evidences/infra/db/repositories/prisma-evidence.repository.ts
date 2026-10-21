@@ -79,6 +79,17 @@ export class PrismaEvidenceRepository
     return count;
   }
 
+  async deleteNotCollectedSince(
+    dataSourceId: string,
+    before: Date,
+  ): Promise<number> {
+    const { count } = await this.prisma.evidenceNormalized.deleteMany({
+      where: { data_source_id: dataSourceId, collected_at: { lt: before } },
+    });
+
+    return count;
+  }
+
   async hasAnsweredCollection(
     cnpj: string,
     dataSourceId: string,

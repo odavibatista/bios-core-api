@@ -198,6 +198,30 @@ describe('RecordEvidenceCollectionUseCase', () => {
       });
     });
 
+    it('a mesma referência com identidades diferentes são evidências diferentes', async () => {
+      await useCase.execute({
+        cnpj,
+        sourceSlug: 'IBAMA',
+        result: {
+          status: 'COLLECTED',
+          findings: [
+            { reference: '9185894-E', identity: 'AI-1' },
+            { reference: '9185894-E', identity: 'AI-2' },
+          ],
+        },
+      });
+
+      expect(savedEvidences().map(({ key }) => key)).toEqual([
+        `IBAMA:${cnpj}:AI-1`,
+        `IBAMA:${cnpj}:AI-2`,
+      ]);
+      expect(
+        savedEvidences().every(
+          ({ sourceReference }) => sourceReference === '9185894-E',
+        ),
+      ).toBe(true);
+    });
+
     it.each(['', '   '])(
       'recusa o registro sem referência ("%s"), sem gravar nada',
       async (reference) => {

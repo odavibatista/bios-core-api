@@ -1,3 +1,4 @@
+import type { IbamaRecord } from '@modules/ibama/domain/dtos/providers/ibama-dump.dto.js';
 import { faker } from '../../support/faker.js';
 import { defineFactory } from '../factory.js';
 
@@ -52,7 +53,10 @@ export const TERMO_EMBARGO_COLUMNS = [
   'MUNICIPIO',
   'UF',
   'QTD_AREA_EMBARGADA',
+  'TIPO_AREA',
   'SIT_DESEMBARGO',
+  'TIPO_DESEMBARGO',
+  'DAT_DESEMBARGO',
   'GEOM_AREA_EMBARGADA',
 ] as const;
 
@@ -131,3 +135,32 @@ export function toIbamaCsv(
 
   return `${bom ? BYTE_ORDER_MARK : ''}${lines.join('\n')}\n`;
 }
+
+/**
+ * Registro de pessoa jurídica como o adapter o entrega (`IbamaRecord`), de um
+ * auto de infração. Os testes sobrescrevem o `payload` inteiro quando precisam
+ * de outras colunas.
+ */
+export const ibamaRecordFactory = defineFactory<IbamaRecord>(() => {
+  const number = faker.string.numeric(7);
+
+  return {
+    resource: 'AUTO_INFRACAO',
+    cnpj: IBAMA_CNPJ,
+    reference: `${number}-E`,
+    sequence: faker.string.numeric(6),
+    payload: {
+      SEQ_AUTO_INFRACAO: faker.string.numeric(6),
+      NUM_AUTO_INFRACAO: number,
+      SER_AUTO_INFRACAO: 'E',
+      DES_STATUS_FORMULARIO: 'Lavrado',
+      SIT_CANCELADO: 'N',
+      TIPO_AUTO: 'Multa simples',
+      VAL_AUTO_INFRACAO: '6932,00',
+      DAT_HORA_AUTO_INFRACAO: '2024-05-17 10:30:00',
+      MUNICIPIO: 'Altamira',
+      UF: 'PA',
+      DES_INFRACAO: 'Destruir floresta considerada de preservação permanente',
+    },
+  };
+});
