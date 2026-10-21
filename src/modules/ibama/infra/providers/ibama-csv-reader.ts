@@ -11,6 +11,7 @@ export const MAX_UNCOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024;
 /** Chamado a cada linha que o CSV não consegue ler (aspas ou colunas fora do formato). */
 export interface CsvReadHooks {
   onMalformedRow(): void;
+  onHeader?(columns: readonly string[]): void;
 }
 
 export type CsvRow = Record<string, string>;
@@ -30,9 +31,14 @@ export async function* readCsvRows(
   source: Readable,
   hooks: CsvReadHooks,
 ): AsyncGenerator<CsvRow> {
+  let hasHeader = false;
   const parser = parse({
     delimiter: ';',
-    columns: true,
+    columns: (columns: string[]) => {
+      hasHeader = true;
+      hooks.onHeader?.(columns);
+      return columns;
+    },
     bom: true,
     relax_quotes: true,
     skip_records_with_error: true,
@@ -50,6 +56,7 @@ export async function* readCsvRows(
 
   try {
     for await (const row of parser) yield row as CsvRow;
+    if (!hasHeader) throw new IbamaDumpFormatError('o CSV não tem cabeçalho');
   } finally {
     source.destroy();
   }

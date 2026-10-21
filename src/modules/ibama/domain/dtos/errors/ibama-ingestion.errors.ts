@@ -36,7 +36,7 @@ export class IbamaSourceDisabledError extends Error {
   constructor() {
     super(
       'Fonte IBAMA desabilitada no catálogo (data_sources.is_enabled): ' +
-        'o lote diário não foi executado.',
+        'a coleta não foi executada.',
     );
     this.name = 'IbamaSourceDisabledError';
   }

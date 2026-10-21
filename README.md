@@ -171,7 +171,7 @@ módulo dono do fluxo. Um consumidor por fila: dois na mesma fila competiriam pe
 | Fila | Conteúdo | Consumidor |
 | --- | --- | --- |
 | `company-profile` | Dados cadastrais por CNPJ | `CompanyProfileProcessor` (`companies/`) |
-| `environmental-evidences` | Evidências ambientais e de conduta (IBAMA, CEIS/CNEP) | `IbamaIngestionProcessor` (`ibama/`), por enquanto só o lote diário |
+| `environmental-evidences` | Evidências ambientais e de conduta (IBAMA, CEIS/CNEP) | `IbamaIngestionProcessor` (`ibama/`): lote diário e coleta avulsa por CNPJ |
 | `ghg-inventory` | Inventário de emissões (fallback do GHG Protocol) | ainda não implementado |
 | `ods-scoring` | Recálculo de índice e confiança por ODS | ainda não implementado |
 | `email-dispatch` | E-mails transacionais | consumida nesta API (`mailing/`) |
@@ -808,8 +808,8 @@ O cron `0 4 * * *` (`QUEUE_SCHEDULES`, id `ibama-daily-ingestion`) publica o job
 na fila `environmental-evidences`, e o `IbamaIngestionProcessor` (`ibama/infra/queue/`), hospedado
 no core, o executa por `IngestIbamaDumpsUseCase` (UC14). O consumidor despacha pelo **nome** do
 job; nome desconhecido, payload que não seja um objeto ou job sem identificador falham sem
-repetição (`UnrecoverableError`). Hoje a fila só tem este job; os próximos (o avulso por CNPJ e a
-consolidação) entram aqui ou, quando a consolidação chegar, num despachante acima do módulo.
+repetição (`UnrecoverableError`). O mesmo consumidor também atende o avulso por CNPJ; a futura
+consolidação entra aqui ou num despachante acima do módulo.
 
 O fluxo de uma execução, nesta ordem:
 
@@ -820,7 +820,7 @@ O fluxo de uma execução, nesta ordem:
 3. **Compara o checksum.** `dump_checksum` é um só por execução, e o lote tem dois arquivos: guarda-se
    o hash do mapa recurso → SHA-256 de cada arquivo (`combineDumpChecksums`). Muda se **qualquer**
    dos dois muda, não depende da ordem do download e não confunde um arquivo trocado pelo outro. A
-   referência é a última execução **`SUCCEEDED`**; uma execução pulada ou falha mais recente não conta.
+   referência é a última execução **agendada `SUCCEEDED`**; uma execução pulada ou falha mais recente não conta.
 4. **Dump idêntico** → `SKIPPED_UNCHANGED`: nada é reprocessado, mas a **validade das evidências é
    renovada** (`RenewSourceEvidencesUseCase`: `collected_at` = início da execução e `valid_until` =
    início + janela da fonte, num único `updateMany`, só para `CONFIRMED` e `NOT_FOUND` da fonte; a
@@ -850,8 +850,8 @@ O fluxo de uma execução, nesta ordem:
   20 e 40 min) — ver "Filas (BullMQ)". Jobs fora do agendador seguem a política da fila.
 - **Concorrência 3.** O lote ocupa um worker por vários minutos; a fila é a mesma dos jobs por CNPJ,
   que não podem esperar atrás dele. Um job travado por queda do processo é reexecutado do início, e a
-  carga é idempotente (mesmas chaves). Dois lotes ao mesmo tempo (uma repetição e um novo disparo) também
-  convergem para o mesmo resultado; não há trava.
+  carga é idempotente (mesmas chaves). Não há trava nem garantia de ordenação entre lotes e avulsos
+  concorrentes; o job avulso limita todas as suas gravações e remoções ao CNPJ solicitado.
 - **Recálculo do índice fica fora.** O passo 5 do UC14 (recalcular o índice dos CNPJs afetados) é o
   gatilho de ingestão do recálculo por fila (UC15). O conjunto de afetados não é guardado: toda evidência
   da execução tem `collected_at` igual ao `started_at` dela, e o bruto aponta a execução.
@@ -869,6 +869,57 @@ não foi dado como travado em nenhum momento (`stalledCounter = 0`), então o `l
 (30 s) basta enquanto a leitura é assíncrona. A segunda execução, com os mesmos arquivos, terminou
 como `SKIPPED_UNCHANGED` em **12 s**: nenhum registro lido, nenhuma evidência nova, e as 229 184
 existentes com a validade renovada.
+
+### Consulta local e job avulso do IBAMA por CNPJ
+
+`GetIbamaCompanyEvidencesUseCase` consulta somente o IBAMA e publica a coleta sem esperar
+seu resultado (UC07, fluxo 1.1; UC14). O caso de uso é exportado pelo `IbamaModule` para a
+consolidação ambiental e o perfil completo; esta entrega não acrescenta endpoint nem altera
+a resposta cadastral atual.
+
+- Evidências `CONFIRMED` ou `NOT_FOUND` válidas são devolvidas sem download.
+- Se o CNPJ não tem resposta local, a última carga **agendada** `SUCCEEDED` ou
+  `SKIPPED_UNCHANGED` ainda válida comprova a ausência: grava `NOT_FOUND` com a data
+  de início desse lote e sua janela de validade. A consulta não renova essa janela.
+  Uma execução `ON_DEMAND`, um lote falho ou ainda em andamento não comprovam o índice inteiro.
+- Sem essa referência, grava `UNKNOWN` antes de publicar o job
+  `ingest-ibama-company`, payload `{ cnpj }` canônico, na fila `environmental-evidences`.
+  Um `UNKNOWN` válido evita outra publicação durante 15 minutos. O identificador
+  `ibama-cnpj-<cnpj>-<janela de 15 min>` deduplica publicações concorrentes na mesma janela.
+  Se a publicação reportar fila indisponível, a consulta preserva a resposta local.
+- Respostas anteriores vencidas continuam disponíveis como `OUTDATED` enquanto a atualização
+  é publicada; indisponibilidade não as substitui por `UNKNOWN`.
+
+O mesmo consumidor do lote despacha `IngestIbamaCompanyUseCase`. Cada job abre uma execução
+`ON_DEMAND` com `cnpj` e `job_id`; os downloads têm trigger `ON_DEMAND_JOB` e apontam
+essa execução. Baixa e lê integralmente **os dois** dumps, incluindo a validação de cada
+cabeçalho, mas guarda em memória e persiste apenas os achados do CNPJ solicitado.
+Um CSV sem cabeçalho ou com colunas obrigatórias ausentes falha mesmo sem linhas de dados;
+um cabeçalho válido sem registros confirma um recurso vazio.
+
+Somente após ambas as leituras, `RecordEvidenceEntriesUseCase` grava os brutos com o mesmo
+hash usado pelo lote e substitui o retrato dessa empresa. Não chama `batch.finish()`:
+evidências de outros CNPJs e de outras fontes ficam intactas. Sem achados, grava
+`NOT_FOUND`; falha de download ou formato preserva o retrato anterior, ou deixa
+`UNKNOWN` quando nunca houve resposta.
+
+O avulso registra checksum combinado para auditoria, mas seu sucesso não é referência de
+checksum nem de atualidade do lote completo. Suas contagens incluem todas as linhas lidas,
+as evidências gravadas (inclusive o marcador de ausência) e os descartes do parser, anulados
+e registros de outros CNPJs. Repetições reabrem a mesma execução; `FAILED` só na última
+tentativa, ou imediatamente se a fonte estiver desabilitada. Usa a política já existente
+da fila: 5 tentativas, backoff exponencial de base 5 segundos.
+
+Validação local com os dumps oficiais já baixados na entrega anterior (123 095 496 bytes
++ 210 516 004 bytes): os dois cenários reais passaram em cerca de 184 s no total. O CNPJ
+presente gerou 2 535 evidências; o ausente terminou como `NOT_FOUND`, preservando outra
+empresa. O arquivo completo teve 829 239 linhas. Essa validação usa os arquivos preservados,
+sem afirmar uma nova consulta ao armazenamento público.
+
+Os temporários são descartados no `finally`. A deduplicação é por janela; não é uma trava
+entre lote diário e avulso, nem entre janelas diferentes. A persistência mantém o modelo
+idempotente existente, sem transação global ou garantia de ordenação entre coletas
+concorrentes. O recálculo por fila continua no UC15 (#80).
 
 ## Consulta de empresa por CNPJ
 

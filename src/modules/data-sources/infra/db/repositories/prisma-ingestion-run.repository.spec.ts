@@ -111,6 +111,83 @@ describe('PrismaIngestionRunRepository', () => {
     });
   });
 
+  describe('openOnDemand', () => {
+    it('grava tipo e CNPJ para não confundir o avulso com uma carga completa', async () => {
+      const cnpj = '11222333000181';
+      const startedAt = faker.date.recent();
+      findFirst.mockResolvedValue(null);
+      create.mockResolvedValue(storedRun());
+      await repository.openOnDemand({ dataSourceId, jobId, startedAt, cnpj });
+      expect(findFirst).toHaveBeenCalledWith({
+        where: {
+          data_source_id: dataSourceId,
+          job_id: jobId,
+          run_type: IngestionRunType.ON_DEMAND,
+          cnpj,
+        },
+      });
+      expect(create).toHaveBeenCalledWith({
+        data: {
+          data_source_id: dataSourceId,
+          job_id: jobId,
+          started_at: startedAt,
+          run_type: IngestionRunType.ON_DEMAND,
+          cnpj,
+          status: IngestionRunStatus.RUNNING,
+        },
+      });
+    });
+
+    it('reabre a mesma execução avulsa na repetição do job', async () => {
+      const existing = storedRun({ run_type: IngestionRunType.ON_DEMAND });
+      findFirst.mockResolvedValue(existing);
+      update.mockResolvedValue(existing);
+      const run = await repository.openOnDemand({
+        dataSourceId,
+        jobId,
+        startedAt: new Date(),
+        cnpj: '11222333000181',
+      });
+      expect(run.id).toBe(existing.id_ingestion_run);
+      expect(create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('findLastConfirmedBatch', () => {
+    it('aceita reconfirmação, mas somente de execução agendada', async () => {
+      const stored = storedRun({
+        status: IngestionRunStatus.SKIPPED_UNCHANGED,
+      });
+      findFirst.mockResolvedValue(stored);
+      expect(
+        await repository.findLastConfirmedBatch(dataSourceId),
+      ).toMatchObject({
+        id: stored.id_ingestion_run,
+        status: IngestionRunStatus.SKIPPED_UNCHANGED,
+      });
+      expect(findFirst).toHaveBeenCalledWith({
+        where: {
+          data_source_id: dataSourceId,
+          run_type: IngestionRunType.SCHEDULED,
+          status: {
+            in: [
+              IngestionRunStatus.SUCCEEDED,
+              IngestionRunStatus.SKIPPED_UNCHANGED,
+            ],
+          },
+        },
+        orderBy: { finished_at: 'desc' },
+      });
+    });
+
+    it('sem carga completa não confirma ausência de empresa', async () => {
+      findFirst.mockResolvedValue(null);
+      await expect(
+        repository.findLastConfirmedBatch(dataSourceId),
+      ).resolves.toBeNull();
+    });
+  });
+
   describe('findByJob', () => {
     it('devolve a execução da fonte para o job', async () => {
       const stored = storedRun({ dump_checksum: buildChecksum() });
@@ -128,7 +205,6 @@ describe('PrismaIngestionRunRepository', () => {
         where: {
           data_source_id: dataSourceId,
           job_id: jobId,
-          run_type: IngestionRunType.SCHEDULED,
         },
       });
     });
@@ -210,6 +286,7 @@ describe('PrismaIngestionRunRepository', () => {
         where: {
           data_source_id: dataSourceId,
           status: IngestionRunStatus.SUCCEEDED,
+          run_type: IngestionRunType.SCHEDULED,
         },
         orderBy: { finished_at: 'desc' },
       });
