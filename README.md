@@ -1018,6 +1018,13 @@ e `main`, sem etapa de deploy:
   (`mongo:8.3.11`), para o CI e cada máquina rodarem o mesmo banco; subir a versão é uma
   mudança deliberada no `docker-compose.yml`. Se a infraestrutura falhar ao subir, um passo
   imprime o log dos contêineres.
+- **Runner do job Testes fixo no Ubuntu 22.04.** Do kernel Linux 6.19 ao 7.0.13 o MongoDB 8 se
+  recusa a iniciar (incompatibilidade do tcmalloc com o kernel, SERVER-121912, válida para todas as
+  imagens e pacotes do 8.x; resolvida no kernel 7.0.14). O `ubuntu-latest` passou a usar um kernel
+  dessa faixa, e o passo da infraestrutura falhava com `container bios-mongodb exited (1)`. Um
+  passo registra o `uname -r` do runner. Rodar o banco local não é afetado (o kernel do Docker
+  Desktop é anterior). Se o 22.04 também chegar a essa faixa, a alternativa é usar o MongoDB 7.0 no
+  CI, que não tem o problema.
 
 As actions são fixadas por SHA de commit e atualizadas pelo Dependabot
 (`.github/dependabot.yml`), que também abre PRs semanais de dependências npm contra o
