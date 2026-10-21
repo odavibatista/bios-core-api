@@ -38,11 +38,18 @@ export const QUEUE_SCHEDULES: readonly QueueSchedule[] = [
     id: 'ibama-daily-ingestion',
     jobName: 'ingest-ibama-dumps',
     cron: '0 4 * * *',
+    // O backoff do lote é de minutos (5, 10, 20 e 40 min entre as cinco
+    // tentativas): uma fonte oficial fora do ar costuma ficar horas, e repetir
+    // a cada segundos só gastaria tentativas — e dois downloads de centenas de
+    // MB — antes de ela voltar. Os jobs por CNPJ da mesma fila mantêm a política
+    // curta da fila.
+    retry: { attempts: 5, backoffMs: 300_000 },
   },
 ];
 
 /**
- * Opções padrão aplicadas a todo job, por fila.
+ * Opções padrão aplicadas a todo job, por fila. `retry` troca a política de
+ * repetição da fila pela de um job específico (ver `QueueSchedule.retry`).
  *
  * Jobs concluídos são descartados após uma janela curta — o resultado já foi
  * entregue a quem esperava, e o histórico de sucesso não é consultado. Jobs
@@ -50,8 +57,11 @@ export const QUEUE_SCHEDULES: readonly QueueSchedule[] = [
  * que distingue, na espera, um job que falhou de um que apenas não concluiu a
  * tempo.
  */
-export function buildJobOptions(queue: QueueName): DefaultJobOptions {
-  const { attempts, backoffMs } = QUEUE_RETRY_POLICIES[queue];
+export function buildJobOptions(
+  queue: QueueName,
+  retry?: QueueRetryPolicy,
+): DefaultJobOptions {
+  const { attempts, backoffMs } = retry ?? QUEUE_RETRY_POLICIES[queue];
 
   return {
     attempts,

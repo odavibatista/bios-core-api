@@ -102,11 +102,12 @@ export class BullMqQueueProvider extends QueueProvider {
     id,
     jobName,
     cron,
+    retry,
   }: QueueSchedule): Promise<void> {
     await this.queueOf(queue).upsertJobScheduler(
       id,
       { pattern: cron },
-      { name: jobName, opts: buildJobOptions(queue) },
+      { name: jobName, opts: buildJobOptions(queue, retry) },
     );
   }
 

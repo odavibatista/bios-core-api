@@ -83,4 +83,14 @@ export interface QueueSchedule {
 
   /** Padrão cron do disparo (fuso do processo). */
   cron: string;
+
+  /**
+   * Política de repetição **deste** job, no lugar da política da fila.
+   *
+   * A fila é compartilhada: o lote diário (centenas de milhares de registros,
+   * minutos por tentativa, uma fonte que costuma ficar fora por horas) e os
+   * jobs por CNPJ (que erram rápido para quem espera) têm necessidades
+   * opostas, e a política da fila só atende a segunda. Ausente, vale a da fila.
+   */
+  retry?: QueueRetryPolicy;
 }
