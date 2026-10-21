@@ -7,6 +7,7 @@ import { PrismaRawEvidenceRepository } from '../db/repositories/prisma-raw-evide
 import { ListCompanyEvidencesUseCase } from '../usecases/list-company-evidences.usecase.js';
 import { OpenEvidenceBatchUseCase } from '../usecases/open-evidence-batch.usecase.js';
 import { RecordEvidenceCollectionUseCase } from '../usecases/record-evidence-collection.usecase.js';
+import { RenewSourceEvidencesUseCase } from '../usecases/renew-source-evidences.usecase.js';
 
 /**
  * Camadas bruta e normalizada de evidências ambientais por CNPJ
@@ -21,6 +22,8 @@ import { RecordEvidenceCollectionUseCase } from '../usecases/record-evidence-col
  *  - `OpenEvidenceBatchUseCase`: abre a carga em lote de uma fonte (o dump
  *    diário do IBAMA), gravando o registro bruto e a evidência de cada
  *    registro em fluxo (UC14);
+ *  - `RenewSourceEvidencesUseCase`: renova a validade das evidências de uma
+ *    fonte em lote cujo dump não mudou (UC14);
  *  - `ListCompanyEvidencesUseCase`: as evidências de uma empresa com o estado
  *    de agora (`OUTDATED` derivado da validade).
  */
@@ -33,11 +36,13 @@ import { RecordEvidenceCollectionUseCase } from '../usecases/record-evidence-col
 
     /* Casos de uso */
     RecordEvidenceCollectionUseCase,
+    RenewSourceEvidencesUseCase,
     OpenEvidenceBatchUseCase,
     ListCompanyEvidencesUseCase,
   ],
   exports: [
     RecordEvidenceCollectionUseCase,
+    RenewSourceEvidencesUseCase,
     OpenEvidenceBatchUseCase,
     ListCompanyEvidencesUseCase,
   ],
