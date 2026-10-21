@@ -13,6 +13,7 @@ import { ResolveSourceCacheTtlUseCase } from '../usecases/cache/resolve-source-c
 import { ListCadastralChainUseCase } from '../usecases/chain/list-cadastral-chain.usecase.js';
 import { ResolveEvidenceSourceUseCase } from '../usecases/evidence/resolve-evidence-source.usecase.js';
 import { FailIngestionRunUseCase } from '../usecases/ingestion/fail-ingestion-run.usecase.js';
+import { FindLastConfirmedBatchUseCase } from '../usecases/ingestion/find-last-confirmed-batch.usecase.js';
 import { FindLastSucceededIngestionRunUseCase } from '../usecases/ingestion/find-last-succeeded-ingestion-run.usecase.js';
 import { FinishIngestionRunUseCase } from '../usecases/ingestion/finish-ingestion-run.usecase.js';
 import { OpenIngestionRunUseCase } from '../usecases/ingestion/open-ingestion-run.usecase.js';
@@ -64,6 +65,7 @@ import { RequestDataSourceUseCase } from '../usecases/request/request-data-sourc
     FinishIngestionRunUseCase,
     FailIngestionRunUseCase,
     FindLastSucceededIngestionRunUseCase,
+    FindLastConfirmedBatchUseCase,
   ],
   exports: [
     ResolveSourceCacheTtlUseCase,
@@ -74,6 +76,7 @@ import { RequestDataSourceUseCase } from '../usecases/request/request-data-sourc
     FinishIngestionRunUseCase,
     FailIngestionRunUseCase,
     FindLastSucceededIngestionRunUseCase,
+    FindLastConfirmedBatchUseCase,
   ],
 })
 export class DataSourcesModule {}

@@ -1,0 +1,8 @@
+# Somente CI: imagens oficiais Docker distribuídas no ECR Public, sem login.
+# Manter as tags alinhadas ao Compose base; somente o registro muda.
+# Replica set, portas, volumes e healthchecks são herdados sem alterações.
+services:
+  mongodb:
+    image: public.ecr.aws/docker/library/mongo:8.3.11
+  redis:
+    image: public.ecr.aws/docker/library/redis:7-alpine

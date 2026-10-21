@@ -11,6 +11,7 @@ import {
   type IngestionRunRecord,
   IngestionRunRepository,
   type OpenScheduledRunInput,
+  type OpenOnDemandRunInput,
 } from '../../../domain/dtos/repositories/ingestion-run.repository.js';
 
 /**
@@ -28,16 +29,25 @@ export class PrismaIngestionRunRepository
     super(prisma);
   }
 
-  async openScheduled({
-    dataSourceId,
-    jobId,
-    startedAt,
-  }: OpenScheduledRunInput): Promise<IngestionRunRecord> {
+  openScheduled(input: OpenScheduledRunInput): Promise<IngestionRunRecord> {
+    return this.open(input, IngestionRunType.SCHEDULED);
+  }
+
+  openOnDemand(input: OpenOnDemandRunInput): Promise<IngestionRunRecord> {
+    return this.open(input, IngestionRunType.ON_DEMAND, input.cnpj);
+  }
+
+  private async open(
+    { dataSourceId, jobId, startedAt }: OpenScheduledRunInput,
+    runType: IngestionRunType,
+    cnpj?: string,
+  ): Promise<IngestionRunRecord> {
     const existing = await this.prisma.ingestionRun.findFirst({
       where: {
         data_source_id: dataSourceId,
         job_id: jobId,
-        run_type: IngestionRunType.SCHEDULED,
+        run_type: runType,
+        ...(cnpj ? { cnpj } : {}),
       },
     });
 
@@ -59,7 +69,8 @@ export class PrismaIngestionRunRepository
     const created = await this.prisma.ingestionRun.create({
       data: {
         data_source_id: dataSourceId,
-        run_type: IngestionRunType.SCHEDULED,
+        run_type: runType,
+        ...(cnpj ? { cnpj } : {}),
         job_id: jobId,
         status: IngestionRunStatus.RUNNING,
         started_at: startedAt,
@@ -77,7 +88,6 @@ export class PrismaIngestionRunRepository
       where: {
         data_source_id: dataSourceId,
         job_id: jobId,
-        run_type: IngestionRunType.SCHEDULED,
       },
     });
 
@@ -106,6 +116,27 @@ export class PrismaIngestionRunRepository
       where: {
         data_source_id: dataSourceId,
         status: IngestionRunStatus.SUCCEEDED,
+        run_type: IngestionRunType.SCHEDULED,
+      },
+      orderBy: { finished_at: 'desc' },
+    });
+
+    return run ? toRecord(run) : null;
+  }
+
+  async findLastConfirmedBatch(
+    dataSourceId: string,
+  ): Promise<IngestionRunRecord | null> {
+    const run = await this.prisma.ingestionRun.findFirst({
+      where: {
+        data_source_id: dataSourceId,
+        run_type: IngestionRunType.SCHEDULED,
+        status: {
+          in: [
+            IngestionRunStatus.SUCCEEDED,
+            IngestionRunStatus.SKIPPED_UNCHANGED,
+          ],
+        },
       },
       orderBy: { finished_at: 'desc' },
     });

@@ -64,6 +64,14 @@ export class FileIbamaDump implements IbamaDump {
     const required = requiredColumns(this.definition);
 
     const rows = readIbamaRows(this.file.path, this.definition.container, {
+      onHeader: (columns) => {
+        const missing = required.filter((column) => !columns.includes(column));
+        if (missing.length > 0) {
+          throw new IbamaDumpFormatError(
+            `coluna(s) ausente(s): ${missing.join(', ')}`,
+          );
+        }
+      },
       onMalformedRow: () => {
         stats.rows += 1;
         stats.discarded[IbamaDiscardReason.REGISTRO_MALFORMADO] += 1;
@@ -71,14 +79,6 @@ export class FileIbamaDump implements IbamaDump {
     });
 
     for await (const row of rows) {
-      const missing = required.filter((column) => !(column in row));
-
-      if (missing.length > 0) {
-        throw new IbamaDumpFormatError(
-          `coluna(s) ausente(s): ${missing.join(', ')}`,
-        );
-      }
-
       stats.rows += 1;
       const result = mapIbamaRow(this.definition, row);
 

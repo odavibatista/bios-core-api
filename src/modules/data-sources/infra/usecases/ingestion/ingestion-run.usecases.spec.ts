@@ -9,6 +9,7 @@ import { UnknownDataSourceError } from '../../../domain/dtos/errors/unknown-data
 import { DataSourceRepository } from '../../../domain/dtos/repositories/data-source.repository.js';
 import { IngestionRunRepository } from '../../../domain/dtos/repositories/ingestion-run.repository.js';
 import { FailIngestionRunUseCase } from './fail-ingestion-run.usecase.js';
+import { FindLastConfirmedBatchUseCase } from './find-last-confirmed-batch.usecase.js';
 import { FindLastSucceededIngestionRunUseCase } from './find-last-succeeded-ingestion-run.usecase.js';
 import {
   FinishIngestionRunUseCase,
@@ -22,6 +23,9 @@ describe('casos de uso das execuções de ingestão', () => {
   };
   const runRepository = {
     openScheduled: vi.fn<IngestionRunRepository['openScheduled']>(),
+    openOnDemand: vi.fn<IngestionRunRepository['openOnDemand']>(),
+    findLastConfirmedBatch:
+      vi.fn<IngestionRunRepository['findLastConfirmedBatch']>(),
     findByJob: vi.fn<IngestionRunRepository['findByJob']>(),
     finish: vi.fn<IngestionRunRepository['finish']>(),
     findLastSucceeded: vi.fn<IngestionRunRepository['findLastSucceeded']>(),
@@ -33,6 +37,7 @@ describe('casos de uso das execuções de ingestão', () => {
   let finish: FinishIngestionRunUseCase;
   let fail: FailIngestionRunUseCase;
   let findLast: FindLastSucceededIngestionRunUseCase;
+  let confirmedBatch: FindLastConfirmedBatchUseCase;
 
   beforeEach(async () => {
     dataSourceRepository.findRequestConfig.mockResolvedValue({
@@ -51,6 +56,7 @@ describe('casos de uso das execuções de ingestão', () => {
         FinishIngestionRunUseCase,
         FailIngestionRunUseCase,
         FindLastSucceededIngestionRunUseCase,
+        FindLastConfirmedBatchUseCase,
         { provide: DataSourceRepository, useValue: dataSourceRepository },
         { provide: IngestionRunRepository, useValue: runRepository },
       ],
@@ -60,6 +66,7 @@ describe('casos de uso das execuções de ingestão', () => {
     finish = moduleRef.get(FinishIngestionRunUseCase);
     fail = moduleRef.get(FailIngestionRunUseCase);
     findLast = moduleRef.get(FindLastSucceededIngestionRunUseCase);
+    confirmedBatch = moduleRef.get(FindLastConfirmedBatchUseCase);
   });
 
   describe('OpenIngestionRunUseCase', () => {
@@ -95,6 +102,51 @@ describe('casos de uso das execuções de ingestão', () => {
       ).rejects.toBeInstanceOf(UnknownDataSourceError);
 
       expect(runRepository.openScheduled).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('execução avulsa e referência de lote', () => {
+    it('CNPJ informado abre uma execução ON_DEMAND', async () => {
+      const run = ingestionRunFactory.build();
+      runRepository.openOnDemand.mockResolvedValue(run);
+      const input = {
+        sourceSlug: slug,
+        cnpj: '11222333000181',
+        jobId: faker.string.alphanumeric(10),
+        startedAt: new Date(),
+      };
+      expect(await open.execute(input)).toBe(run);
+      expect(runRepository.openOnDemand).toHaveBeenCalledWith({
+        dataSourceId: sourceId,
+        cnpj: input.cnpj,
+        jobId: input.jobId,
+        startedAt: input.startedAt,
+      });
+      expect(runRepository.openScheduled).not.toHaveBeenCalled();
+    });
+
+    it('obtém a última reconfirmação de um lote completo', async () => {
+      const run = ingestionRunFactory.build({
+        status: IngestionRunStatus.SKIPPED_UNCHANGED,
+      });
+      runRepository.findLastConfirmedBatch.mockResolvedValue(run);
+      expect(await confirmedBatch.execute(slug)).toBe(run);
+      expect(runRepository.findLastConfirmedBatch).toHaveBeenCalledWith(
+        sourceId,
+      );
+    });
+
+    it('devolve null quando não há lote completo', async () => {
+      runRepository.findLastConfirmedBatch.mockResolvedValue(null);
+      await expect(confirmedBatch.execute(slug)).resolves.toBeNull();
+    });
+
+    it('recusa consulta de lote para fonte inexistente', async () => {
+      dataSourceRepository.findRequestConfig.mockResolvedValue(null);
+      await expect(confirmedBatch.execute(slug)).rejects.toBeInstanceOf(
+        UnknownDataSourceError,
+      );
+      expect(runRepository.findLastConfirmedBatch).not.toHaveBeenCalled();
     });
   });
 
