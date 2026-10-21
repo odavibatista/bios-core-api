@@ -24,6 +24,11 @@ export interface OpenScheduledRunInput {
   startedAt: Date;
 }
 
+/** Abertura de uma execução restrita a um CNPJ (UC14, fluxo 1.1). */
+export interface OpenOnDemandRunInput extends OpenScheduledRunInput {
+  cnpj: string;
+}
+
 /** Como uma execução terminou. */
 export interface IngestionRunOutcome {
   status: Extract<
@@ -57,7 +62,12 @@ export abstract class IngestionRunRepository {
     input: OpenScheduledRunInput,
   ): Promise<IngestionRunRecord>;
 
-  /** A execução do job na fonte, ou `null` quando o job ainda não abriu uma. */
+  /** Abre ou reabre apenas a execução avulsa daquele CNPJ. */
+  abstract openOnDemand(
+    input: OpenOnDemandRunInput,
+  ): Promise<IngestionRunRecord>;
+
+  /** A execução do job na fonte, agendada ou avulsa, ou `null`. */
   abstract findByJob(
     dataSourceId: string,
     jobId: string,
@@ -67,12 +77,18 @@ export abstract class IngestionRunRepository {
   abstract finish(id: string, outcome: IngestionRunOutcome): Promise<void>;
 
   /**
-   * A execução `SUCCEEDED` mais recente da fonte (pelo término), ou `null`.
+   * A execução agendada `SUCCEEDED` mais recente da fonte, ou `null`.
+   * Uma coleta avulsa não prova que o dump inteiro foi carregado.
    *
    * Só ela serve de referência para "o dump mudou?": uma execução que falhou
    * ou que foi pulada não carregou nada que se possa comparar.
    */
   abstract findLastSucceeded(
+    dataSourceId: string,
+  ): Promise<IngestionRunRecord | null>;
+
+  /** Último lote completo reconfirmado: inclui o skip que renovou a validade. */
+  abstract findLastConfirmedBatch(
     dataSourceId: string,
   ): Promise<IngestionRunRecord | null>;
 }

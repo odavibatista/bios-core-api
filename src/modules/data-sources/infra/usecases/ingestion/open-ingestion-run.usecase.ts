@@ -14,12 +14,15 @@ export interface OpenIngestionRunInput {
   /** Job BullMQ da execução. As tentativas do mesmo job reaproveitam a mesma linha. */
   jobId: string;
 
+  /** Presente apenas na execução avulsa, já canônico e validado. */
+  cnpj?: string;
+
   /** Início da tentativa. */
   startedAt: Date;
 }
 
 /**
- * Abre a execução de um job agendado de ingestão, em `RUNNING` (UC14).
+ * Abre a execução de um job de ingestão, agendado ou avulso por CNPJ, em `RUNNING` (UC14).
  *
  * Uma execução por job: se o job foi repetido depois de uma falha, a execução
  * dele é reaberta, e não duplicada (ver `IngestionRunRepository.openScheduled`).
@@ -45,11 +48,21 @@ export class OpenIngestionRunUseCase extends UseCase<
     sourceSlug,
     jobId,
     startedAt,
+    cnpj,
   }: OpenIngestionRunInput): Promise<IngestionRunRecord> {
     const dataSourceId = await resolveSourceId(
       this.dataSourceRepository,
       sourceSlug,
     );
+
+    if (cnpj !== undefined) {
+      return this.ingestionRunRepository.openOnDemand({
+        dataSourceId,
+        jobId,
+        startedAt,
+        cnpj,
+      });
+    }
 
     return this.ingestionRunRepository.openScheduled({
       dataSourceId,
