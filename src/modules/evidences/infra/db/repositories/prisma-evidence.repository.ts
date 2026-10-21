@@ -90,6 +90,22 @@ export class PrismaEvidenceRepository
     return count;
   }
 
+  async renewValidity(
+    dataSourceId: string,
+    collectedAt: Date,
+    validUntil: Date,
+  ): Promise<number> {
+    const { count } = await this.prisma.evidenceNormalized.updateMany({
+      where: {
+        data_source_id: dataSourceId,
+        state: { in: [EvidenceState.CONFIRMED, EvidenceState.NOT_FOUND] },
+      },
+      data: { collected_at: collectedAt, valid_until: validUntil },
+    });
+
+    return count;
+  }
+
   async hasAnsweredCollection(
     cnpj: string,
     dataSourceId: string,

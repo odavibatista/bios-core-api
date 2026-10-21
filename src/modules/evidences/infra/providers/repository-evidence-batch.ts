@@ -1,6 +1,6 @@
 import type { EvidenceSourceConfig } from '@modules/data-sources/domain/dtos/providers/evidence-source.dto.js';
 import { parseCnpj } from '@shared/domain/value-objects/cnpj.js';
-import { contentHash } from '../../domain/canonical-json.js';
+import { contentHash } from '@shared/domain/canonical-json.js';
 import { buildConfirmedEvidence } from '../../domain/confirmed-evidence.js';
 import { InvalidEvidenceError } from '../../domain/dtos/errors/evidence.errors.js';
 import type {

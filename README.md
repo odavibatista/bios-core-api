@@ -163,18 +163,18 @@ conta.
 
 ## Filas (BullMQ)
 
-Toda a comunicação entre o core e os serviços de ingestão passa por filas BullMQ sobre o
-Redis — não há chamada HTTP entre serviços. As filas de ingestão são consumidas pelo serviço
-dono do fluxo; a única consumida **aqui dentro** é a de e-mails, porque não existe serviço
-separado de envio.
+Toda a comunicação entre quem pede e quem processa passa por filas BullMQ sobre o Redis — não
+há chamada HTTP entre serviços. A ingestão **não** é um serviço à parte: cada fonte é um módulo
+do core (`ibama/`, `receita/`…), e o consumidor de cada fila é um `@Processor` hospedado no
+módulo dono do fluxo. Um consumidor por fila: dois na mesma fila competiriam pelos jobs.
 
-| Fila | Conteúdo |
-| --- | --- |
-| `company-profile` | Dados cadastrais por CNPJ |
-| `environmental-evidences` | Evidências ambientais e de conduta (IBAMA, CEIS/CNEP) |
-| `ghg-inventory` | Inventário de emissões (fallback do GHG Protocol) |
-| `ods-scoring` | Recálculo de índice e confiança por ODS |
-| `email-dispatch` | E-mails transacionais (consumida nesta API) |
+| Fila | Conteúdo | Consumidor |
+| --- | --- | --- |
+| `company-profile` | Dados cadastrais por CNPJ | `CompanyProfileProcessor` (`companies/`) |
+| `environmental-evidences` | Evidências ambientais e de conduta (IBAMA, CEIS/CNEP) | `IbamaIngestionProcessor` (`ibama/`), por enquanto só o lote diário |
+| `ghg-inventory` | Inventário de emissões (fallback do GHG Protocol) | ainda não implementado |
+| `ods-scoring` | Recálculo de índice e confiança por ODS | ainda não implementado |
+| `email-dispatch` | E-mails transacionais | consumida nesta API (`mailing/`) |
 
 O contrato é `QueueProvider`, com três operações:
 
@@ -198,6 +198,12 @@ await queues.schedule({ queue, id: 'ibama-daily-ingestion', jobName, cron: '0 4 
 - **Jobs repetíveis.** `QUEUE_SCHEDULES` declara os agendamentos (cron), registrados a cada
   boot pelo `QueueSchedulesInitializer`. O registro é idempotente pelo `id`: reiniciar a API
   não duplica o disparo. Desligue com `QUEUE_SCHEDULES_SYNC_ON_BOOT=false`.
+- **Retry por agendamento.** Um agendamento pode trazer a própria política (`retry`), no lugar da
+  da fila. A fila `environmental-evidences` é compartilhada por jobs de naturezas opostas: o lote
+  diário do IBAMA (minutos por tentativa, fonte que costuma ficar horas fora do ar) e, adiante,
+  os jobs por CNPJ (que erram rápido para quem espera). O lote declara **5 tentativas com
+  backoff exponencial de base 5 min** (5, 10, 20 e 40 min entre elas); os demais jobs da fila
+  mantêm a política curta da fila (5 tentativas, base de 5 s).
 - **A API sobe sem Redis.** A conexão é `lazyConnect` e o `/health` reporta
   `checks.redis`. Por esse mesmo motivo a espera consulta o estado do job em intervalos
   curtos em vez de usar `QueueEvents`: o `QueueEvents` abre uma conexão bloqueante ao ser
@@ -699,8 +705,8 @@ O IBAMA não tem consulta por CNPJ: publica o dump inteiro de cada recurso, e o 
 (UC14): o **auto de infração** (`.zip` com um CSV por ano, hoje 48 arquivos e cerca de 720 MB
 descompactados) e o **termo de embargo** (um `.csv` de cerca de 210 MB). `IbamaDataSource`
 (`ibama/`, slug `IBAMA`) **baixa** o dump e entrega um `IbamaDump`, que lê os registros em fluxo.
-O adapter não grava nada: a normalização em evidências é a próxima subseção, e o agendamento do
-job, a retentativa e o controle de execuções ficam para a issue do job diário.
+O adapter não grava nada: a normalização em evidências é a próxima subseção, e o job diário que
+agenda, repete e registra tudo isso (checksum, execuções, retry) é a subseção seguinte.
 
 - **Onde estão os arquivos.** `data_sources.base_url` do IBAMA aponta para o armazenamento onde o
   IBAMA os publica (o portal CKAN só aponta para ele), e o adapter acrescenta o caminho de cada
@@ -795,6 +801,74 @@ await batch.finish(); // remove o que o dump deixou de listar
   terem sido carregados**: com um deles faltando, evidências válidas dele seriam removidas. Sem
   chamá-lo (uma carga que falhou), nada é removido, e as evidências anteriores seguem até vencer
   (UC14, fluxo 2.1). A validade de tudo o que a carga grava é renovada (`cache_ttl_seconds`).
+
+### Job diário do IBAMA (consumidor, execuções, retry)
+
+O cron `0 4 * * *` (`QUEUE_SCHEDULES`, id `ibama-daily-ingestion`) publica o job `ingest-ibama-dumps`
+na fila `environmental-evidences`, e o `IbamaIngestionProcessor` (`ibama/infra/queue/`), hospedado
+no core, o executa por `IngestIbamaDumpsUseCase` (UC14). O consumidor despacha pelo **nome** do
+job; nome desconhecido, payload que não seja um objeto ou job sem identificador falham sem
+repetição (`UnrecoverableError`). Hoje a fila só tem este job; os próximos (o avulso por CNPJ e a
+consolidação) entram aqui ou, quando a consolidação chegar, num despachante acima do módulo.
+
+O fluxo de uma execução, nesta ordem:
+
+1. **Abre a execução** em `ingestion_runs` (`RUNNING`, `run_type = SCHEDULED`, `job_id` do BullMQ).
+   O `started_at` é também a **data de coleta** de tudo o que a execução grava.
+2. **Baixa os dois dumps** (autos de infração e termos de embargo) e só então decide. Se algum não
+   vier, o job falha (`IbamaDumpUnavailableError`, com o motivo de cada um) e a fila o repete.
+3. **Compara o checksum.** `dump_checksum` é um só por execução, e o lote tem dois arquivos: guarda-se
+   o hash do mapa recurso → SHA-256 de cada arquivo (`combineDumpChecksums`). Muda se **qualquer**
+   dos dois muda, não depende da ordem do download e não confunde um arquivo trocado pelo outro. A
+   referência é a última execução **`SUCCEEDED`**; uma execução pulada ou falha mais recente não conta.
+4. **Dump idêntico** → `SKIPPED_UNCHANGED`: nada é reprocessado, mas a **validade das evidências é
+   renovada** (`RenewSourceEvidencesUseCase`: `collected_at` = início da execução e `valid_until` =
+   início + janela da fonte, num único `updateMany`, só para `CONFIRMED` e `NOT_FOUND` da fonte; a
+   `UNKNOWN` não envelhece e as de outras fontes não são tocadas). Sem isso, o IBAMA republicando o
+   mesmo arquivo por um fim de semana deixaria, passados os dois dias de validade, todas as evidências
+   `OUTDATED` com o dado vigente.
+5. **Dump diferente** → abre a carga, normaliza e grava os dois recursos em fluxo e, **só depois dos
+   dois**, encerra a carga (`batch.finish()`), que remove o que o dump deixou de listar. Em nenhuma
+   falha o `finish` roda.
+6. **Encerra a execução** (`SUCCEEDED`) com `records_read` (linhas lidas dos dois dumps, as
+   descartadas incluídas), `records_upserted` (evidências gravadas) e `records_discarded` (as linhas
+   descartadas por pessoa física, sem documento, documento inválido ou malformadas, **mais** os registros
+   anulados que não viraram evidência).
+7. **Apaga os arquivos temporários** dos dois dumps, sempre (`finally`), com sucesso, skip ou falha.
+
+- **Uma execução por job.** As tentativas do mesmo job (`job_id`) reabrem a mesma linha de
+  `ingestion_runs` (volta a `RUNNING`, com o início da nova tentativa e sem o erro anterior), em vez de
+  gerar uma linha por tentativa. Por isso `started_at` é o início da tentativa que de fato gravou.
+- **`FAILED` só na última tentativa.** O consumidor compara `attemptsMade + 1` com as tentativas do
+  job: nas intermediárias a execução segue `RUNNING`; na última, ou num erro que não admite repetição
+  (fonte `IBAMA` **desabilitada** no catálogo, que falha já na primeira tentativa com
+  `UnrecoverableError`), vira `FAILED` com a mensagem (até 500 caracteres, sem dado pessoal). Falhar a
+  execução **não apaga evidência alguma**: as anteriores seguem até o fim da validade e então aparecem
+  como `OUTDATED` (UC14, fluxo 2.1). Se nem gravar o `FAILED` for possível, o erro original é o que sobe
+  para a fila.
+- **Retry e backoff.** O agendamento declara 5 tentativas com backoff exponencial de base 5 min (5, 10,
+  20 e 40 min) — ver "Filas (BullMQ)". Jobs fora do agendador seguem a política da fila.
+- **Concorrência 3.** O lote ocupa um worker por vários minutos; a fila é a mesma dos jobs por CNPJ,
+  que não podem esperar atrás dele. Um job travado por queda do processo é reexecutado do início, e a
+  carga é idempotente (mesmas chaves). Dois lotes ao mesmo tempo (uma repetição e um novo disparo) também
+  convergem para o mesmo resultado; não há trava.
+- **Recálculo do índice fica fora.** O passo 5 do UC14 (recalcular o índice dos CNPJs afetados) é o
+  gatilho de ingestão do recálculo por fila (UC15). O conjunto de afetados não é guardado: toda evidência
+  da execução tem `collected_at` igual ao `started_at` dela, e o bruto aponta a execução.
+- **Disparo manual.** Não há endpoint. Em desenvolvimento, publique o job na fila
+  (`queue.add('ingest-ibama-dumps', {})`) ou use a política de teste dos e2e.
+- **Bancos criados antes da #69.** O seed não altera fontes existentes: confira `base_url`,
+  `request_timeout_ms` (600 000) e `cache_ttl_seconds` (172 800) da fonte `IBAMA`; sem isso o download
+  recebe 404.
+
+**Medido com os dumps reais** (21/10/2026, MongoDB e Redis locais, os dois arquivos servidos por um
+servidor HTTP local): a primeira execução leva **cerca de 10,5 min** (629 s) para ler 829 239 linhas,
+gravar **229 184 evidências** (e o mesmo número de registros brutos) e descartar 600 055 (pessoa física,
+sem documento ou inválido, e anulados); o pico de memória do processo de teste foi de 230 MB. O job
+não foi dado como travado em nenhum momento (`stalledCounter = 0`), então o `lockDuration` padrão
+(30 s) basta enquanto a leitura é assíncrona. A segunda execução, com os mesmos arquivos, terminou
+como `SKIPPED_UNCHANGED` em **12 s**: nenhum registro lido, nenhuma evidência nova, e as 229 184
+existentes com a validade renovada.
 
 ## Consulta de empresa por CNPJ
 

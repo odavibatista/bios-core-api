@@ -4,8 +4,9 @@
  * A comunicação entre quem pede e quem processa acontece exclusivamente
  * por estas filas, sem chamadas HTTP entre os serviços
  * (`14-Projeto-e-Arquitetura.md`, seção 2). Cada fila tem um único consumidor,
- * que vive onde o fluxo é dono (hoje o e-mail e o cadastro por CNPJ são atendidos no
- * próprio core; os demais, nos serviços de ingestão); o core é produtor de todas elas.
+ * que vive no módulo dono do fluxo, dentro do próprio core: hoje o e-mail, o
+ * cadastro por CNPJ e o lote diário do IBAMA já têm o seu, e os das demais
+ * entram com as respectivas fontes.
  */
 export const QueueName = {
   /** Dados cadastrais por CNPJ (BrasilAPI → OpenCNPJ → Minha Receita + IBGE). */
@@ -83,4 +84,14 @@ export interface QueueSchedule {
 
   /** Padrão cron do disparo (fuso do processo). */
   cron: string;
+
+  /**
+   * Política de repetição **deste** job, no lugar da política da fila.
+   *
+   * A fila é compartilhada: o lote diário (centenas de milhares de registros,
+   * minutos por tentativa, uma fonte que costuma ficar fora por horas) e os
+   * jobs por CNPJ (que erram rápido para quem espera) têm necessidades
+   * opostas, e a política da fila só atende a segunda. Ausente, vale a da fila.
+   */
+  retry?: QueueRetryPolicy;
 }

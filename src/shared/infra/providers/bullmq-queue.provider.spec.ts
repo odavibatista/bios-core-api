@@ -336,6 +336,55 @@ describe('BullMqQueueProvider', () => {
       );
     });
 
+    it('sem política própria, o job agendado herda a da fila', async () => {
+      const queue = fakeQueue();
+      const schedule = queueScheduleFactory.build({
+        queue: QueueName.ENVIRONMENTAL_EVIDENCES,
+        retry: undefined,
+      });
+
+      await createProvider({
+        [QueueName.ENVIRONMENTAL_EVIDENCES]: queue,
+      }).schedule(schedule);
+
+      expect(queue.upsertJobScheduler).toHaveBeenCalledWith(
+        schedule.id,
+        { pattern: schedule.cron },
+        {
+          name: schedule.jobName,
+          opts: buildJobOptions(QueueName.ENVIRONMENTAL_EVIDENCES),
+        },
+      );
+    });
+
+    it('com política própria, o job agendado repete como ela manda, e não como a fila', async () => {
+      const queue = fakeQueue();
+      const retry = {
+        attempts:
+          QUEUE_RETRY_POLICIES[QueueName.ENVIRONMENTAL_EVIDENCES].attempts + 2,
+        backoffMs: 300_000,
+      };
+      const schedule = queueScheduleFactory.build({
+        queue: QueueName.ENVIRONMENTAL_EVIDENCES,
+        retry,
+      });
+
+      await createProvider({
+        [QueueName.ENVIRONMENTAL_EVIDENCES]: queue,
+      }).schedule(schedule);
+
+      const [, , template] = queue.upsertJobScheduler.mock.calls[0] as [
+        string,
+        unknown,
+        { opts: { attempts: number; backoff: unknown } },
+      ];
+      expect(template.opts.attempts).toBe(retry.attempts);
+      expect(template.opts.backoff).toEqual({
+        type: 'exponential',
+        delay: retry.backoffMs,
+      });
+    });
+
     it('registrar o mesmo agendamento duas vezes não cria um segundo', async () => {
       const queue = fakeQueue();
       const schedule = queueScheduleFactory.build({

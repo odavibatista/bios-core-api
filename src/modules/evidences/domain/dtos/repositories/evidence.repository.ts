@@ -87,6 +87,19 @@ export abstract class EvidenceRepository {
   ): Promise<number>;
 
   /**
+   * Renova a validade das evidências da fonte, de **qualquer empresa**, que
+   * ainda respondem (`CONFIRMED` ou `NOT_FOUND`): a data de coleta passa a
+   * `collectedAt` e a validade, a `validUntil`. As `UNKNOWN` ficam como estão:
+   * não há dado a renovar, e a janela delas é a da nova tentativa. Devolve
+   * quantas renovou.
+   */
+  abstract renewValidity(
+    dataSourceId: string,
+    collectedAt: Date,
+    validUntil: Date,
+  ): Promise<number>;
+
+  /**
    * Indica se há, para a empresa e a fonte, alguma coleta que de fato
    * respondeu (`CONFIRMED` ou `NOT_FOUND`), isto é, algo além de `UNKNOWN`.
    */
