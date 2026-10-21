@@ -28,7 +28,7 @@ export type QueueRegistry = ReadonlyMap<QueueName, Queue>;
  * Produção de jobs sobre BullMQ e Redis (NFCO01, NFPD02).
  *
  * Cada fila declarada é registrada pelo módulo e chega aqui pelo mapa de filas;
- * os consumidores vivem nos serviços de ingestão.
+ * os consumidores vivem nos módulos donos de cada fluxo.
  *
  * A espera pela conclusão consulta o estado do job em intervalos curtos, em vez
  * de usar `QueueEvents`. O motivo é a exigência de a API subir com o Redis fora
