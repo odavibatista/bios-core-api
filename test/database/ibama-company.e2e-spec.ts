@@ -196,7 +196,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
     }
 
     /**
-     * Publica o job do lote e espera o consumidor real concluí-lo (ou
+     * Publica o job avulso e espera o consumidor real concluí-lo (ou
      * esgotá-lo). A política de repetição é escolhida pelo teste: o backoff de
      * produção é de minutos.
      */

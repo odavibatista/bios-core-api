@@ -20,7 +20,7 @@ import { IBAMA_SLUG } from '../providers/ibama.data-source.js';
 
 /**
  * Consome a fila `environmental-evidences` no core: executa o lote diário do
- * IBAMA publicado pelo agendador (UC14; ver `QUEUE_SCHEDULES`).
+ * IBAMA publicado pelo agendador e a coleta avulsa por CNPJ (UC14).
  *
  * Despacha lote diário e coleta avulsa por CNPJ pelo nome do job. A futura
  * consolidação entra aqui ou num despachante acima deste módulo. Um nome que ninguém
