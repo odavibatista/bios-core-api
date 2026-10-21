@@ -9,10 +9,17 @@ import type { Prisma } from '@prisma/client';
 export interface EvidenceFinding {
   /**
    * Identificador do registro no órgão de origem (ex.: número do auto de
-   * infração). Identifica a evidência entre coletas e é exibido para auditoria
-   * (RF09).
+   * infração). É o que se exibe ao usuário para auditoria (RF09) e, quando não
+   * há `identity`, o que identifica a evidência entre coletas.
    */
   reference: string;
+
+  /**
+   * Identificador do registro que a fonte garante único, quando a `reference`
+   * exibida não é (o IBAMA repete o número de um auto em registros diferentes).
+   * Identifica a evidência entre coletas no lugar da `reference`.
+   */
+  identity?: string;
 
   /** Resumo legível exibido ao usuário. */
   summary?: string | null;

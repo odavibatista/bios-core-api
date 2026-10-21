@@ -699,7 +699,8 @@ O IBAMA não tem consulta por CNPJ: publica o dump inteiro de cada recurso, e o 
 (UC14): o **auto de infração** (`.zip` com um CSV por ano, hoje 48 arquivos e cerca de 720 MB
 descompactados) e o **termo de embargo** (um `.csv` de cerca de 210 MB). `IbamaDataSource`
 (`ibama/`, slug `IBAMA`) **baixa** o dump e entrega um `IbamaDump`, que lê os registros em fluxo.
-Não grava nada: gravar, normalizar e agendar são das issues seguintes.
+O adapter não grava nada: a normalização em evidências é a próxima subseção, e o agendamento do
+job, a retentativa e o controle de execuções ficam para a issue do job diário.
 
 - **Onde estão os arquivos.** `data_sources.base_url` do IBAMA aponta para o armazenamento onde o
   IBAMA os publica (o portal CKAN só aponta para ele), e o adapter acrescenta o caminho de cada
@@ -743,6 +744,57 @@ Não grava nada: gravar, normalizar e agendar são das issues seguintes.
   normaliza decide como tratar; o adapter entrega as linhas como estão.
 - **Quem usa precisa chamar `dispose()`** ao terminar (inclusive em falha): ele apaga a pasta
   temporária do dump. `records()` pode ser chamado de novo (relê o arquivo), e `stats` recomeça.
+
+### Normalização das evidências do IBAMA
+
+`NormalizeIbamaRecordsUseCase` (`ibama/`) transforma os `IbamaRecord` em evidências por CNPJ e as
+grava, junto do registro bruto, pela **carga em lote** do módulo de evidências (UC14, passos 3 e
+4; RF08). Quem orquestra (o job) abre a carga, baixa e normaliza cada recurso e, se **todos**
+deram certo, a encerra:
+
+```ts
+const batch = await openEvidenceBatch.execute({ sourceSlug: 'IBAMA', collectedAt, ingestionRunId });
+for (const resource of [AUTO_INFRACAO, TERMO_EMBARGO]) {
+  const downloaded = await ibama.download(resource, context);
+  // ... só segue se FOUND
+  try { await normalize.execute({ records: downloaded.data.records(), batch }); }
+  finally { await downloaded.data.dispose(); }
+}
+await batch.finish(); // remove o que o dump deixou de listar
+```
+
+- **O que vira evidência.** Cada registro vira uma evidência `CONFIRMED` da categoria e do ODS do
+  catálogo (`INFRACAO_AMBIENTAL`, ODS 15, sinal negativo), com a **referência pública** do
+  documento (`1092-A`), um **resumo em português** (`Multa simples: Infração da Flora — R$ 6.932,00
+  (FORTALEZA/CE)`; `Termo de embargo — Desmatamento — 12,5 ha (Lages/SC)`), **detalhes** com valores
+  já convertidos (valor da multa, hectares, município, UF, processo), a **data** do auto ou do
+  termo (só o dia, o dump não diz o fuso) e o **link** do conjunto de dados no portal do IBAMA
+  (RF09: o dump não traz um link por registro, então a referência identifica o registro nele).
+- **Registro anulado não é evidência.** Auto ou termo cancelado (`SIT_CANCELADO = S`), excluído ou
+  substituído por outro (`DES_STATUS_FORMULARIO`) é pulado e contado: uma infração anulada não
+  aconteceu para efeito de índice, e uma evidência negativa que não vale seria injusta com a
+  empresa (IND01). Vale também para o que **passa** a ser anulado: some na carga seguinte.
+- **Embargo suspenso continua sendo evidência.** O embargo desembargado aconteceu; o resumo diz
+  `desembargado em 01/03/2024` e `details.lifted` o marca. Quanto ele pesa é do cálculo do índice.
+- **Identidade da evidência.** O número público se repete no dump, mas o identificador interno
+  (`SEQ_*`) não: a chave da evidência é `IBAMA:<cnpj>:AI-<seq>` (auto) ou `TE-<seq>` (termo), e, nos
+  documentos novos, que não têm `SEQ`, o número. O prefixo evita colisão entre um auto e um termo
+  de mesmo `SEQ`. Dois registros com o mesmo número público e `SEQ` diferentes são duas
+  evidências; a mesma linha duas vezes no dump é uma.
+- **Registro bruto (auditoria, NFCO02).** Cada registro é gravado em `evidence_raw` uma única vez por
+  conteúdo (`payload_hash`, índice único com a fonte): repetir a carga reaproveita o registro e
+  mantém a data e a execução da primeira coleta; se o IBAMA **alterar** o registro, nasce uma nova
+  versão bruta e a evidência passa a apontar para ela. O payload é o do adapter, **refeito pela lista
+  de colunas permitidas** aqui também (sem nome do autuado, texto livre nem geometria).
+- **Em fluxo, sem crescer a memória.** Os registros são gravados em lotes de 200, com até 25
+  gravações simultâneas (cada uma é o bruto e a evidência). A falha de uma gravação interrompe o
+  lote sem iniciar itens novos.
+- **Encerrar a carga (`batch.finish()`).** Remove as evidências da fonte, de qualquer empresa,
+  coletadas antes da carga: o que o IBAMA deixou de listar, um auto cancelado depois, uma empresa
+  que saiu do dump e os `NOT_FOUND` e `UNKNOWN` de antes. **Só se chama depois de todos os recursos
+  terem sido carregados**: com um deles faltando, evidências válidas dele seriam removidas. Sem
+  chamá-lo (uma carga que falhou), nada é removido, e as evidências anteriores seguem até vencer
+  (UC14, fluxo 2.1). A validade de tudo o que a carga grava é renovada (`cache_ttl_seconds`).
 
 ## Consulta de empresa por CNPJ
 
@@ -909,6 +961,18 @@ a data e a validade e **limpa** o campo que a fonte deixou de informar (grava `n
 O índice único da chave decide a disputa entre gravações simultâneas: quem perde a criação repete
 uma vez, agora como atualização. O fluxo não usa transação: cada passo é idempotente, e uma falha
 no meio se corrige repetindo a coleta (a fila já repete).
+
+Quando a referência que a fonte exibe **não é única** (o IBAMA repete o número de um auto em
+registros diferentes), o registro informa uma `identity`, que passa a compor a chave no lugar da
+referência; a referência continua sendo o que se mostra ao usuário (RF09).
+
+**Carga em lote: `OpenEvidenceBatchUseCase`.** Para as fontes em lote (o dump diário do IBAMA, com
+centenas de milhares de registros de muitas empresas), o retrato por empresa não serve: a carga é
+**em fluxo**. `batch.write(entradas)` grava cada registro ao chegar, o bruto (`evidence_raw`, uma
+vez por conteúdo) e a evidência, sem acumular nada na memória; `batch.finish()` remove, ao final,
+as evidências da fonte que a carga não renovou (`collected_at` anterior à carga). A fonte e a
+validade são lidas do catálogo uma vez, na abertura. Falhar no meio não apaga nada, pois quem não
+chamou `finish` não removeu evidência alguma.
 
 Erros de configuração (fonte que não é de evidências, CNPJ não canônico, registro sem referência)
 são falhas de programação, e não exceções de domínio: `EvidenceSourceNotFoundError` e

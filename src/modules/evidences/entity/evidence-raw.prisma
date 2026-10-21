@@ -1,11 +1,13 @@
-/// Camada bruta de dados: registro original de uma fonte, sem transformação.
+/// Camada bruta de dados: registro de uma fonte, sem transformação além do corte nas colunas permitidas.
 ///
 /// Mantida para auditoria (NFCO02).
 ///
 /// Observações:
 ///  - registros de pessoa física (CPF) são descartados antes de qualquer persistência,
-///    inclusive nesta camada (INL02);
-///  - `payload_hash` deduplica o mesmo registro entre execuções;
+///    inclusive nesta camada (INL02), e o payload leva só as colunas permitidas da fonte
+///    (sem nome de pessoa, texto livre nem geometria);
+///  - `payload_hash` deduplica o mesmo registro entre execuções: o mesmo conteúdo, na mesma
+///    fonte, é gravado uma vez, e um registro alterado na fonte nasce como nova versão;
 ///  - mapeado para a coleção `evidence_raw`.
 model EvidenceRaw {
   /// Identificador do registro bruto.
@@ -23,10 +25,10 @@ model EvidenceRaw {
   /// Identificador do registro na fonte (ex.: número do auto de infração).
   external_reference String?
 
-  /// Registro original da fonte.
+  /// Registro da fonte, reduzido às colunas permitidas.
   payload Json
 
-  /// Hash do payload, usado para deduplicação.
+  /// Hash do conteúdo, usado para deduplicação.
   payload_hash String
 
   /// Data/hora da coleta.
