@@ -1,15 +1,21 @@
 import { Module } from '@nestjs/common';
 import { DataSourceRequestLogRepository } from '../../domain/dtos/repositories/data-source-request-log.repository.js';
 import { DataSourceRepository } from '../../domain/dtos/repositories/data-source.repository.js';
+import { IngestionRunRepository } from '../../domain/dtos/repositories/ingestion-run.repository.js';
 import { SourceHttpClient } from '../../domain/providers/source-http-client.provider.js';
 import { SourceRateLimiter } from '../../domain/providers/source-rate-limiter.provider.js';
 import { PrismaDataSourceRequestLogRepository } from '../db/repositories/prisma-data-source-request-log.repository.js';
 import { PrismaDataSourceRepository } from '../db/repositories/prisma-data-source.repository.js';
+import { PrismaIngestionRunRepository } from '../db/repositories/prisma-ingestion-run.repository.js';
 import { FetchSourceHttpClient } from '../providers/fetch-source-http-client.provider.js';
 import { RedisSourceRateLimiter } from '../providers/redis-source-rate-limiter.provider.js';
 import { ResolveSourceCacheTtlUseCase } from '../usecases/cache/resolve-source-cache-ttl.usecase.js';
 import { ListCadastralChainUseCase } from '../usecases/chain/list-cadastral-chain.usecase.js';
 import { ResolveEvidenceSourceUseCase } from '../usecases/evidence/resolve-evidence-source.usecase.js';
+import { FailIngestionRunUseCase } from '../usecases/ingestion/fail-ingestion-run.usecase.js';
+import { FindLastSucceededIngestionRunUseCase } from '../usecases/ingestion/find-last-succeeded-ingestion-run.usecase.js';
+import { FinishIngestionRunUseCase } from '../usecases/ingestion/finish-ingestion-run.usecase.js';
+import { OpenIngestionRunUseCase } from '../usecases/ingestion/open-ingestion-run.usecase.js';
 import { RequestDataSourceUseCase } from '../usecases/request/request-data-source.usecase.js';
 
 /**
@@ -26,7 +32,11 @@ import { RequestDataSourceUseCase } from '../usecases/request/request-data-sourc
  *  - `ListCadastralChainUseCase`: a ordem da cadeia de fallback cadastral, que
  *    é do catálogo;
  *  - `ResolveEvidenceSourceUseCase`: a categoria e o ODS das evidências de uma
- *    fonte, também do catálogo (RF08).
+ *    fonte, também do catálogo (RF08);
+ *  - `OpenIngestionRunUseCase`, `FinishIngestionRunUseCase`,
+ *    `FailIngestionRunUseCase` e `FindLastSucceededIngestionRunUseCase`: o
+ *    registro das execuções de ingestão e a referência da última bem-sucedida
+ *    (UC14).
  *
  * O contrato que os adapters implementam é `DataSourceInterface`
  * (`../../domain/data-source.interface.ts`).
@@ -35,6 +45,7 @@ import { RequestDataSourceUseCase } from '../usecases/request/request-data-sourc
   providers: [
     /* Repositórios */
     { provide: DataSourceRepository, useClass: PrismaDataSourceRepository },
+    { provide: IngestionRunRepository, useClass: PrismaIngestionRunRepository },
     {
       provide: DataSourceRequestLogRepository,
       useClass: PrismaDataSourceRequestLogRepository,
@@ -49,12 +60,20 @@ import { RequestDataSourceUseCase } from '../usecases/request/request-data-sourc
     RequestDataSourceUseCase,
     ListCadastralChainUseCase,
     ResolveEvidenceSourceUseCase,
+    OpenIngestionRunUseCase,
+    FinishIngestionRunUseCase,
+    FailIngestionRunUseCase,
+    FindLastSucceededIngestionRunUseCase,
   ],
   exports: [
     ResolveSourceCacheTtlUseCase,
     RequestDataSourceUseCase,
     ListCadastralChainUseCase,
     ResolveEvidenceSourceUseCase,
+    OpenIngestionRunUseCase,
+    FinishIngestionRunUseCase,
+    FailIngestionRunUseCase,
+    FindLastSucceededIngestionRunUseCase,
   ],
 })
 export class DataSourcesModule {}

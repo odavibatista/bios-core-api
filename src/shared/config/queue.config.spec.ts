@@ -35,6 +35,19 @@ describe('configuração de filas', () => {
       },
     );
 
+    it('a política própria de um job substitui a da fila', () => {
+      const retry = {
+        attempts: QUEUE_RETRY_POLICIES[QueueName.COMPANY_PROFILE].attempts + 4,
+        backoffMs: 777_000,
+      };
+
+      expect(buildJobOptions(QueueName.COMPANY_PROFILE, retry)).toMatchObject({
+        attempts: retry.attempts,
+        backoff: { type: 'exponential', delay: retry.backoffMs },
+        removeOnFail: false,
+      });
+    });
+
     it.each(QUEUE_NAMES)(
       '%s tenta mais de uma vez antes de desistir',
       (queue) => {
@@ -64,6 +77,16 @@ describe('configuração de filas', () => {
         queue: QueueName.ENVIRONMENTAL_EVIDENCES,
         cron: expect.stringMatching(/^\d+ \d+ \* \* \*$/),
       });
+    });
+
+    it('o lote diário do IBAMA espera minutos entre as tentativas, e a fila continua curta', () => {
+      const daily = QUEUE_SCHEDULES.find(({ id }) => id.includes('ibama'));
+      const queuePolicy =
+        QUEUE_RETRY_POLICIES[QueueName.ENVIRONMENTAL_EVIDENCES];
+
+      expect(daily?.retry).toEqual({ attempts: 5, backoffMs: 300_000 });
+      // Os jobs por CNPJ da mesma fila seguem errando rápido.
+      expect(queuePolicy.backoffMs).toBeLessThan(60_000);
     });
   });
 

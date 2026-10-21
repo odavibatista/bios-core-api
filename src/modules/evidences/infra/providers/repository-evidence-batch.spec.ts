@@ -2,7 +2,7 @@ import { EvidenceCategory, EvidenceState } from '@prisma/client';
 import { evidenceSourceFactory } from '@test/factories/evidences/evidence.factory.js';
 import { IBAMA_CNPJ } from '@test/factories/ibama/ibama-dump.factory.js';
 import { faker } from '@test/support/faker.js';
-import { contentHash } from '../../domain/canonical-json.js';
+import { contentHash } from '@shared/domain/canonical-json.js';
 import { InvalidEvidenceError } from '../../domain/dtos/errors/evidence.errors.js';
 import type { EvidenceBatchEntry } from '../../domain/dtos/providers/evidence-batch.dto.js';
 import type {
