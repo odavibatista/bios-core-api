@@ -9,6 +9,7 @@ import { PrismaEvidenceRepository } from './prisma-evidence.repository.js';
 describe('PrismaEvidenceRepository', () => {
   const upsert = vi.fn();
   const deleteMany = vi.fn();
+  const updateMany = vi.fn();
   const findFirst = vi.fn();
   const findMany = vi.fn();
   let repository: PrismaEvidenceRepository;
@@ -45,7 +46,13 @@ describe('PrismaEvidenceRepository', () => {
         {
           provide: PrismaService,
           useValue: {
-            evidenceNormalized: { upsert, deleteMany, findFirst, findMany },
+            evidenceNormalized: {
+              upsert,
+              deleteMany,
+              updateMany,
+              findFirst,
+              findMany,
+            },
           },
         },
       ],
@@ -191,6 +198,40 @@ describe('PrismaEvidenceRepository', () => {
       );
 
       const [{ where }] = deleteMany.mock.calls[0] as [{ where: object }];
+      expect(where).not.toHaveProperty('cnpj');
+    });
+  });
+
+  describe('renewValidity', () => {
+    it('renova a coleta e a validade só das evidências que ainda respondem, da fonte', async () => {
+      updateMany.mockResolvedValue({ count: 12 });
+      const sourceId = faker.database.mongodbObjectId();
+      const collectedAt = faker.date.recent();
+      const validUntil = faker.date.soon();
+
+      await expect(
+        repository.renewValidity(sourceId, collectedAt, validUntil),
+      ).resolves.toBe(12);
+
+      expect(updateMany).toHaveBeenCalledWith({
+        where: {
+          data_source_id: sourceId,
+          state: { in: [EvidenceState.CONFIRMED, EvidenceState.NOT_FOUND] },
+        },
+        data: { collected_at: collectedAt, valid_until: validUntil },
+      });
+    });
+
+    it('não filtra por empresa: a renovação vale para a fonte inteira', async () => {
+      updateMany.mockResolvedValue({ count: 0 });
+
+      await repository.renewValidity(
+        faker.database.mongodbObjectId(),
+        faker.date.recent(),
+        faker.date.soon(),
+      );
+
+      const [{ where }] = updateMany.mock.calls[0] as [{ where: object }];
       expect(where).not.toHaveProperty('cnpj');
     });
   });

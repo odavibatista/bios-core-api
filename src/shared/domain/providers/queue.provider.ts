@@ -8,7 +8,7 @@ import type {
 /**
  * Contrato de produção de jobs nas filas do sistema (NFCO01, NFPD02).
  *
- * Só o lado produtor: os consumidores vivem nos serviços de ingestão, que
+ * Só o lado produtor: os consumidores vivem nos módulos donos de cada fluxo, que
  * processam cada fila sem conhecer quem publicou. O core publica e, quando a
  * resposta é imediata, aguarda a conclusão com prazo.
  *
