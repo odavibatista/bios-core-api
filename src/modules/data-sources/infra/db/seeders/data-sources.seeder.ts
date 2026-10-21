@@ -63,7 +63,10 @@ export const DATA_SOURCES: readonly DataSourceDefinition[] = [
   {
     slug: 'IBAMA',
     name: 'IBAMA — Dados Abertos',
-    base_url: 'https://dadosabertos.ibama.gov.br',
+    // Armazenamento onde o IBAMA publica os arquivos dos dumps (o portal CKAN só
+    // aponta para eles). O adapter acrescenta o caminho de cada recurso.
+    base_url:
+      'https://stibamadadosabertosprd.blob.core.windows.net/dados-abertos/dados',
     role: DataSourceRole.EVIDENCE,
     ingestion_mode: IngestionMode.DAILY_BATCH,
     evidence_category: EvidenceCategory.INFRACAO_AMBIENTAL,
@@ -72,7 +75,8 @@ export const DATA_SOURCES: readonly DataSourceDefinition[] = [
     // diário a renova; dois dias deixam passar uma execução perdida sem vencer
     // a base inteira.
     cache_ttl_seconds: 2 * ONE_DAY,
-    request_timeout_ms: 60_000,
+    // Tempo do download inteiro de um dump (centenas de MB), e não de uma consulta.
+    request_timeout_ms: 600_000,
   },
   {
     slug: 'CGU_CEIS',

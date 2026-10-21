@@ -261,4 +261,18 @@ describe('FetchSourceHttpClient', () => {
       expect(init?.signal).toBeInstanceOf(AbortSignal);
     });
   });
+
+  describe('download: resposta 2xx sem corpo', () => {
+    it('é falha, não um arquivo vazio gravado', async () => {
+      fetchMock.mockResolvedValue(new Response(null, { status: 200 }));
+
+      await expect(
+        client.download({
+          ...request,
+          destination: 'nao-sera-criado',
+          maxBytes: 1_000,
+        }),
+      ).resolves.toEqual({ kind: 'FAILED', message: 'resposta sem corpo' });
+    });
+  });
 });

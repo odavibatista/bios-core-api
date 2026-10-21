@@ -109,11 +109,14 @@ export class RequestDataSourceUseCase extends UseCase<
       };
     }
 
-    const result = await this.httpClient.get({
+    const http = {
       url,
       headers: request.headers ?? {},
       timeoutMs: config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
-    });
+    };
+    const result = request.download
+      ? await this.httpClient.download({ ...http, ...request.download })
+      : await this.httpClient.get(http);
 
     return classify(result);
   }
@@ -185,13 +188,16 @@ function classify(result: SourceHttpResult): CalledResponse {
   const { status } = result;
 
   if (status >= 200 && status < 300) {
-    return result.json === undefined
+    // JSON numa consulta; arquivo baixado numa chamada de download.
+    const body = result.file ?? result.json;
+
+    return body === undefined
       ? {
           outcome: SourceOutcome.FAILURE,
           status,
           message: 'resposta sem corpo',
         }
-      : { outcome: SourceOutcome.SUCCESS, status, body: result.json };
+      : { outcome: SourceOutcome.SUCCESS, status, body };
   }
 
   if (status === 404) return { outcome: SourceOutcome.NOT_FOUND, status };
