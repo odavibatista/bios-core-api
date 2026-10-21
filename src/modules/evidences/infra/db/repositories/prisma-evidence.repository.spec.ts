@@ -167,6 +167,34 @@ describe('PrismaEvidenceRepository', () => {
     });
   });
 
+  describe('deleteNotCollectedSince', () => {
+    it('remove da fonte, de qualquer empresa, o que foi coletado antes do corte', async () => {
+      deleteMany.mockResolvedValue({ count: 7 });
+      const sourceId = faker.database.mongodbObjectId();
+      const before = faker.date.recent();
+
+      await expect(
+        repository.deleteNotCollectedSince(sourceId, before),
+      ).resolves.toBe(7);
+
+      expect(deleteMany).toHaveBeenCalledWith({
+        where: { data_source_id: sourceId, collected_at: { lt: before } },
+      });
+    });
+
+    it('não filtra por empresa', async () => {
+      deleteMany.mockResolvedValue({ count: 0 });
+
+      await repository.deleteNotCollectedSince(
+        faker.database.mongodbObjectId(),
+        faker.date.recent(),
+      );
+
+      const [{ where }] = deleteMany.mock.calls[0] as [{ where: object }];
+      expect(where).not.toHaveProperty('cnpj');
+    });
+  });
+
   describe('hasAnsweredCollection', () => {
     it('procura CONFIRMED ou NOT_FOUND da empresa e da fonte (UNKNOWN não conta)', async () => {
       findFirst.mockResolvedValue({ id_evidence: 'x' });

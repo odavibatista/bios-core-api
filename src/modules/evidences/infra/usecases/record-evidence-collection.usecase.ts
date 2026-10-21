@@ -19,13 +19,12 @@ import {
   type EvidenceToSave,
 } from '../../domain/dtos/repositories/evidence.repository.js';
 import {
-  buildEvidenceKey,
-  buildPlaceholderKey,
-} from '../../domain/evidence-key.js';
-import {
-  signalForCategory,
-  UNKNOWN_RETRY_WINDOW_SECONDS,
-} from '../../domain/evidence-rules.js';
+  baseEvidence,
+  buildConfirmedEvidence,
+  type EvidenceBuildContext,
+} from '../../domain/confirmed-evidence.js';
+import { buildPlaceholderKey } from '../../domain/evidence-key.js';
+import { UNKNOWN_RETRY_WINDOW_SECONDS } from '../../domain/evidence-rules.js';
 
 /**
  * Grava o resultado de consultar uma fonte de evidências para um CNPJ (RF08).
@@ -146,15 +145,15 @@ interface Context {
   collectedAt: Date;
 }
 
-type ValidContext = Context & { validUntil: Date };
+type ValidContext = EvidenceBuildContext;
 
 function addSeconds(date: Date, seconds: number): Date {
   return new Date(date.getTime() + seconds * 1_000);
 }
 
 /**
- * Uma evidência por registro. Se a fonte repete a mesma referência na coleta,
- * vale a última: duas gravações com a mesma chave só se sobrescreveriam.
+ * Uma evidência por registro. Se a fonte repete a mesma chave na coleta, vale a
+ * última: duas gravações com a mesma chave só se sobrescreveriam.
  */
 function toConfirmedEvidences(
   findings: readonly EvidenceFinding[],
@@ -163,25 +162,9 @@ function toConfirmedEvidences(
   const byKey = new Map<string, EvidenceToSave>();
 
   for (const finding of findings) {
-    const reference = finding.reference.trim();
-    if (reference === '') {
-      throw new InvalidEvidenceError(
-        `registro de "${context.source.slug}" sem referência no órgão de origem.`,
-      );
-    }
+    const evidence = buildConfirmedEvidence(finding, context);
 
-    const key = buildEvidenceKey(context.source.slug, context.cnpj, reference);
-    byKey.set(key, {
-      ...base(context),
-      key,
-      state: EvidenceState.CONFIRMED,
-      summary: finding.summary ?? null,
-      sourceReference: reference,
-      sourceUrl: finding.url ?? null,
-      details: finding.details ?? null,
-      publishedAt: finding.publishedAt ?? null,
-      rawEvidenceId: finding.rawEvidenceId ?? null,
-    });
+    byKey.set(evidence.key, evidence);
   }
 
   return [...byKey.values()];
@@ -192,7 +175,7 @@ function placeholder(
   context: ValidContext,
 ): EvidenceToSave {
   return {
-    ...base(context),
+    ...baseEvidence(context),
     key: buildPlaceholderKey(context.source.slug, context.cnpj, state),
     state,
     summary: null,
@@ -201,17 +184,5 @@ function placeholder(
     details: null,
     publishedAt: null,
     rawEvidenceId: null,
-  };
-}
-
-function base({ cnpj, source, collectedAt, validUntil }: ValidContext) {
-  return {
-    cnpj,
-    dataSourceId: source.id,
-    odsId: source.odsId,
-    category: source.category,
-    signal: signalForCategory(source.category),
-    collectedAt,
-    validUntil,
   };
 }
