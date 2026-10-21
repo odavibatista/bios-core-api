@@ -27,7 +27,10 @@ describe('RequestDataSourceUseCase', () => {
     record: vi.fn<DataSourceRequestLogRepository['record']>(),
   };
   const rateLimiter = { tryAcquire: vi.fn<SourceRateLimiter['tryAcquire']>() };
-  const httpClient = { get: vi.fn<SourceHttpClient['get']>() };
+  const httpClient = {
+    get: vi.fn<SourceHttpClient['get']>(),
+    download: vi.fn<SourceHttpClient['download']>(),
+  };
   let config: DataSourceRequestConfig;
   let request: DataSourceRequest;
   let useCase: RequestDataSourceUseCase;
@@ -133,6 +136,120 @@ describe('RequestDataSourceUseCase', () => {
         httpStatus: 200,
         durationMs: 120,
         errorMessage: undefined,
+      });
+    });
+  });
+
+  describe('download de arquivo (dump em lote)', () => {
+    const file = {
+      path: '/tmp/dump',
+      bytes: 1_234,
+      checksum: faker.string.hexadecimal({
+        length: 64,
+        prefix: '',
+        casing: 'lower',
+      }),
+    };
+    const downloadRequest: DataSourceRequest = {
+      slug: 'IBAMA',
+      segments: ['SIFISC', 'auto_infracao.zip'],
+      download: { destination: '/tmp/dump', maxBytes: 1_000_000 },
+      context: { trigger: RequestTrigger.SCHEDULED_JOB },
+    };
+
+    beforeEach(() => {
+      config.slug = 'IBAMA';
+      config.baseUrl = 'https://dados.ibama.test/dados/';
+      httpClient.download.mockResolvedValue({
+        kind: 'RESPONSE',
+        status: 200,
+        file,
+      });
+    });
+
+    it('baixa pelo cliente de download, e não pelo de consulta, com o destino e o limite pedidos', async () => {
+      await useCase.execute(downloadRequest);
+
+      expect(httpClient.download).toHaveBeenCalledWith({
+        url: 'https://dados.ibama.test/dados/SIFISC/auto_infracao.zip',
+        headers: {},
+        timeoutMs: 5_000,
+        destination: '/tmp/dump',
+        maxBytes: 1_000_000,
+      });
+      expect(httpClient.get).not.toHaveBeenCalled();
+    });
+
+    it('o arquivo baixado é o corpo do sucesso', async () => {
+      await expect(useCase.execute(downloadRequest)).resolves.toEqual({
+        outcome: SourceOutcome.SUCCESS,
+        status: 200,
+        body: file,
+      });
+    });
+
+    it('sem pedir download, a consulta continua pelo cliente de consulta', async () => {
+      await useCase.execute(request);
+
+      expect(httpClient.get).toHaveBeenCalledOnce();
+      expect(httpClient.download).not.toHaveBeenCalled();
+    });
+
+    it('registra o download no log como qualquer outra chamada', async () => {
+      await useCase.execute(downloadRequest);
+
+      expect(requestLogRepository.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          dataSourceId: config.id,
+          trigger: RequestTrigger.SCHEDULED_JOB,
+          outcome: RequestOutcome.SUCCESS,
+          httpStatus: 200,
+        }),
+      );
+    });
+
+    it('respeita o limite por minuto da fonte', async () => {
+      config.rateLimitPerMinute = 1;
+      rateLimiter.tryAcquire.mockResolvedValue(false);
+
+      await expect(useCase.execute(downloadRequest)).resolves.toMatchObject({
+        outcome: SourceOutcome.RATE_LIMITED,
+      });
+      expect(httpClient.download).not.toHaveBeenCalled();
+    });
+
+    it('fonte desabilitada não é baixada', async () => {
+      config.isEnabled = false;
+
+      await expect(useCase.execute(downloadRequest)).resolves.toEqual({
+        outcome: SourceOutcome.DISABLED,
+      });
+      expect(httpClient.download).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      [{ kind: 'TIMEOUT' }, SourceOutcome.TIMEOUT],
+      [{ kind: 'FAILED', message: 'arquivo vazio' }, SourceOutcome.FAILURE],
+      [{ kind: 'RESPONSE', status: 500 }, SourceOutcome.FAILURE],
+      [{ kind: 'RESPONSE', status: 404 }, SourceOutcome.NOT_FOUND],
+    ] as [SourceHttpResult, string][])(
+      'o desfecho %o é classificado como %s',
+      async (result, outcome) => {
+        httpClient.download.mockResolvedValue(result);
+
+        await expect(useCase.execute(downloadRequest)).resolves.toMatchObject({
+          outcome,
+        });
+      },
+    );
+
+    it('2xx sem arquivo é FAILURE: não há dump a entregar', async () => {
+      httpClient.download.mockResolvedValue({ kind: 'RESPONSE', status: 200 });
+
+      await expect(useCase.execute(downloadRequest)).resolves.toEqual({
+        outcome: SourceOutcome.FAILURE,
+        status: 200,
+        message: 'resposta sem corpo',
       });
     });
   });

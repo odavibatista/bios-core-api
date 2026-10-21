@@ -1,9 +1,19 @@
+import { createHash } from 'node:crypto';
+import { createWriteStream } from 'node:fs';
+import { rm } from 'node:fs/promises';
+import { Readable, Transform } from 'node:stream';
+import type { ReadableStream as NodeReadableStream } from 'node:stream/web';
+import { pipeline } from 'node:stream/promises';
 import { Injectable } from '@nestjs/common';
 import {
   SourceHttpClient,
+  type SourceDownloadedFile,
+  type SourceDownloadRequest,
   type SourceHttpRequest,
   type SourceHttpResult,
 } from '../../domain/providers/source-http-client.provider.js';
+
+const TOO_LARGE_MESSAGE = 'arquivo maior que o limite aceito';
 
 /** Maior corpo aceito de uma fonte. APIs de consulta por CNPJ respondem em poucos KB. */
 export const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
@@ -63,6 +73,102 @@ export class FetchSourceHttpClient extends SourceHttpClient {
     } catch (error) {
       return this.failureOf(error);
     }
+  }
+
+  /**
+   * Baixa um arquivo grande (um dump em lote) para o disco.
+   *
+   * Valem as mesmas garantias de `get` (tempo máximo da chamada inteira, sem
+   * redirecionamentos, nunca lança) com duas diferenças: o corpo vai direto para
+   * o arquivo, em fluxo, e o limite é o de `maxBytes`, não o de uma resposta de
+   * API. O SHA-256 é calculado durante a gravação, sem reler o arquivo. Falhar
+   * no meio, estourar o limite ou o tempo apaga o que foi gravado.
+   */
+  override async download({
+    url,
+    headers,
+    timeoutMs,
+    destination,
+    maxBytes,
+  }: SourceDownloadRequest): Promise<SourceHttpResult> {
+    const signal = AbortSignal.timeout(timeoutMs);
+
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        redirect: 'manual',
+        headers: { accept: '*/*', 'user-agent': USER_AGENT, ...headers },
+        signal,
+      });
+
+      if (!response.ok) {
+        await response.body?.cancel();
+
+        return { kind: 'RESPONSE', status: response.status };
+      }
+
+      if (!response.body) {
+        return { kind: 'FAILED', message: 'resposta sem corpo' };
+      }
+
+      if (Number(response.headers.get('content-length')) > maxBytes) {
+        await response.body.cancel();
+
+        return { kind: 'FAILED', message: TOO_LARGE_MESSAGE };
+      }
+
+      const file = await this.saveToDisk(
+        response.body as NodeReadableStream,
+        destination,
+        maxBytes,
+        signal,
+      );
+
+      if (file.bytes === 0) {
+        await rm(destination, { force: true });
+
+        return { kind: 'FAILED', message: 'arquivo vazio' };
+      }
+
+      return { kind: 'RESPONSE', status: response.status, file };
+    } catch (error) {
+      await rm(destination, { force: true });
+
+      return signal.aborted ? { kind: 'TIMEOUT' } : this.failureOf(error);
+    }
+  }
+
+  private async saveToDisk(
+    body: NodeReadableStream,
+    destination: string,
+    maxBytes: number,
+    signal: AbortSignal,
+  ): Promise<SourceDownloadedFile> {
+    const hash = createHash('sha256');
+    let bytes = 0;
+    const meter = new Transform({
+      transform(chunk: Buffer, _encoding, done) {
+        bytes += chunk.length;
+
+        if (bytes > maxBytes) {
+          done(new Error(TOO_LARGE_MESSAGE));
+
+          return;
+        }
+
+        hash.update(chunk);
+        done(null, chunk);
+      },
+    });
+
+    await pipeline(
+      Readable.fromWeb(body),
+      meter,
+      createWriteStream(destination),
+      { signal },
+    );
+
+    return { path: destination, bytes, checksum: hash.digest('hex') };
   }
 
   private async readJson(response: Response): Promise<SourceHttpResult> {

@@ -579,8 +579,9 @@ Cada fonte externa fica atrás de um adapter próprio, que implementa o contrato
   inteira, corpo incluído; esgotado, `TIMEOUT`.
 - **Cliente HTTP.** `fetch` do Node, sem redirecionamentos (o endereço vem do catálogo, e
   seguir um `Location` levaria a chamada para onde a fonte mandasse) e com corpo limitado a
-  5 MiB, lido em fluxo. Os segmentos do caminho são codificados na montagem da URL: um
-  valor como `../admin` não escapa do caminho da fonte.
+  5 MiB, lido em fluxo (os dumps em lote, que passam disso, usam o modo `download`, descrito na
+  seção do IBAMA). Os segmentos do caminho são codificados na montagem da URL: um valor como
+  `../admin` não escapa do caminho da fonte.
 - **Log de requisições.** Cada chamada vira uma linha em `data_source_request_logs`: fonte,
   CNPJ, origem (`trigger`), resultado, status HTTP e duração. As recusadas pelo limite entram
   também, sem status. Cabeçalhos (a chave de API da fonte, por exemplo) nunca são gravados.
@@ -690,7 +691,58 @@ não trazer nenhuma); o IBGE é a fonte da taxonomia.
 Um adapter novo declara o `slug` da fonte (que o seeder cria), chama
 `RequestDataSourceUseCase.execute({ slug, segments, cnpj, context })` e passa a resposta por
 `toLookupResult` com o seu *parser*. Fontes que não se consultam item a item, como o dump
-diário do IBAMA, definem o próprio fluxo de ingestão.
+diário do IBAMA, definem o próprio fluxo de ingestão (próxima seção).
+
+### Lote diário: IBAMA (download e leitura dos dumps)
+
+O IBAMA não tem consulta por CNPJ: publica o dump inteiro de cada recurso, e o MVP ingere dois
+(UC14): o **auto de infração** (`.zip` com um CSV por ano, hoje 48 arquivos e cerca de 720 MB
+descompactados) e o **termo de embargo** (um `.csv` de cerca de 210 MB). `IbamaDataSource`
+(`ibama/`, slug `IBAMA`) **baixa** o dump e entrega um `IbamaDump`, que lê os registros em fluxo.
+Não grava nada: gravar, normalizar e agendar são das issues seguintes.
+
+- **Onde estão os arquivos.** `data_sources.base_url` do IBAMA aponta para o armazenamento onde o
+  IBAMA os publica (o portal CKAN só aponta para ele), e o adapter acrescenta o caminho de cada
+  recurso (`IBAMA_RESOURCES`). Um banco criado antes desta entrega mantém a `base_url` antiga
+  (o seed não altera fontes existentes) e passa a receber 404: ajuste `base_url` e
+  `request_timeout_ms` (600 000 ms) da fonte no banco.
+- **Download em disco, em fluxo.** `RequestDataSourceUseCase` ganhou o modo `download` (mesmo limite
+  por minuto, tempo máximo do catálogo e log de requisições): o corpo vai para um arquivo
+  temporário, com **limite de tamanho** (1 GiB), **tempo máximo da chamada inteira**, sem seguir
+  redirecionamento, e o **SHA-256 é calculado durante a gravação**. Falha, limite ou tempo
+  estourado apagam o que foi gravado. O checksum existe para a ingestão encerrar um dump idêntico
+  ao da última execução sem reprocessá-lo.
+- **404 não é "sem registro".** Para um arquivo, é o dump fora do lugar (URL do catálogo errada ou
+  o IBAMA o moveu): o resultado é `UNAVAILABLE`, com a mensagem apontando a `base_url`, nunca
+  `NOT_FOUND`.
+- **Leitura em fluxo.** CSV com separador `;`, texto livre entre aspas com quebras de linha e, no
+  embargo, marca de ordem de bytes (BOM): lido com `csv-parse`; o `.zip`, com `yauzl`, **direto do
+  arquivo, sem extrair**. Ler os 712 mil registros do auto de infração leva cerca de 1 minuto e
+  usa pouco mais de 120 MB de memória. A soma dos CSVs do `.zip` é limitada a 2 GiB, e o tamanho
+  real de cada um é conferido contra o declarado (bomba de descompressão). Uma linha malformada é
+  pulada e contada; já **coluna que sumiu** do cabeçalho, `.zip` sem CSV ou cortado é
+  `IbamaDumpFormatError`: o IBAMA mudou o dump, e o job deve falhar, não ingerir nada em silêncio.
+- **Pessoa física nunca sai do adapter (INL02).** Cada linha passa por `classifyIbamaDocument`
+  **antes** de qualquer persistência, inclusive na camada bruta. O **documento decide, não o
+  rótulo**: só entra um CNPJ válido (formato e dígitos verificadores, numérico ou alfanumérico). Nos
+  dumps de outubro de 2026 há linhas rotuladas `PJ` com um CPF no documento, e o termo de embargo
+  nem tem o rótulo; rótulo `PF` descarta mesmo com documento que parece CNPJ. Os descartes são
+  contados por motivo (`PESSOA_FISICA`, `SEM_DOCUMENTO`, `DOCUMENTO_INVALIDO`,
+  `REGISTRO_MALFORMADO`) e a soma é o `records_discarded` da execução. Nos dumps de hoje: de
+  712 288 linhas do auto de infração, 220 108 são de empresa, 458 677 de pessoa física, 32 955 sem
+  documento e 548 com documento inválido; do embargo, de 116 865, são 17 737 de empresa e 88 727
+  de pessoa física.
+- **O que o registro leva.** `IbamaRecord` traz o CNPJ canônico, a referência pública (número e
+  série: `1092-A`; os documentos novos têm número alfanumérico e nenhuma série), o identificador
+  interno (`SEQ_*`, vazio nos novos) e um payload com **colunas permitidas**
+  (`payloadColumns`). Ficam de fora o **nome** do autuado/embargado, o texto livre e as geometrias
+  (WKT, que podem pesar megabytes por linha): a empresa já é identificada pelo CNPJ, e o nome é o
+  único campo em que um nome de pessoa poderia chegar ao banco.
+- **A referência pública não é única.** O mesmo número aparece em mais de uma linha (nos dumps de
+  hoje, 425 pares CNPJ e referência se repetem entre os 220 mil do auto de infração). Quem
+  normaliza decide como tratar; o adapter entrega as linhas como estão.
+- **Quem usa precisa chamar `dispose()`** ao terminar (inclusive em falha): ele apaga a pasta
+  temporária do dump. `records()` pode ser chamado de novo (relê o arquivo), e `stats` recomeça.
 
 ## Consulta de empresa por CNPJ
 

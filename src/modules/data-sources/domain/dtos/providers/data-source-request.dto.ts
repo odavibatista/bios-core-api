@@ -35,6 +35,13 @@ export interface DataSourceRequest {
   /** CNPJ consultado, para o log (auditoria e cobertura por fonte). */
   cnpj?: string;
 
+  /**
+   * Quando presente, a resposta é um arquivo grande (um dump em lote) gravado em
+   * `destination`, e não um JSON: o `body` do sucesso é um `SourceDownloadedFile`.
+   * Mesmo limite por minuto, tempo máximo e log das demais chamadas.
+   */
+  download?: { destination: string; maxBytes: number };
+
   context: SourceCallContext;
 }
 
