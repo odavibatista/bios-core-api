@@ -1,4 +1,5 @@
-# Somente CI: imagens oficiais Docker distribuídas no ECR Public, sem login.
+# Somente CI: nomes locais das imagens oficiais obtidas por pull-ci-images.sh.
+# O script tenta registros alternativos e aplica estas tags antes do up --pull never.
 # Manter as tags alinhadas ao Compose base; somente o registro muda.
 # Replica set, portas, volumes e healthchecks são herdados sem alterações.
 services:

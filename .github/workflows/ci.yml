@@ -116,12 +116,17 @@ jobs:
       - name: Kernel do runner
         run: uname -r
 
-      # Mesmos serviços e healthchecks locais, com imagens oficiais do ECR Public
-      # no CI para não depender da autenticação do Docker Hub. --wait aguarda: o do
-      # MongoDB só passa quando o replica set já tem primário (aceita escrita), e
-      # o do Redis, quando ele responde ao ping.
+      # Download das mesmas imagens oficiais por registros alternativos.
+      - name: Validar fallback dos registros de imagens
+        run: bash .github/scripts/pull-ci-images.test.sh
+
+      - name: Obter imagens da infraestrutura de teste
+        run: bash .github/scripts/pull-ci-images.sh
+
+      # --pull never usa as imagens obtidas, sem consultar o registro novamente.
+      # --wait exige MongoDB primário e Redis respondendo ao ping.
       - name: Infraestrutura de teste (MongoDB em replica set e Redis)
-        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up --detach --wait mongodb redis
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up --detach --wait --pull never mongodb redis
 
       # Se um contêiner sair com erro, o `--wait` só informa o código de saída;
       # o motivo está no log do próprio serviço.
