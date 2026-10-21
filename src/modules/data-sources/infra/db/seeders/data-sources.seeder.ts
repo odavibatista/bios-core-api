@@ -68,6 +68,10 @@ export const DATA_SOURCES: readonly DataSourceDefinition[] = [
     ingestion_mode: IngestionMode.DAILY_BATCH,
     evidence_category: EvidenceCategory.INFRACAO_AMBIENTAL,
     ods_number: 15,
+    // Nas fontes de evidência, a janela é a validade da evidência (RF08). O job
+    // diário a renova; dois dias deixam passar uma execução perdida sem vencer
+    // a base inteira.
+    cache_ttl_seconds: 2 * ONE_DAY,
     request_timeout_ms: 60_000,
   },
   {

@@ -1,4 +1,5 @@
 import type { DataSourceRequestConfig } from '../providers/data-source-request.dto.js';
+import type { EvidenceSourceConfig } from '../providers/evidence-source.dto.js';
 
 /**
  * Contrato de acesso ao catálogo de fontes externas.
@@ -28,4 +29,13 @@ export abstract class DataSourceRepository {
    * definida ficam de fora.
    */
   abstract findCadastralChain(): Promise<string[]>;
+
+  /**
+   * Categoria e ODS das evidências de uma fonte. `null` quando a fonte não
+   * existe ou não é de evidências (`role` diferente de `EVIDENCE`, ou sem
+   * categoria/ODS no catálogo).
+   */
+  abstract findEvidenceSource(
+    slug: string,
+  ): Promise<EvidenceSourceConfig | null>;
 }

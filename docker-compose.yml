@@ -5,9 +5,13 @@
 # de conta). O healthcheck inicializa o replica set na primeira execução e só
 # reporta o serviço como saudável quando o nó já é primário (aceita escrita), o
 # que permite aguardar o banco com `docker compose up --wait` (usado no CI).
+#
+# A versão do MongoDB é fixada no patch: a tag `mongo:8` anda a cada lançamento
+# e faz o CI e a máquina de cada um rodarem bancos diferentes sem ninguém ter
+# mexido em nada. Subir a versão é uma mudança deliberada, feita aqui.
 services:
   mongodb:
-    image: mongo:8
+    image: mongo:8.3.11
     container_name: bios-mongodb
     command: ['--replSet', 'rs0', '--bind_ip_all', '--port', '27017']
     ports:
