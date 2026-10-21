@@ -83,7 +83,12 @@ jobs:
 
   test:
     name: Testes
-    runs-on: ubuntu-latest
+    # Fixo no Ubuntu 22.04, e não em `ubuntu-latest`, de propósito: do kernel 6.19
+    # ao 7.0.13 o MongoDB 8 se recusa a iniciar (incompatibilidade do tcmalloc com
+    # o kernel, SERVER-121912; resolvida no kernel 7.0.14). O `ubuntu-latest`
+    # passou a usar um kernel dessa faixa, e o e2e não subia o banco. Quando o
+    # runner novo trouxer o kernel 7.0.14 ou mais, dá para voltar ao `latest`.
+    runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -105,6 +110,11 @@ jobs:
 
       - name: Testes unitários e de integração (cobertura mínima de 75% — NFPD03)
         run: npm run test:cov
+
+      # O kernel do runner decide se o MongoDB 8 inicia (ver `runs-on` acima);
+      # registrá-lo deixa a causa óbvia se o banco voltar a não subir.
+      - name: Kernel do runner
+        run: uname -r
 
       # Mesma definição do ambiente local; --wait aguarda os healthchecks: o do
       # MongoDB só passa quando o replica set já tem primário (aceita escrita), e
