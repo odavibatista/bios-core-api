@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { EvidencesController } from '../../http/controllers/evidences.controller.js';
 import { DataSourcesModule } from '@modules/data-sources/infra/modules/data-sources.module.js';
 import { IbamaModule } from '@modules/ibama/infra/modules/ibama.module.js';
 import { CguModule } from '@modules/cgu/infra/modules/cgu.module.js';
@@ -16,6 +17,7 @@ import { GetCompanyEnvironmentalEvidencesUseCase } from '../usecases/get-company
     CguModule,
     GhgModule,
   ],
+  controllers: [EvidencesController],
   providers: [
     EnvironmentalEvidencesProcessor,
     RequestCguCompanyEvidencesUseCase,
