@@ -29,7 +29,7 @@ export const QUEUE_RETRY_POLICIES: Readonly<
  * Jobs repetíveis registrados na inicialização.
  *
  * O lote diário do IBAMA é disparado pelo agendador e consumido no próprio core,
- * pelo `IbamaIngestionProcessor` (`08-Artefatos-de-Análise.md`, diagrama 4). O
+ * pelo `EnvironmentalEvidencesProcessor` (`08-Artefatos-de-Análise.md`, diagrama 4). O
  * horário evita o pico de acesso aos Dados Abertos no começo do dia útil.
  */
 export const QUEUE_SCHEDULES: readonly QueueSchedule[] = [
