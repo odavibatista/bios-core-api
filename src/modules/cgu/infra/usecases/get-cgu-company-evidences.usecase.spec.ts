@@ -153,4 +153,22 @@ describe('coleta CGU por empresa', () => {
     resolve();
     await expect(pending).rejects.toThrow('banco');
   });
+
+  it('validade vencida e OUTDATED exigem coleta mesmo havendo resposta anterior', async () => {
+    list.execute.mockResolvedValue([
+      storedEvidenceFactory.build({
+        cnpj,
+        sourceSlug: 'CGU_CEIS',
+        validUntil: new Date(0),
+      }),
+      storedEvidenceFactory.build({
+        cnpj,
+        sourceSlug: 'CGU_CNEP',
+        state: 'OUTDATED',
+      }),
+    ]);
+    await useCase.execute({ cnpj, context });
+    expect(ceis.fetch).toHaveBeenCalledOnce();
+    expect(cnep.fetch).toHaveBeenCalledOnce();
+  });
 });
