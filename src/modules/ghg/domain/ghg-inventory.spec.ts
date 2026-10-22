@@ -1,12 +1,17 @@
 import {
+  GHG_PORTAL_MAX_PAGE,
   ghgEnvelope,
   ghgInventoryFactory,
+  ghgOrganizationFactory,
 } from '@test/factories/ghg/ghg.factory.js';
 import { otherCguCnpj } from '@test/factories/cgu/cgu-sanction.factory.js';
 import { faker } from '@test/support/faker.js';
 import {
+  GHG_ORGANIZATION_SEARCH,
+  GHG_ORGANIZATIONS_PAGE_SIZE,
   candidateOrganizations,
   readInventories,
+  readOrganizationsPage,
   readReportIdentity,
   ghgBaseUrl,
   toGhgEvidence,
@@ -32,22 +37,63 @@ describe('contrato publico GHG', () => {
       id: i + 1,
       name: 'Ação Climática',
     }));
+    expect(candidateOrganizations(orgs, ['ACAO CLIMATICA SA'])).toHaveLength(3);
+    expect(candidateOrganizations(orgs, ['a'])).toEqual([]);
     expect(
-      candidateOrganizations(ghgEnvelope(orgs), ['ACAO CLIMATICA SA']),
-    ).toHaveLength(3);
-    expect(candidateOrganizations(ghgEnvelope(orgs), ['a'])).toEqual([]);
-    expect(
-      candidateOrganizations(ghgEnvelope([{ id: 1, name: 'ABC' }]), ['ABC SA']),
+      candidateOrganizations([{ id: 1, name: 'ABC' }], ['ABC SA']),
     ).toEqual([]);
   });
+  it('le uma pagina da busca e ignora os campos que nao usa', () => {
+    const organizations = ghgOrganizationFactory.buildMany(3);
+    const page = readOrganizationsPage(
+      ghgEnvelope({
+        total: 1029,
+        organizations: organizations.map((org) => ({
+          ...org,
+          about: faker.lorem.sentence(),
+          sector: faker.commerce.department(),
+        })),
+      }),
+    );
+    expect(page).toEqual({ total: 1029, organizations });
+  });
+  it('a lista simples de GetAllOrganizations nao e o cadastro e nao e aceita', () => {
+    // Essa rota devolve so 10 organizacoes; aceita-la como cadastro cegaria a coleta.
+    expect(() =>
+      readOrganizationsPage(ghgEnvelope(ghgOrganizationFactory.buildMany(3))),
+    ).toThrow();
+  });
   it.each([
-    null,
-    [],
-    { success: false },
-    ghgEnvelope('<html>'),
-    ghgEnvelope([{ id: 0, name: 'x' }]),
-  ])('rejeita catalogo invalido %j', (body) => {
-    expect(() => candidateOrganizations(body, ['Empresa'])).toThrow();
+    ['sem corpo', null],
+    ['lista', []],
+    ['sem sucesso', { success: false }],
+    ['texto', ghgEnvelope('<html>')],
+    ['sem total', ghgEnvelope({ organizations: [] })],
+    ['total negativo', ghgEnvelope({ total: -1, organizations: [] })],
+    ['total acima do teto', ghgEnvelope({ total: 20001, organizations: [] })],
+    [
+      'id invalido',
+      ghgEnvelope({ total: 1, organizations: [{ id: 0, name: 'x' }] }),
+    ],
+    [
+      'nome vazio',
+      ghgEnvelope({ total: 1, organizations: [{ id: 1, name: '' }] }),
+    ],
+    [
+      'pagina maior que o permitido',
+      ghgEnvelope({
+        total: 1001,
+        organizations: ghgOrganizationFactory.buildMany(
+          GHG_ORGANIZATIONS_PAGE_SIZE + 1,
+        ),
+      }),
+    ],
+  ])('rejeita pagina de organizacoes invalida: %s', (_case, body) => {
+    expect(() => readOrganizationsPage(body)).toThrow();
+  });
+  it('a busca de organizacoes usa a rota paginada do portal, no maximo de 1000 por pagina', () => {
+    expect(GHG_ORGANIZATION_SEARCH.at(-1)).toBe('SearchAllOrganizations');
+    expect(GHG_ORGANIZATIONS_PAGE_SIZE).toBe(GHG_PORTAL_MAX_PAGE);
   });
   it('le inventarios e rejeita avisos/erros/inventarios fora do contrato', () => {
     const response = {

@@ -16,6 +16,29 @@ export function ghgEnvelope(result: unknown) {
     __abp: true,
   };
 }
+/** Organizacao do cadastro do portal, no formato que a busca devolve (sem os campos que o adapter ignora). */
+export const ghgOrganizationFactory = defineFactory(() => ({
+  id: faker.number.int({ min: 1, max: 99_999 }),
+  name: faker.company.name(),
+}));
+/** Tamanho da pagina que o portal devolve quando a busca nao informa `maxResultCount`. */
+export const GHG_PORTAL_DEFAULT_PAGE = 10;
+/** Maior `maxResultCount` aceito pelo portal; acima disso responde HTTP 400. */
+export const GHG_PORTAL_MAX_PAGE = 1000;
+/**
+ * Resposta de `SearchAllOrganizations` como o portal a entrega: `total` e a
+ * pagina pedida, que sem `maxResultCount` e a de 10. Os cenarios que precisam
+ * de uma organizacao fora da primeira pagina a colocam apos as 10 primeiras.
+ */
+export function ghgOrganizationsPage(
+  catalog: readonly { id: number; name: string; about?: string }[],
+  { maxResultCount = GHG_PORTAL_DEFAULT_PAGE, skipCount = 0 } = {},
+) {
+  return ghgEnvelope({
+    total: catalog.length,
+    organizations: catalog.slice(skipCount, skipCount + maxResultCount),
+  });
+}
 /** PDF sintetico minimo, sem rede/fontes externas; texto relevante gerado pelo cenario. */
 export function ghgPdf(cnpj: string, year: number, extra = ''): Buffer {
   const text = `BT /F1 12 Tf 20 760 Td (Ano inventariado: ${year}) Tj 0 -20 Td (CNPJ: ${cnpj}) Tj 0 -20 Td (${extra}) Tj ET`;
