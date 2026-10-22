@@ -172,6 +172,19 @@ describe('RF10: regras fixas por ODS', () => {
     expect(degraded.confidenceValue).toBeLessThan(baseline.confidenceValue);
   });
 
+  it('CONFIRMED com validade expirada não pontua mesmo antes de ser projetado OUTDATED', () => {
+    const now = new Date();
+    const expired = {
+      ...ibama('expired'),
+      validUntil: new Date(now.getTime() - 1),
+    };
+    expect(scoreOdsEvidences(15, [expired], now)).toMatchObject({
+      scoreValue: null,
+      confidenceValue: 0,
+      evidenceCount: 0,
+    });
+  });
+
   it('mais achados confirmados não reduzem confiança; ODS 13 mantém teto estrutural baixo', () => {
     const one = scoreOdsEvidences(15, [ibama('one')]);
     const two = scoreOdsEvidences(15, [ibama('one'), ibama('two')]);
