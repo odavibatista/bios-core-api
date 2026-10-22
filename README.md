@@ -172,7 +172,7 @@ módulo dono do fluxo. Um consumidor por fila: dois na mesma fila competiriam pe
 | --- | --- | --- |
 | `company-profile` | Dados cadastrais por CNPJ | `CompanyProfileProcessor` (`companies/`) |
 | `environmental-evidences` | Evidências ambientais e de conduta (IBAMA, CEIS/CNEP) | `EnvironmentalEvidencesProcessor` (`evidences/`): lote diário/avulso IBAMA e consulta CGU por CNPJ |
-| `ghg-inventory` | Inventário de emissões (fallback do GHG Protocol) | `GhgInventoryProcessor` (`ghg/`), exclusivo, concorrência 1 |
+| `ghg-inventory` | Inventário de emissões (fallback do GHG Protocol) | `GhgInventoryProcessor` (`ghg/`), exclusivo, concorrência 1: coleta por CNPJ e sincronização diária do cadastro de organizações |
 | `ods-scoring` | Recálculo de índice e confiança por ODS | ainda não implementado |
 | `email-dispatch` | E-mails transacionais | consumida nesta API (`mailing/`) |
 
@@ -1317,20 +1317,45 @@ não são aceitos como dados nem como prova de ausência.
 `SearchAllOrganizations`, um `POST` com corpo JSON `{ maxResultCount, skipCount }`
 que responde `{ total, organizations }`. Sem `maxResultCount` ela devolve só **10**
 organizações, o máximo aceito é **1000** (acima disso, HTTP 400) e uma página além do
-fim volta vazia, com o `total`. O adapter pede 1000 por vez e avança pelo que
-recebeu até cobrir o `total`; uma página vazia antes do total, um total acima de
+fim volta vazia, com o `total`. A rota `GetAllOrganizations`, que a primeira versão
+usava, **não** é o cadastro: devolve a mesma amostra de 10 organizações, e tomá-la por
+ele deixava a coleta cega para a quase totalidade das empresas (em 22/10/2026, o
+portal tinha 1029 organizações). Uma página vazia antes do total, um total acima de
 20 000 ou uma página fora do contrato são resposta anormal (`UNKNOWN`), nunca dado.
-A rota `GetAllOrganizations`, que a primeira versão usava, **não** é o cadastro:
-devolve a mesma amostra de 10 organizações, e tomá-la por ele deixava a coleta cega
-para a quase totalidade das empresas (em 22/10/2026, o portal tinha 1029
-organizações). Cada chamada leva cerca de 3 s no portal e uma página de 1000 pesa
-cerca de 1,5 MB, então a listagem completa (duas páginas hoje) não cabe no prazo
-padrão de 10 s do catálogo: a coleta com esse prazo ainda termina em `UNKNOWN`. Medido
-com o portal real (22/10/2026), para uma organização fora das 10 primeiras (id 5979,
-inventário 2025, confirmada pelo CNPJ e pelo ano do PDF): 4 chamadas, todas 200, em
-**11,5 s** no total (páginas de 6,9 s e 3,1 s, lista de inventários 0,2 s, PDF 0,7 s);
-uma empresa sem organização no portal voltou `UNKNOWN`. Mantê-la dentro do prazo é a
-sincronização diária do cadastro (#250), que tira a listagem do caminho de cada consulta.
+
+**O cadastro é sincronizado uma vez por dia, e a coleta de cada CNPJ o lê pronto.**
+Cada chamada à busca leva cerca de 3 s de latência fixa mais ~5 ms por item (uma
+página de 1000 levou ~7 s e pesa ~1,5 MB): a listagem completa levava ~11 s, mais que
+os 10 s do catálogo, e era refeita a cada empresa. Hoje:
+
+- **Sincronização.** O job `sync-ghg-organizations` (fila `ghg-inventory`, agendamento
+  `ghg-organizations-sync`, todo dia às 03:30) lê o cadastro em páginas de **500** (cada
+  chamada fica em ~5 s, bem abaixo do tempo máximo do catálogo) com orçamento próprio de 120 s
+  para a listagem inteira, e o guarda no Redis (`GhgOrganizationDirectory`, namespace
+  `ghg-organizations`: id e nome de cada organização, mais a data). Repetição: 5 tentativas,
+  backoff exponencial de base 1 min (1, 2, 4 e 8 min); fonte desabilitada falha já na primeira,
+  sem repetir. As chamadas entram no log de requisições como `SCHEDULED_JOB`, sem CNPJ.
+- **Só grava completo.** O cadastro novo substitui o anterior apenas depois de todas as páginas
+  lidas e válidas; falha, resposta fora do contrato ou página vazia antes do total não gravam nada,
+  e o cadastro anterior segue valendo.
+- **Vale sete dias.** Falhas seguidas da sincronização diária não cegam a coleta de imediato.
+  É cache, não fonte de verdade: vive no Redis e é reconstruível pela fonte, então **não há
+  coleção nem migração**. Se faltar (primeira execução, Redis limpo), a primeira coleta que o
+  precisa o sincroniza na hora, antes de o prazo daquela coleta começar a contar, e as seguintes
+  o reaproveitam; como a coleta pode então passar do prazo de quem espera, o resultado aparece na
+  consulta seguinte, sem repetir a listagem.
+- **A coleta de um CNPJ não lista o portal.** Localiza os candidatos no cadastro guardado e só
+  então busca os inventários e o relatório (2 chamadas). Empresa sem organização no cadastro
+  não faz **nenhuma** chamada externa e fica `UNKNOWN` (janela de 15 min): por isso não há um
+  cache negativo à parte.
+- **Prazo do catálogo.** O `request_timeout_ms` de 10 s passa a bastar: vale para cada chamada e
+  para o fluxo do CNPJ (inventários + PDF), sem a listagem. **Medido com o portal real
+  (22/10/2026), com o prazo padrão de 10 s do catálogo, sem ampliá-lo:** o job de sincronização,
+  pelo worker real, levou **13,8 s** e guardou as **1029** organizações (três chamadas, de 4,9 s,
+  5,7 s e 3,0 s, todas abaixo dos 10 s); a coleta de duas empresas de organizações fora das 10
+  primeiras (ids 5979 e 8119, inventário 2025) levou **1,9 s e 1,1 s**, `CONFIRMED`, com duas
+  chamadas cada e nenhuma à listagem; uma empresa sem organização no cadastro voltou `UNKNOWN`
+  em 0,2 s e **sem nenhuma chamada externa**.
 
 O catálogo não traz CNPJ. Nome é somente uma pista: o CNPJ exato e o ano do PDF
 precisam corresponder à empresa e ao inventário listado. Verifica-se o ano mais

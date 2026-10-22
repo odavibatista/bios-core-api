@@ -2,12 +2,9 @@ import { Test } from '@nestjs/testing';
 import { RequestTrigger } from '@prisma/client';
 import type { DataSourceRequest } from '@modules/data-sources/domain/dtos/providers/data-source-request.dto.js';
 import {
-  GHG_PORTAL_DEFAULT_PAGE,
-  GHG_PORTAL_MAX_PAGE,
   ghgEnvelope,
   ghgInventoryFactory,
   ghgOrganizationFactory,
-  ghgOrganizationsPage,
 } from '@test/factories/ghg/ghg.factory.js';
 import { otherCguCnpj } from '@test/factories/cgu/cgu-sanction.factory.js';
 import { faker } from '@test/support/faker.js';
@@ -15,6 +12,7 @@ import { RequestDataSourceUseCase } from '@modules/data-sources/infra/usecases/r
 import { ResolveSourceRequestConfigUseCase } from '@modules/data-sources/infra/usecases/request/resolve-source-request-config.usecase.js';
 import { ResolveSourceCacheTtlUseCase } from '@modules/data-sources/infra/usecases/cache/resolve-source-cache-ttl.usecase.js';
 import { CacheProvider } from '@shared/domain/providers/cache.provider.js';
+import { GhgOrganizationDirectory } from './ghg-organization-directory.provider.js';
 import { GhgReportReader } from './ghg-report-reader.provider.js';
 import { GhgDataSource } from './ghg.data-source.js';
 describe('GhgDataSource', () => {
@@ -24,25 +22,31 @@ describe('GhgDataSource', () => {
     config = { execute: vi.fn() },
     ttl = { execute: vi.fn() },
     cache = { get: vi.fn(), set: vi.fn() },
-    reader = { read: vi.fn() };
+    reader = { read: vi.fn() },
+    directory = { read: vi.fn(), sync: vi.fn() };
   const inventory = ghgInventoryFactory.build(),
     name = faker.company.name();
   const catalog = [{ id: inventory.organizationId, name }];
-  /** Corpo da busca de organizacoes: o que o adapter pediu. */
-  type PageRequest = { maxResultCount: number; skipCount: number };
-  const FULL_PAGE = { maxResultCount: GHG_PORTAL_MAX_PAGE };
+  /** O cadastro de organizacoes como a sincronizacao o guarda. */
+  const snapshot = (organizations: { id: number; name: string }[]) => ({
+    syncedAt: new Date().toISOString(),
+    organizations,
+  });
   const context = { trigger: RequestTrigger.ON_DEMAND_JOB };
-  /** Chamadas a busca de organizacoes, na ordem em que foram feitas. */
-  const searches = () =>
-    request.execute.mock.calls
-      .map(([r]) => r)
-      .filter((r) => r.segments.at(-1) === 'SearchAllOrganizations');
   let adapter: GhgDataSource;
   const answer = (body: unknown, status = 200) => ({
     outcome: 'SUCCESS',
     status,
     body,
   });
+  const inventories = () =>
+    answer(
+      ghgEnvelope({
+        inventories: [{ year: inventory.year, cycleId: inventory.cycleId }],
+        errorMsg: null,
+        warnMsg: null,
+      }),
+    );
   const run = () =>
     adapter.fetch({ cnpj: inventory.cnpj, names: [name] }, context);
   beforeEach(async () => {
@@ -53,22 +57,9 @@ describe('GhgDataSource', () => {
     });
     ttl.execute.mockResolvedValue(2592000);
     cache.get.mockResolvedValue(null);
+    directory.read.mockResolvedValue(snapshot(catalog));
     request.execute.mockImplementation((r) =>
-      Promise.resolve(
-        r.download
-          ? answer({})
-          : r.segments.at(-1) === 'SearchAllOrganizations'
-            ? answer(ghgOrganizationsPage(catalog, r.body as PageRequest))
-            : answer(
-                ghgEnvelope({
-                  inventories: [
-                    { year: inventory.year, cycleId: inventory.cycleId },
-                  ],
-                  errorMsg: null,
-                  warnMsg: null,
-                }),
-              ),
-      ),
+      Promise.resolve(r.download ? answer({}) : inventories()),
     );
     reader.read.mockResolvedValue({
       cnpj: inventory.cnpj,
@@ -82,6 +73,7 @@ describe('GhgDataSource', () => {
         { provide: ResolveSourceCacheTtlUseCase, useValue: ttl },
         { provide: CacheProvider, useValue: cache },
         { provide: GhgReportReader, useValue: reader },
+        { provide: GhgOrganizationDirectory, useValue: directory },
       ],
     }).compile();
     adapter = module.get(GhgDataSource);
@@ -94,7 +86,8 @@ describe('GhgDataSource', () => {
       expect.objectContaining({ inventories: [inventory] }),
       2592000,
     );
-    expect(request.execute).toHaveBeenCalledTimes(3);
+    // Inventarios e relatorio: a lista de organizacoes nao e consultada aqui.
+    expect(request.execute).toHaveBeenCalledTimes(2);
     for (const [r] of request.execute.mock.calls) {
       expect(r).toMatchObject({
         slug: 'GHG_PROTOCOL',
@@ -107,120 +100,80 @@ describe('GhgDataSource', () => {
       ).toContain('registropublicodeemissoesapi');
     }
   });
-  describe('cadastro de organizacoes do portal', () => {
-    /** Cadastro em que a organizacao procurada vem depois das que precedem na lista. */
-    function catalogWithTargetAt(position: number) {
-      const others = ghgOrganizationFactory.buildMany(position);
+  describe('cadastro de organizacoes sincronizado', () => {
+    it('localiza candidatos no cadastro guardado, sem listar o portal', async () => {
+      await expect(run()).resolves.toMatchObject({ status: 'FOUND' });
 
-      return [...others, { id: inventory.organizationId, name }];
-    }
-    const inventories = () =>
-      answer(
-        ghgEnvelope({
-          inventories: [{ year: inventory.year, cycleId: inventory.cycleId }],
-          errorMsg: null,
-          warnMsg: null,
-        }),
-      );
-
-    it('busca pela rota paginada, com POST e o maior tamanho de pagina', async () => {
-      await run();
-
-      const [first] = searches();
-      expect(first.body).toEqual({
-        maxResultCount: GHG_PORTAL_MAX_PAGE,
-        skipCount: 0,
-      });
-      expect(first.segments.at(-1)).toBe('SearchAllOrganizations');
-    });
-
-    it('encontra a organizacao fora das 10 primeiras, que e a pagina padrao do portal', async () => {
-      const everything = catalogWithTargetAt(GHG_PORTAL_DEFAULT_PAGE + 15);
-      request.execute.mockImplementation((r) =>
-        Promise.resolve(
-          r.download
-            ? answer({})
-            : r.segments.at(-1) === 'SearchAllOrganizations'
-              ? answer(ghgOrganizationsPage(everything, r.body as PageRequest))
-              : inventories(),
+      expect(directory.read).toHaveBeenCalledOnce();
+      expect(directory.sync).not.toHaveBeenCalled();
+      expect(
+        request.execute.mock.calls.some(([r]) =>
+          r.segments.includes('SearchAllOrganizations'),
         ),
+      ).toBe(false);
+    });
+
+    it('encontra a organizacao em qualquer posicao do cadastro', async () => {
+      directory.read.mockResolvedValue(
+        snapshot([
+          ...ghgOrganizationFactory.buildMany(1500),
+          { id: inventory.organizationId, name },
+        ]),
       );
 
       await expect(run()).resolves.toMatchObject({ status: 'FOUND' });
     });
 
-    it('segue as paginas pelo que o portal entrega, ate cobrir o total', async () => {
-      // O portal pode devolver menos do que foi pedido: o avanco e pelo que chegou.
-      const everything = catalogWithTargetAt(4);
-      request.execute.mockImplementation((r) => {
-        if (r.download) return Promise.resolve(answer({}));
-        if (r.segments.at(-1) !== 'SearchAllOrganizations') {
-          return Promise.resolve(inventories());
-        }
-        const { skipCount } = r.body as PageRequest;
-
-        return Promise.resolve(
-          answer(
-            ghgOrganizationsPage(everything, { maxResultCount: 2, skipCount }),
-          ),
-        );
-      });
+    it('sem cadastro guardado, sincroniza na hora com o contexto da coleta e segue', async () => {
+      directory.read.mockResolvedValue(null);
+      directory.sync.mockResolvedValue(snapshot(catalog));
 
       await expect(run()).resolves.toMatchObject({ status: 'FOUND' });
 
-      expect(searches().map((r) => (r.body as PageRequest).skipCount)).toEqual([
-        0, 2, 4,
-      ]);
+      expect(directory.sync).toHaveBeenCalledWith(context);
     });
 
-    it('pagina vazia antes do total e cadastro incompleto: nada e inferido', async () => {
-      request.execute.mockImplementation((r) => {
-        const { skipCount } = r.body as PageRequest;
-
-        return Promise.resolve(
-          answer(
-            ghgOrganizationsPage(catalogWithTargetAt(4), {
-              maxResultCount: skipCount === 0 ? 2 : 0,
-              skipCount,
-            }),
-          ),
-        );
-      });
-
-      await expect(run()).resolves.toMatchObject({ status: 'UNAVAILABLE' });
-
-      expect(searches()).toHaveLength(2);
-      expect(reader.read).not.toHaveBeenCalled();
-    });
-
-    it('cadastro acima do teto aceito e resposta anormal, nao dado', async () => {
-      request.execute.mockResolvedValue(
-        answer(ghgEnvelope({ total: 20001, organizations: catalog })),
-      );
-
-      await expect(run()).resolves.toMatchObject({ status: 'UNAVAILABLE' });
-    });
-
-    it('o prazo e unico para todas as paginas', async () => {
+    it('o prazo da coleta so comeca depois do cadastro estar disponivel', async () => {
       config.execute.mockResolvedValue({
         isEnabled: true,
-        requestTimeoutMs: 5,
+        requestTimeoutMs: 400,
       });
-      request.execute.mockImplementation(async (r) => {
-        await new Promise((resolve) => setTimeout(resolve, 20));
-        const { skipCount } = r.body as PageRequest;
+      directory.read.mockResolvedValue(null);
+      directory.sync.mockImplementation(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 500));
 
-        return answer(
-          ghgOrganizationsPage(catalogWithTargetAt(4), {
-            maxResultCount: 2,
-            skipCount,
-          }),
-        );
+        return snapshot(catalog);
       });
+
+      await expect(run()).resolves.toMatchObject({ status: 'FOUND' });
+    });
+
+    it('cadastro indisponivel na sincronizacao nao e ausencia nem dado', async () => {
+      directory.read.mockResolvedValue(null);
+      directory.sync.mockRejectedValue(new Error('portal fora'));
 
       await expect(run()).resolves.toMatchObject({ status: 'UNAVAILABLE' });
 
-      expect(searches()).toHaveLength(1);
+      expect(request.execute).not.toHaveBeenCalled();
+      expect(cache.set).not.toHaveBeenCalled();
+    });
+
+    it('cadastro sem candidato nao faz chamada externa nem prova ausencia', async () => {
+      directory.read.mockResolvedValue(
+        snapshot(ghgOrganizationFactory.buildMany(5)),
+      );
+
+      await expect(run()).resolves.toMatchObject({ status: 'UNAVAILABLE' });
+
+      expect(request.execute).not.toHaveBeenCalled();
+      expect(cache.set).not.toHaveBeenCalled();
+    });
+
+    it('sem nome local nao consulta nem o cadastro', async () => {
+      await adapter.fetch({ cnpj: inventory.cnpj, names: [] }, context);
+
+      expect(directory.read).not.toHaveBeenCalled();
+      expect(request.execute).not.toHaveBeenCalled();
     });
   });
   it('reutiliza cache com data original sem rede', async () => {
@@ -231,6 +184,7 @@ describe('GhgDataSource', () => {
       data: { collectedAt: new Date(collectedAt) },
     });
     expect(request.execute).not.toHaveBeenCalled();
+    expect(directory.read).not.toHaveBeenCalled();
   });
   it.each([-1000, 2592001 * 1000])(
     'ignora cache futuro ou vencido %s',
@@ -240,7 +194,7 @@ describe('GhgDataSource', () => {
         inventories: [inventory],
       });
       await run();
-      expect(request.execute).toHaveBeenCalledTimes(3);
+      expect(request.execute).toHaveBeenCalledTimes(2);
     },
   );
   it('ignora cache de outra empresa', async () => {
@@ -249,7 +203,7 @@ describe('GhgDataSource', () => {
       inventories: [{ ...inventory, cnpj: otherCguCnpj(inventory.cnpj) }],
     });
     await run();
-    expect(request.execute).toHaveBeenCalledTimes(3);
+    expect(request.execute).toHaveBeenCalledTimes(2);
   });
   it.each([null, { isEnabled: false }])(
     'fonte ausente/desabilitada nao consulta cache/rede',
@@ -257,6 +211,7 @@ describe('GhgDataSource', () => {
       config.execute.mockResolvedValue(s);
       expect((await run()).status).toBe('UNAVAILABLE');
       expect(cache.get).not.toHaveBeenCalled();
+      expect(directory.read).not.toHaveBeenCalled();
       expect(request.execute).not.toHaveBeenCalled();
     },
   );
@@ -265,10 +220,6 @@ describe('GhgDataSource', () => {
       (await adapter.fetch({ cnpj: 'invalid', names: [name] }, context)).status,
     ).toBe('UNAVAILABLE');
     expect(config.execute).not.toHaveBeenCalled();
-  });
-  it('sem nome local nao tenta atribuir por coincidencia', async () => {
-    await adapter.fetch({ cnpj: inventory.cnpj, names: [] }, context);
-    expect(request.execute).not.toHaveBeenCalled();
   });
   it.each(['TIMEOUT', 'NOT_FOUND', 'FAILURE', 'RATE_LIMITED', 'DISABLED'])(
     'falha %s nao e ausencia nem cache',
@@ -282,16 +233,13 @@ describe('GhgDataSource', () => {
     request.execute.mockResolvedValue(answer({}, 206));
     expect((await run()).status).toBe('UNAVAILABLE');
   });
-  it('HTTP206 com catalogo valido tambem e rejeitado', async () => {
-    request.execute.mockResolvedValueOnce(
-      answer(ghgOrganizationsPage(catalog, FULL_PAGE), 206),
-    );
+  it('HTTP206 com lista de inventarios valida tambem e rejeitado', async () => {
+    request.execute.mockResolvedValueOnce({ ...inventories(), status: 206 });
     expect((await run()).status).toBe('UNAVAILABLE');
     expect(reader.read).not.toHaveBeenCalled();
   });
   it('seleciona o ano mais recente independentemente da ordem recebida', async () => {
     request.execute
-      .mockResolvedValueOnce(answer(ghgOrganizationsPage(catalog, FULL_PAGE)))
       .mockResolvedValueOnce(
         answer(
           ghgEnvelope({
@@ -306,7 +254,7 @@ describe('GhgDataSource', () => {
       )
       .mockResolvedValue(answer({}));
     expect((await run()).status).toBe('FOUND');
-    expect(request.execute.mock.calls[2][0].segments).toContain(
+    expect(request.execute.mock.calls[1][0].segments).toContain(
       String(inventory.cycleId),
     );
     expect(cache.set).toHaveBeenCalledWith(
@@ -319,40 +267,20 @@ describe('GhgDataSource', () => {
     request.execute.mockResolvedValue(answer('<html>'));
     expect((await run()).status).toBe('UNAVAILABLE');
   });
-  it('catalogo sem candidato nao prova ausencia', async () => {
-    request.execute.mockResolvedValue(
-      answer(ghgOrganizationsPage([], FULL_PAGE)),
-    );
-    expect((await run()).status).toBe('UNAVAILABLE');
-    expect(cache.set).not.toHaveBeenCalled();
-  });
   it('sem inventarios nao prova ausencia', async () => {
-    request.execute
-      .mockResolvedValueOnce(answer(ghgOrganizationsPage(catalog, FULL_PAGE)))
-      .mockResolvedValue(
-        answer(ghgEnvelope({ inventories: [], errorMsg: null, warnMsg: null })),
-      );
+    request.execute.mockResolvedValue(
+      answer(ghgEnvelope({ inventories: [], errorMsg: null, warnMsg: null })),
+    );
     expect((await run()).status).toBe('UNAVAILABLE');
     expect(reader.read).not.toHaveBeenCalled();
   });
   it('falha ao listar inventarios preserva desconhecido', async () => {
-    request.execute
-      .mockResolvedValueOnce(answer(ghgOrganizationsPage(catalog, FULL_PAGE)))
-      .mockResolvedValue({ outcome: 'TIMEOUT' });
+    request.execute.mockResolvedValue({ outcome: 'TIMEOUT' });
     expect((await run()).status).toBe('UNAVAILABLE');
   });
   it('falha no download nao chama parser', async () => {
     request.execute
-      .mockResolvedValueOnce(answer(ghgOrganizationsPage(catalog, FULL_PAGE)))
-      .mockResolvedValueOnce(
-        answer(
-          ghgEnvelope({
-            inventories: [inventory],
-            errorMsg: null,
-            warnMsg: null,
-          }),
-        ),
-      )
+      .mockResolvedValueOnce(inventories())
       .mockResolvedValue({ outcome: 'FAILURE' });
     expect((await run()).status).toBe('UNAVAILABLE');
     expect(reader.read).not.toHaveBeenCalled();
@@ -367,10 +295,10 @@ describe('GhgDataSource', () => {
     expect(cache.set).not.toHaveBeenCalled();
   });
   it('prazo total nao se renova por etapa', async () => {
-    config.execute.mockResolvedValue({ isEnabled: true, requestTimeoutMs: 1 });
+    config.execute.mockResolvedValue({ isEnabled: true, requestTimeoutMs: 50 });
     request.execute.mockImplementationOnce(async () => {
-      await new Promise((r) => setTimeout(r, 10));
-      return answer(ghgOrganizationsPage([{ id: 1, name }], FULL_PAGE));
+      await new Promise((r) => setTimeout(r, 80));
+      return inventories();
     });
     expect((await run()).status).toBe('UNAVAILABLE');
     expect(request.execute).toHaveBeenCalledTimes(1);

@@ -12,7 +12,10 @@ import { inject } from 'vitest';
 import type { Queue } from 'bullmq';
 import { CATALOG_SEEDERS } from '@app/database/catalog.seeders.js';
 import { GetGhgCompanyEvidencesUseCase } from '@modules/ghg/infra/usecases/get-ghg-company-evidences.usecase.js';
-import { FETCH_GHG_INVENTORY_JOB } from '@modules/ghg/domain/ghg-job.dto.js';
+import {
+  FETCH_GHG_INVENTORY_JOB,
+  SYNC_GHG_ORGANIZATIONS_JOB,
+} from '@modules/ghg/domain/ghg-job.dto.js';
 import { RecordEvidenceCollectionUseCase } from '@modules/evidences/infra/usecases/record-evidence-collection.usecase.js';
 import { ListCompanyEvidencesUseCase } from '@modules/evidences/infra/usecases/list-company-evidences.usecase.js';
 import { QueueName } from '@shared/domain/dtos/providers/queue-job.dto.js';
@@ -235,12 +238,13 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       expect(logs).toHaveLength(3);
       expect(
         logs.every(
-          (l) =>
-            l.trigger === 'ON_DEMAND_JOB' &&
-            l.cnpj === inventory.cnpj &&
-            l.outcome === 'SUCCESS',
+          (l) => l.trigger === 'ON_DEMAND_JOB' && l.outcome === 'SUCCESS',
         ),
       ).toBe(true);
+      // Inventarios e relatorio sao da empresa; a listagem do cadastro (feita
+      // aqui por ser a primeira vez) e da fonte, e nao leva CNPJ.
+      expect(logs.filter((l) => l.cnpj === inventory.cnpj)).toHaveLength(2);
+      expect(logs.filter((l) => !l.cnpj)).toHaveLength(1);
       const cached = await cache.get({
         namespace: CacheNamespace.GHG_INVENTORY,
         identifier: inventory.cnpj,
@@ -291,16 +295,160 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         ['POST /api/services/app/EstatisticaPublica/SearchAllOrganizations'],
       );
     });
-    it('cadastro maior que uma pagina de 1000: pede a segunda e confirma a organizacao nela', async () => {
+    it('cadastro de varias paginas: pede cada uma e confirma a organizacao na ultima', async () => {
       directory = [
         ...ghgOrganizationFactory.buildMany(1200),
         { id: inventory.organizationId, name, about: personal },
       ];
       const result = await run();
       expect(result[0].state).toBe(EvidenceState.CONFIRMED);
+      // 1201 organizacoes em paginas de 500.
       expect(
         calls.filter((c) => c.endsWith('SearchAllOrganizations')),
-      ).toHaveLength(2);
+      ).toHaveLength(3);
+    });
+    describe('sincronizacao diaria do cadastro de organizacoes', () => {
+      const ORGANIZATIONS_KEY = {
+        namespace: CacheNamespace.GHG_ORGANIZATIONS,
+        identifier: 'all',
+      };
+      const searchCalls = () =>
+        calls.filter((c) => c.endsWith('SearchAllOrganizations'));
+
+      /** Publica o job do agendador na fila real e espera o consumidor concluí-lo ou esgotá-lo. */
+      async function runSyncJob(attempts = 1) {
+        const job = await queue.add(
+          SYNC_GHG_ORGANIZATIONS_JOB,
+          {},
+          {
+            attempts,
+            backoff: { type: 'fixed', delay: 50 },
+            removeOnComplete: false,
+            removeOnFail: false,
+          },
+        );
+        const deadline = Date.now() + 15_000;
+        for (;;) {
+          const state = await job.getState();
+          if (state === 'completed' || state === 'failed') break;
+          if (Date.now() > deadline) throw new Error('job nao concluiu');
+          await new Promise((r) => setTimeout(r, 25));
+        }
+
+        return queue.getJob(job.id as string);
+      }
+
+      it('o job guarda o cadastro e a coleta de um CNPJ deixa de listar o portal', async () => {
+        const finished = await runSyncJob();
+        expect(await finished?.getState()).toBe('completed');
+        expect(finished?.returnvalue).toEqual({ organizations: 1 });
+        const stored = await cache.get<{ organizations: unknown[] }>(
+          ORGANIZATIONS_KEY,
+        );
+        expect(stored?.organizations).toHaveLength(1);
+        expect(searchCalls()).toHaveLength(1);
+        calls = [];
+
+        const result = await run();
+
+        expect(result[0].state).toBe(EvidenceState.CONFIRMED);
+        // So inventarios e relatorio: a lista de organizacoes nao e consultada.
+        expect(searchCalls()).toEqual([]);
+        expect(calls).toHaveLength(2);
+      });
+
+      it('as chamadas do job entram no log como agendadas e sem CNPJ', async () => {
+        await runSyncJob();
+
+        const logs = await prisma.dataSourceRequestLog.findMany();
+        expect(logs).toHaveLength(1);
+        expect(logs[0]).toMatchObject({
+          trigger: 'SCHEDULED_JOB',
+          outcome: 'SUCCESS',
+          http_status: 200,
+        });
+        expect(logs[0].cnpj ?? null).toBeNull();
+      });
+
+      it('CNPJ sem organizacao no cadastro sincronizado nao faz nenhuma chamada externa', async () => {
+        directory = ghgOrganizationFactory.buildMany(30);
+        await runSyncJob();
+        calls = [];
+
+        const result = await run();
+
+        expect(result[0].state).toBe(EvidenceState.UNKNOWN);
+        expect(calls).toEqual([]);
+      });
+
+      it('falha do portal na sincronizacao mantem o cadastro anterior', async () => {
+        await runSyncJob();
+        const before = await cache.get<{ syncedAt: string }>(ORGANIZATIONS_KEY);
+        status = 500;
+
+        const failed = await runSyncJob(2);
+
+        expect(await failed?.getState()).toBe('failed');
+        expect(failed?.attemptsMade).toBe(2);
+        expect(await cache.get(ORGANIZATIONS_KEY)).toEqual(before);
+      });
+
+      it('resposta incompleta do portal nao substitui o cadastro anterior', async () => {
+        await runSyncJob();
+        const before = await cache.get<{ syncedAt: string }>(ORGANIZATIONS_KEY);
+        rawOrganizations = '<html>login</html>';
+
+        const failed = await runSyncJob();
+
+        expect(await failed?.getState()).toBe('failed');
+        expect(await cache.get(ORGANIZATIONS_KEY)).toEqual(before);
+      });
+
+      it('sem cadastro guardado (cache limpo), a coleta o refaz uma vez e as seguintes o reaproveitam', async () => {
+        await runSyncJob();
+        await resetCache(redisUrl);
+        calls = [];
+
+        await run();
+        expect(searchCalls()).toHaveLength(1);
+
+        // Outra empresa, outra coleta: o cadastro ja esta de volta.
+        const other = { cnpj: otherCguCnpj(inventory.cnpj) };
+        const source = await prisma.dataSource.findUniqueOrThrow({
+          where: { slug: 'BRASIL_API' },
+        });
+        const { refreshed_at, ...profile } =
+          companyProfileResponseFactory.build({
+            cnpj: other.cnpj,
+            legal_name: faker.company.name(),
+            trade_name: null,
+          });
+        await prisma.companyProfile.create({
+          data: {
+            ...profile,
+            refreshed_at: new Date(refreshed_at),
+            cadastral_source_id: source.id_data_source,
+            content_hash: faker.string.hexadecimal({ length: 64, prefix: '' }),
+          },
+        });
+        calls = [];
+        await get.execute(other.cnpj);
+        expect(calls).toEqual([]);
+      });
+
+      it('fonte desabilitada: o job falha na primeira tentativa, sem repeticao e sem chamada', async () => {
+        await prisma.dataSource.update({
+          where: { slug: 'GHG_PROTOCOL' },
+          data: { is_enabled: false },
+        });
+
+        const failed = await runSyncJob(5);
+
+        expect(await failed?.getState()).toBe('failed');
+        expect(failed?.attemptsMade).toBe(1);
+        expect(failed?.failedReason).toContain('desabilitada');
+        expect(calls).toEqual([]);
+      });
     });
     it('organizacao sem inventario gera UNKNOWN', async () => {
       inventories = ghgEnvelope({
