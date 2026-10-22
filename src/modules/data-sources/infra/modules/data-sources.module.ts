@@ -18,6 +18,7 @@ import { FindLastSucceededIngestionRunUseCase } from '../usecases/ingestion/find
 import { FinishIngestionRunUseCase } from '../usecases/ingestion/finish-ingestion-run.usecase.js';
 import { OpenIngestionRunUseCase } from '../usecases/ingestion/open-ingestion-run.usecase.js';
 import { RequestDataSourceUseCase } from '../usecases/request/request-data-source.usecase.js';
+import { ResolveSourceRequestConfigUseCase } from '../usecases/request/resolve-source-request-config.usecase.js';
 
 /**
  * Catálogo de fontes externas, execuções de ingestão e log de requisições
@@ -57,6 +58,7 @@ import { RequestDataSourceUseCase } from '../usecases/request/request-data-sourc
     { provide: SourceRateLimiter, useClass: RedisSourceRateLimiter },
 
     /* Casos de uso */
+    ResolveSourceRequestConfigUseCase,
     ResolveSourceCacheTtlUseCase,
     RequestDataSourceUseCase,
     ListCadastralChainUseCase,
@@ -68,6 +70,7 @@ import { RequestDataSourceUseCase } from '../usecases/request/request-data-sourc
     FindLastConfirmedBatchUseCase,
   ],
   exports: [
+    ResolveSourceRequestConfigUseCase,
     ResolveSourceCacheTtlUseCase,
     RequestDataSourceUseCase,
     ListCadastralChainUseCase,
