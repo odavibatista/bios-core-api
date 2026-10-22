@@ -24,10 +24,34 @@ const Envelope = z.object({
   unAuthorizedRequest: z.literal(false),
   result: z.unknown(),
 });
-export function readOrganizations(body: unknown) {
+/**
+ * Busca paginada de organizações do portal (`SearchAllOrganizations`, `POST`).
+ *
+ * É a única rota que lista o cadastro inteiro: `GetAllOrganizations` devolve só
+ * uma amostra de 10 organizações (o portal tinha 1029 em outubro de 2026), e
+ * tomá-la pelo cadastro deixaria a coleta cega para quase todas as empresas. O
+ * limite de `maxResultCount` é 1000 (o portal recusa mais com HTTP 400).
+ */
+export const GHG_ORGANIZATION_SEARCH = [
+  ...GHG_PUBLIC_API,
+  'SearchAllOrganizations',
+] as const;
+export const GHG_ORGANIZATIONS_PAGE_SIZE = 1000;
+/** Teto do cadastro aceito: bem acima do real, só para uma resposta anormal não rodar sem fim. */
+export const GHG_MAX_ORGANIZATIONS = 20000;
+const Organization = z.object({ id: Id, name: z.string().min(1) });
+export type GhgOrganization = z.infer<typeof Organization>;
+export interface GhgOrganizationsPage {
+  /** Tamanho do cadastro informado pelo portal, que pode passar do que veio nesta página. */
+  total: number;
+  organizations: GhgOrganization[];
+}
+export function readOrganizationsPage(body: unknown): GhgOrganizationsPage {
   return z
-    .array(z.object({ id: Id, name: z.string().min(1) }))
-    .max(20000)
+    .object({
+      total: z.number().int().nonnegative().max(GHG_MAX_ORGANIZATIONS),
+      organizations: z.array(Organization).max(GHG_ORGANIZATIONS_PAGE_SIZE),
+    })
     .parse(Envelope.parse(body).result);
 }
 export function readInventories(body: unknown) {
@@ -41,11 +65,11 @@ export function readInventories(body: unknown) {
 }
 /** Nome e apenas pista de busca. A identidade vem exclusivamente do CNPJ do PDF. */
 export function candidateOrganizations(
-  body: unknown,
+  organizations: readonly GhgOrganization[],
   names: readonly string[],
 ) {
   const normalized = names.map(normalizeName).filter((s) => s.length >= 5);
-  return readOrganizations(body)
+  return organizations
     .filter((org) => {
       const name = normalizeName(org.name);
       return (

@@ -19,12 +19,16 @@ import { CacheNamespace } from '@shared/domain/dtos/providers/cache-key.dto.js';
 import { parseCnpj } from '@shared/domain/value-objects/cnpj.js';
 import {
   GHG_SLUG,
+  GHG_ORGANIZATION_SEARCH,
+  GHG_ORGANIZATIONS_PAGE_SIZE,
   GHG_PUBLIC_API,
   GhgInventorySchema,
   candidateOrganizations,
   ghgBaseUrl,
   readInventories,
+  readOrganizationsPage,
   type GhgInventory,
+  type GhgOrganization,
 } from '../../domain/ghg-inventory.js';
 import { GhgReportReader } from './ghg-report-reader.provider.js';
 
@@ -88,12 +92,14 @@ export class GhgDataSource implements DataSourceInterface<GhgQuery, GhgAnswer> {
         segments: string[],
         params?: Record<string, string>,
         report = false,
+        body?: unknown,
       ) => {
         if (remaining() <= 0) return null;
         const result = await this.request.execute({
           slug: this.slug,
           segments,
           query: params,
+          body,
           cnpj,
           context,
           budgetMs: remaining(),
@@ -112,15 +118,27 @@ export class GhgDataSource implements DataSourceInterface<GhgQuery, GhgAnswer> {
         return { body: result.body };
       };
       if (!query.names.some((n) => n.trim().length >= 5)) return unavailable();
-      const organizations = await call([
-        ...GHG_PUBLIC_API,
-        'GetAllOrganizations',
-      ]);
-      if (!organizations) return unavailable();
-      const candidates = candidateOrganizations(
-        organizations.body,
-        query.names,
-      );
+      // O cadastro vem em páginas: listar só a primeira deixaria o resto invisível.
+      const organizations: GhgOrganization[] = [];
+      let total = 0;
+      do {
+        const page = await call(
+          [...GHG_ORGANIZATION_SEARCH],
+          undefined,
+          false,
+          {
+            maxResultCount: GHG_ORGANIZATIONS_PAGE_SIZE,
+            skipCount: organizations.length,
+          },
+        );
+        if (!page) return unavailable();
+        const read = readOrganizationsPage(page.body);
+        // Página vazia antes do total: o cadastro mudou no meio; não inferir nada.
+        if (read.organizations.length === 0) return unavailable();
+        total = read.total;
+        organizations.push(...read.organizations);
+      } while (organizations.length < total);
+      const candidates = candidateOrganizations(organizations, query.names);
       directory = await mkdtemp(join(tmpdir(), 'bios-ghg-'));
       for (const org of candidates) {
         const response = await call(
