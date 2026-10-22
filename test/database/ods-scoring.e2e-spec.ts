@@ -118,7 +118,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
           (item) =>
             item.evidence_count === 0 &&
             item.contributions.length === 0 &&
-            item.rules_version === 'rf10-v1',
+            item.rules_version === 'rf10-rf11-v2',
         ),
       ).toBe(true);
     });
@@ -156,7 +156,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
             evidenceIds.has(contribution.evidence_id),
           ),
         ).toBe(true);
-        expect(item.rules_version).toBe('rf10-v1');
+        expect(item.rules_version).toBe('rf10-rf11-v2');
         expect(item.calculated_at).toBeInstanceOf(Date);
         expect(item.uf).toBeNull();
         expect(item.city).toBeNull();
@@ -201,6 +201,35 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       expect(
         (await scores()).find((item) => item.ods_number === 15),
       ).toMatchObject({ score_value: -10, evidence_count: 2 });
+    });
+
+    it('persiste confiança separada e reduz por UNKNOWN sem alterar o índice', async () => {
+      await collect();
+      const baseline = (await calculate.execute(CNPJ)).find(
+        (item) => item.odsNumber === 15,
+      )!;
+      expect(baseline.scoreValue).toBe(-50);
+      expect(baseline.confidenceValue).toBeCloseTo(0.75 * (2.5 / 3.5));
+      expect(
+        (await scores()).find((item) => item.ods_number === 15)!
+          .confidence_value,
+      ).toBeCloseTo(baseline.confidenceValue);
+
+      await prisma.evidenceNormalized.updateMany({
+        where: { cnpj: CNPJ, data_source: { slug: 'CGU_CNEP' } },
+        data: { state: EvidenceState.UNKNOWN },
+      });
+      const degraded = (await calculate.execute(CNPJ)).find(
+        (item) => item.odsNumber === 15,
+      )!;
+      expect(degraded.scoreValue).toBe(baseline.scoreValue);
+      expect(degraded.evidenceCount).toBe(baseline.evidenceCount);
+      expect(degraded.confidenceValue).toBeLessThan(baseline.confidenceValue);
+      const persisted = (await scores()).find(
+        (item) => item.ods_number === 15,
+      )!;
+      expect(persisted.score_value).toBe(baseline.scoreValue);
+      expect(persisted.confidence_value).toBeCloseTo(degraded.confidenceValue);
     });
 
     it('descarta confirmação sem proveniência e evidência vencida, sem bônus por NOT_FOUND', async () => {

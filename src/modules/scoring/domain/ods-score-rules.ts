@@ -6,8 +6,9 @@ import {
 import type { StoredEvidence } from '@modules/evidences/domain/dtos/repositories/evidence.repository.js';
 import { EvidenceSourceUrlSchema } from '@modules/evidences/domain/evidence-provenance.js';
 import type { CalculatedOdsScore } from './dtos/requests/calculate-ods-scores.dto.js';
+import { calculateOdsConfidence } from './ods-confidence-rules.js';
 
-export const ODS_SCORE_RULES_VERSION = 'rf10-v1';
+export const ODS_SCORE_RULES_VERSION = 'rf10-rf11-v2';
 
 type CategoryRule = Readonly<{
   category: EvidenceCategory;
@@ -57,7 +58,6 @@ export function scoreOdsEvidences(
 
   const contributions: CalculatedOdsScore['contributions'] = [];
   const usedByCategory = new Map<EvidenceCategory, number>();
-  let inconclusive = 0;
   for (const evidence of [...evidences].sort(
     (a, b) =>
       a.category.localeCompare(b.category) ||
@@ -70,23 +70,15 @@ export function scoreOdsEvidences(
       evidence.state !== EvidenceState.CONFIRMED ||
       evidence.validUntil <= now
     ) {
-      if (
-        evidence.state === EvidenceState.UNKNOWN ||
-        evidence.state === EvidenceState.OUTDATED ||
-        evidence.validUntil <= now
-      )
-        inconclusive++;
       continue;
     }
     if (evidence.signal !== rule.signal) {
-      inconclusive++;
       continue;
     }
     const traceable =
       Boolean(evidence.sourceReference?.trim()) ||
       EvidenceSourceUrlSchema.safeParse(evidence.sourceUrl).success;
     if (!traceable) {
-      inconclusive++;
       continue;
     }
     const used = usedByCategory.get(rule.category) ?? 0;
@@ -105,10 +97,11 @@ export function scoreOdsEvidences(
   const scoreValue = count
     ? contributions.reduce((total, item) => total + item.points, 0)
     : null;
-  // Política inicial separada do índice; RF11/#78 acrescentará cobertura e qualidade.
-  const confidenceCap = odsNumber === 13 ? 0.25 : 0.8;
-  const confidenceValue = count
-    ? (confidenceCap * count) / (count + inconclusive + 1)
-    : 0;
+  const confidenceValue = calculateOdsConfidence(
+    odsNumber,
+    evidences,
+    new Set(contributions.map((item) => item.evidenceId)),
+    now,
+  );
   return { scoreValue, confidenceValue, evidenceCount: count, contributions };
 }
