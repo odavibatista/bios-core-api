@@ -83,7 +83,7 @@ export function readReportIdentity(
   const clean = text.replace(/[\u200b-\u200f\u2060\ufeff]/g, '');
   const documents = [
     ...clean.matchAll(
-      /CNPJ\s*:\s*([A-Z0-9]{2}\.?[A-Z0-9]{3}\.?[A-Z0-9]{3}\/?[A-Z0-9]{4}-?\d{2})/gi,
+      /CNPJ\s*:\s*([A-Z0-9]{2}\.?[A-Z0-9]{3}\.?[A-Z0-9]{3}\/?[A-Z0-9]{4}-?\d{2})(?![A-Z0-9])/gi,
     ),
   ].map((m) => parseCnpj(m[1]));
   const years = [...clean.matchAll(/Ano\s+inventariado\s*:\s*(\d{4})/gi)].map(

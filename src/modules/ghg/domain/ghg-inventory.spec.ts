@@ -90,6 +90,9 @@ describe('contrato publico GHG', () => {
   });
   it('rejeita anos e CNPJs ambiguos', () => {
     expect(
+      readReportIdentity(`CNPJ: ${inventory.cnpj}XYZ Ano inventariado: 2025`),
+    ).toBeNull();
+    expect(
       readReportIdentity(
         `CNPJ: ${inventory.cnpj} CNPJ: ${otherCguCnpj(inventory.cnpj)} Ano inventariado: 2025`,
       ),
