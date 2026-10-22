@@ -6,6 +6,7 @@ import request from 'supertest';
 import type { Queue } from 'bullmq';
 import { CATALOG_SEEDERS } from '@app/database/catalog.seeders.js';
 import { RecordEvidenceCollectionUseCase } from '@modules/evidences/infra/usecases/record-evidence-collection.usecase.js';
+import { companyProfileResponseFactory } from '../factories/companies/company-profile.factory.js';
 import { CompanyEnvironmentalEvidencesResponseSchema } from '@modules/evidences/domain/dtos/requests/company-evidences.dto.js';
 import { IBAMA_DATASET_URLS } from '@modules/ibama/domain/ibama-evidence.mapper.js';
 import { QueueName } from '@shared/domain/dtos/providers/queue-job.dto.js';
@@ -84,9 +85,23 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       await resetThrottleCounters(redisUrl);
       await prisma.reset(clean);
       await prisma.seed(CATALOG_SEEDERS);
+      cnpj = buildCnpj();
+      const source = await prisma.dataSource.findUniqueOrThrow({
+        where: { slug: 'BRASIL_API' },
+      });
+      const { refreshed_at, ...profile } = companyProfileResponseFactory.build({
+        cnpj,
+      });
+      await prisma.companyProfile.create({
+        data: {
+          ...profile,
+          refreshed_at: new Date(refreshed_at),
+          cadastral_source_id: source.id_data_source,
+          content_hash: faker.string.hexadecimal({ length: 64, prefix: '' }),
+        },
+      });
       // Consulta de proveniência usa retratos locais. Nunca baixar fontes oficiais nesta suíte.
       await prisma.dataSource.updateMany({ data: { is_enabled: false } });
-      cnpj = buildCnpj();
       const account = await createTestAccount(app);
       const login = await request(app.getHttpServer())
         .post('/auth/login')
@@ -154,6 +169,30 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         .set('Authorization', `Bearer ${token}`)
         .expect(422);
       for (const q of queues) expect(await q.getWaitingCount()).toBe(0);
+      expect(await prisma.dataSourceRequestLog.count()).toBe(0);
+    });
+    it('404 para CNPJ válido sem perfil, sem escrita, HTTP externo ou jobs', async () => {
+      const other = otherCguCnpj(cnpj);
+      const before = await Promise.all(queues.map((q) => q.getJobCounts()));
+      const response = await request(app.getHttpServer())
+        .get(route(other))
+        .set('Authorization', `Bearer ${token}`)
+        .expect(404);
+      expect(response.body).toMatchObject({ code: 'COMPANY_NOT_FOUND' });
+      expect(
+        await prisma.evidenceNormalized.count({ where: { cnpj: other } }),
+      ).toBe(0);
+      expect(await prisma.evidenceRaw.count({ where: { cnpj: other } })).toBe(
+        0,
+      );
+      expect(await prisma.dataSourceRequestLog.count()).toBe(0);
+      expect(await Promise.all(queues.map((q) => q.getJobCounts()))).toEqual(
+        before,
+      );
+    });
+    it('limita a rota a 20 consultas por minuto por IP', async () => {
+      for (let index = 0; index < 20; index++) await http().expect(200);
+      await http().expect(429);
       expect(await prisma.dataSourceRequestLog.count()).toBe(0);
     });
     it('200 entrega quatro fontes do catálogo, referência, HTTPS e nenhum campo interno', async () => {
@@ -316,7 +355,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       );
       const operation = document.paths['/companies/{cnpj}/evidences'].get!;
       expect(operation.security).toEqual([{ jwt: [] }]);
-      for (const status of ['200', '401', '422', '429', '500', '503'])
+      for (const status of ['200', '401', '404', '422', '429', '500', '503'])
         expect(operation.responses).toHaveProperty(status);
       const text = JSON.stringify(operation.responses['200']);
       for (const field of [

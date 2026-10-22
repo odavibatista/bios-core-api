@@ -434,19 +434,22 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         await settle();
       }
     });
-    it('CNPJ diferente nao recebe registros da primeira empresa e entrada invalida nao publica', async () => {
+    it('CNPJ sem perfil nao recebe registros nem publica coletas; entrada invalida nao publica', async () => {
       await run();
       await expect(get.execute('invalido')).rejects.toThrow(/CNPJ/);
       const other = otherCguCnpj(inventory.cnpj);
-      const rows = flatten(await get.execute(other));
-      expect(
-        rows
-          .filter((e) => e.source_slug.startsWith('CGU_'))
-          .every((e) => e.state === 'NOT_FOUND'),
-      ).toBe(true);
-      expect(rows.find((e) => e.source_slug === 'GHG_PROTOCOL')!.state).toBe(
-        'UNKNOWN',
+      const callsBefore = calls.length;
+      const jobsBefore = await Promise.all(queues.map((q) => q.getJobCounts()));
+      await expect(get.execute(other)).rejects.toMatchObject({
+        code: 'COMPANY_NOT_FOUND',
+      });
+      expect(calls).toHaveLength(callsBefore);
+      expect(await Promise.all(queues.map((q) => q.getJobCounts()))).toEqual(
+        jobsBefore,
       );
+      expect(
+        await prisma.evidenceNormalized.count({ where: { cnpj: other } }),
+      ).toBe(0);
       expect(
         (
           await prisma.evidenceNormalized.findMany({

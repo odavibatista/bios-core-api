@@ -7,7 +7,10 @@ import { ListCompanyEvidencesUseCase } from './list-company-evidences.usecase.js
 import { RecordEvidenceCollectionUseCase } from './record-evidence-collection.usecase.js';
 import { GetCompanyEnvironmentalEvidencesUseCase } from './get-company-environmental-evidences.usecase.js';
 import { Test } from '@nestjs/testing';
+import { CompanyProfileRepository } from '@modules/companies/domain/dtos/repositories/company-profile.repository.js';
+import { CompanyNotFoundException } from '@modules/companies/domain/dtos/errors/company-not-found.exception.js';
 describe('UC07 fontes independentes', () => {
+  const profiles = { findByCnpj: vi.fn() };
   const ibama = { execute: vi.fn() },
     cgu = { execute: vi.fn() },
     ghg = { execute: vi.fn() },
@@ -19,11 +22,13 @@ describe('UC07 fontes independentes', () => {
   let useCase: GetCompanyEnvironmentalEvidencesUseCase;
   beforeEach(async () => {
     vi.resetAllMocks();
+    profiles.findByCnpj.mockResolvedValue({ profile: { cnpj } });
     for (const mock of [ibama, cgu, ghg]) mock.execute.mockResolvedValue([]);
     list.execute.mockResolvedValue([storedEvidenceFactory.build({ cnpj })]);
     const module = await Test.createTestingModule({
       providers: [
         GetCompanyEnvironmentalEvidencesUseCase,
+        { provide: CompanyProfileRepository, useValue: profiles },
         { provide: GetIbamaCompanyEvidencesUseCase, useValue: ibama },
         { provide: RequestCguCompanyEvidencesUseCase, useValue: cgu },
         { provide: GetGhgCompanyEvidencesUseCase, useValue: ghg },
@@ -42,6 +47,7 @@ describe('UC07 fontes independentes', () => {
         }),
     );
     const pending = useCase.execute(cnpj);
+    await Promise.resolve();
     await Promise.resolve();
     expect(cgu.execute).toHaveBeenCalledWith(cnpj);
     expect(ghg.execute).toHaveBeenCalledWith(cnpj);
@@ -76,6 +82,23 @@ describe('UC07 fontes independentes', () => {
     await expect(useCase.execute('invalido')).rejects.toThrow(/CNPJ/);
     expect(ibama.execute).not.toHaveBeenCalled();
     expect(list.execute).not.toHaveBeenCalled();
+    expect(profiles.findByCnpj).not.toHaveBeenCalled();
+  });
+  it('recusa CNPJ sem perfil antes de ler, gravar ou acionar fontes', async () => {
+    profiles.findByCnpj.mockResolvedValue(null);
+    await expect(useCase.execute(cnpj)).rejects.toBeInstanceOf(
+      CompanyNotFoundException,
+    );
+    expect(profiles.findByCnpj).toHaveBeenCalledWith(cnpj);
+    for (const source of [ibama, cgu, ghg])
+      expect(source.execute).not.toHaveBeenCalled();
+    expect(list.execute).not.toHaveBeenCalled();
+    expect(collection.execute).not.toHaveBeenCalled();
+  });
+  it('propaga falha na leitura do perfil sem acionar fontes', async () => {
+    profiles.findByCnpj.mockRejectedValue(new Error('banco fora'));
+    await expect(useCase.execute(cnpj)).rejects.toThrow('banco fora');
+    expect(ibama.execute).not.toHaveBeenCalled();
   });
   it('nao disfarca falha global de persistencia como ausencia', async () => {
     list.execute.mockRejectedValue(new Error('banco fora'));
