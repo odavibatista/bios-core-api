@@ -23,6 +23,7 @@ describe('RF10: regras fixas por ODS', () => {
     storedEvidenceFactory.build({
       key,
       category: EvidenceCategory.CONDUTA_ADMINISTRATIVA,
+      sourceSlug: 'CGU_CEIS',
       signal: EvidenceSignal.NEGATIVE,
       odsNumber: 15,
       sourceReference: key,
@@ -32,6 +33,7 @@ describe('RF10: regras fixas por ODS', () => {
     storedEvidenceFactory.build({
       key,
       category: EvidenceCategory.EMISSAO_GEE,
+      sourceSlug: 'GHG_PROTOCOL',
       signal: EvidenceSignal.POSITIVE,
       odsNumber: 13,
       sourceReference: key,
@@ -39,7 +41,7 @@ describe('RF10: regras fixas por ODS', () => {
     });
 
   it('versiona regras e falha explicitamente para ODS ativo sem regra', () => {
-    expect(ODS_SCORE_RULES_VERSION).toBe('rf10-v1');
+    expect(ODS_SCORE_RULES_VERSION).toBe('rf10-rf11-v2');
     expect(() => scoreOdsEvidences(16, [])).toThrow('ODS 16 sem regras');
   });
 
