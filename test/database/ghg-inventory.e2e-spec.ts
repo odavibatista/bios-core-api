@@ -1,4 +1,4 @@
-import { createServer, type Server } from 'node:http';
+import { createServer, type Server, type ServerResponse } from 'node:http';
 import { readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import type { AddressInfo } from 'node:net';
@@ -28,6 +28,8 @@ import { otherCguCnpj } from '../factories/cgu/cgu-sanction.factory.js';
 import {
   ghgEnvelope,
   ghgInventoryFactory,
+  ghgOrganizationFactory,
+  ghgOrganizationsPage,
   ghgPdf,
 } from '../factories/ghg/ghg.factory.js';
 import { faker } from '../support/faker.js';
@@ -52,8 +54,44 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       status: number,
       delay: number,
       report: Buffer,
-      organizations: unknown,
+      directory: { id: number; name: string; about?: string }[],
+      rawOrganizations: unknown,
       inventories: unknown;
+    /**
+     * `SearchAllOrganizations` como o portal responde: so aceita POST, pagina de
+     * 10 sem `maxResultCount`, no maximo 1000 (acima disso, HTTP 400) e `total`
+     * com o tamanho do cadastro. `rawOrganizations` substitui a resposta inteira,
+     * para os cenarios de formato invalido.
+     */
+    function searchOrganizations(
+      method: string,
+      received: string,
+      res: ServerResponse,
+    ) {
+      const json = { 'Content-Type': 'application/json' };
+      if (method !== 'POST') {
+        res.writeHead(405).end();
+        return;
+      }
+      if (rawOrganizations !== undefined) {
+        res.writeHead(200, json).end(JSON.stringify(rawOrganizations));
+        return;
+      }
+      const { maxResultCount = 10, skipCount = 0 } = JSON.parse(
+        received || '{}',
+      ) as { maxResultCount?: number; skipCount?: number };
+      if (maxResultCount < 1 || maxResultCount > 1000) {
+        res.writeHead(400, json).end(JSON.stringify({ success: false }));
+        return;
+      }
+      res
+        .writeHead(200, json)
+        .end(
+          JSON.stringify(
+            ghgOrganizationsPage(directory, { maxResultCount, skipCount }),
+          ),
+        );
+    }
     const run = () => get.execute(inventory.cnpj);
     const dirs = async () =>
       new Set(
@@ -75,28 +113,31 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         .get(QueueName.GHG_INVENTORY)!;
       server = createServer((req, res) => {
         const url = new URL(req.url ?? '/', 'http://localhost');
-        calls.push(url.pathname);
-        const send = () => {
-          if (status !== 200) {
-            res.writeHead(status).end();
-            return;
-          }
-          if (url.pathname.endsWith('GetAllOrganizations'))
-            res
-              .writeHead(200, { 'Content-Type': 'application/json' })
-              .end(JSON.stringify(organizations));
-          else if (url.pathname.endsWith('GetReportedInventories'))
-            res
-              .writeHead(200, { 'Content-Type': 'application/json' })
-              .end(JSON.stringify(inventories));
-          else if (url.pathname.startsWith('/GenerateReport/'))
-            res
-              .writeHead(200, { 'Content-Type': 'application/pdf' })
-              .end(report);
-          else res.writeHead(404).end();
-        };
-        if (delay) setTimeout(send, delay);
-        else send();
+        calls.push(`${req.method} ${url.pathname}`);
+        const chunks: Buffer[] = [];
+        req.on('data', (chunk: Buffer) => chunks.push(chunk));
+        req.on('end', () => {
+          const received = Buffer.concat(chunks).toString();
+          const send = () => {
+            if (status !== 200) {
+              res.writeHead(status).end();
+              return;
+            }
+            if (url.pathname.endsWith('SearchAllOrganizations'))
+              searchOrganizations(req.method ?? '', received, res);
+            else if (url.pathname.endsWith('GetReportedInventories'))
+              res
+                .writeHead(200, { 'Content-Type': 'application/json' })
+                .end(JSON.stringify(inventories));
+            else if (url.pathname.startsWith('/GenerateReport/'))
+              res
+                .writeHead(200, { 'Content-Type': 'application/pdf' })
+                .end(report);
+            else res.writeHead(404).end();
+          };
+          if (delay) setTimeout(send, delay);
+          else send();
+        });
       });
       await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
       base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -122,9 +163,8 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       status = 200;
       delay = 0;
       report = ghgPdf(inventory.cnpj, inventory.year, personal);
-      organizations = ghgEnvelope([
-        { id: inventory.organizationId, name, about: personal },
-      ]);
+      directory = [{ id: inventory.organizationId, name, about: personal }];
+      rawOrganizations = undefined;
       inventories = ghgEnvelope({
         inventories: [{ year: inventory.year, cycleId: inventory.cycleId }],
         errorMsg: null,
@@ -227,7 +267,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       expect(await prisma.evidenceRaw.count()).toBe(1);
     });
     it('catalogo sem candidato gera UNKNOWN por 15 minutos, sem NOT_FOUND', async () => {
-      organizations = ghgEnvelope([]);
+      directory = [];
       const result = await run();
       expect(result[0].state).toBe('UNKNOWN');
       expect(
@@ -236,6 +276,31 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       await run();
       expect(calls).toHaveLength(1);
       expect(await prisma.evidenceRaw.count()).toBe(0);
+    });
+    it('confirma uma organizacao fora das 10 primeiras, que e tudo o que o portal devolve sem paginar', async () => {
+      directory = [
+        ...ghgOrganizationFactory.buildMany(25),
+        { id: inventory.organizationId, name, about: personal },
+      ];
+      const result = await run();
+      expect(result[0].state).toBe(EvidenceState.CONFIRMED);
+      expect(result[0].sourceReference).toBe(
+        `${inventory.organizationId}/${inventory.cycleId}`,
+      );
+      expect(calls.filter((c) => c.endsWith('SearchAllOrganizations'))).toEqual(
+        ['POST /api/services/app/EstatisticaPublica/SearchAllOrganizations'],
+      );
+    });
+    it('cadastro maior que uma pagina de 1000: pede a segunda e confirma a organizacao nela', async () => {
+      directory = [
+        ...ghgOrganizationFactory.buildMany(1200),
+        { id: inventory.organizationId, name, about: personal },
+      ];
+      const result = await run();
+      expect(result[0].state).toBe(EvidenceState.CONFIRMED);
+      expect(
+        calls.filter((c) => c.endsWith('SearchAllOrganizations')),
+      ).toHaveLength(2);
     });
     it('organizacao sem inventario gera UNKNOWN', async () => {
       inventories = ghgEnvelope({
@@ -261,7 +326,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       expect(await prisma.evidenceRaw.count()).toBe(0);
     });
     it('HTML de erro em HTTP200 nao e catalogo vazio', async () => {
-      organizations = '<html>login</html>';
+      rawOrganizations = '<html>login</html>';
       expect((await run())[0].state).toBe('UNKNOWN');
       expect(await prisma.evidenceRaw.count()).toBe(0);
     });

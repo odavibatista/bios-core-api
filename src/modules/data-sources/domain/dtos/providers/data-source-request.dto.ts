@@ -36,6 +36,13 @@ export interface DataSourceRequest {
   cnpj?: string;
 
   /**
+   * Quando presente, a chamada é um `POST` com este corpo enviado como JSON, e
+   * não um `GET`. Só para fontes cuja consulta existe apenas assim; o corpo nunca
+   * vai ao log de requisições. Não se combina com `download`.
+   */
+  body?: unknown;
+
+  /**
    * Quando presente, a resposta é um arquivo grande (um dump em lote) gravado em
    * `destination`, e não um JSON: o `body` do sucesso é um `SourceDownloadedFile`.
    * Mesmo limite por minuto, tempo máximo e log das demais chamadas.

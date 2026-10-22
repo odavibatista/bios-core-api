@@ -126,7 +126,9 @@ export class RequestDataSourceUseCase extends UseCase<
     };
     const result = request.download
       ? await this.httpClient.download({ ...http, ...request.download })
-      : await this.httpClient.get(http);
+      : request.body === undefined
+        ? await this.httpClient.get(http)
+        : await this.httpClient.post({ ...http, body: request.body });
 
     return classify(result);
   }

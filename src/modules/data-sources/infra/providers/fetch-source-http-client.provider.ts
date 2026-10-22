@@ -11,6 +11,7 @@ import {
   type SourceDownloadRequest,
   type SourceHttpRequest,
   type SourceHttpResult,
+  type SourcePostRequest,
 } from '../../domain/providers/source-http-client.provider.js';
 
 const TOO_LARGE_MESSAGE = 'arquivo maior que o limite aceito';
@@ -45,20 +46,44 @@ function causeCodeOf(error: Error): string | undefined {
  */
 @Injectable()
 export class FetchSourceHttpClient extends SourceHttpClient {
-  override async get({
-    url,
-    headers,
-    timeoutMs,
-  }: SourceHttpRequest): Promise<SourceHttpResult> {
+  override get(request: SourceHttpRequest): Promise<SourceHttpResult> {
+    return this.sendJson(request, { method: 'GET' });
+  }
+
+  override post({
+    body,
+    ...request
+  }: SourcePostRequest): Promise<SourceHttpResult> {
+    return this.sendJson(request, {
+      method: 'POST',
+      body: JSON.stringify(body),
+      contentType: 'application/json',
+    });
+  }
+
+  /**
+   * Envia a chamada e lê a resposta JSON, com as garantias descritas na classe.
+   * O corpo e o tipo só existem no `POST`; os cabeçalhos do catálogo prevalecem.
+   */
+  private async sendJson(
+    { url, headers, timeoutMs }: SourceHttpRequest,
+    {
+      method,
+      body,
+      contentType,
+    }: { method: 'GET' | 'POST'; body?: string; contentType?: string },
+  ): Promise<SourceHttpResult> {
     try {
       const response = await fetch(url, {
-        method: 'GET',
+        method,
         redirect: 'manual',
         headers: {
           accept: 'application/json',
           'user-agent': USER_AGENT,
+          ...(contentType ? { 'content-type': contentType } : {}),
           ...headers,
         },
+        ...(body === undefined ? {} : { body }),
         signal: AbortSignal.timeout(timeoutMs),
       });
 
