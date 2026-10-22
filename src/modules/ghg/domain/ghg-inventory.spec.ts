@@ -9,6 +9,10 @@ import { faker } from '@test/support/faker.js';
 import {
   GHG_ORGANIZATION_SEARCH,
   GHG_ORGANIZATIONS_PAGE_SIZE,
+  GHG_ORGANIZATIONS_TTL_SECONDS,
+  GHG_PORTAL_MAX_PAGE_SIZE,
+  GHG_SYNC_BUDGET_MS,
+  GhgOrganizationsSnapshotSchema,
   candidateOrganizations,
   readInventories,
   readOrganizationsPage,
@@ -84,16 +88,55 @@ describe('contrato publico GHG', () => {
       ghgEnvelope({
         total: 1001,
         organizations: ghgOrganizationFactory.buildMany(
-          GHG_ORGANIZATIONS_PAGE_SIZE + 1,
+          GHG_PORTAL_MAX_PAGE_SIZE + 1,
         ),
       }),
     ],
   ])('rejeita pagina de organizacoes invalida: %s', (_case, body) => {
     expect(() => readOrganizationsPage(body)).toThrow();
   });
-  it('a busca de organizacoes usa a rota paginada do portal, no maximo de 1000 por pagina', () => {
+  it('a busca de organizacoes usa a rota paginada do portal, em paginas menores que o maximo dele', () => {
     expect(GHG_ORGANIZATION_SEARCH.at(-1)).toBe('SearchAllOrganizations');
-    expect(GHG_ORGANIZATIONS_PAGE_SIZE).toBe(GHG_PORTAL_MAX_PAGE);
+    expect(GHG_PORTAL_MAX_PAGE_SIZE).toBe(GHG_PORTAL_MAX_PAGE);
+    // Metade do maximo: cada chamada leva ~5 s, bem abaixo dos 10 s do catalogo.
+    expect(GHG_ORGANIZATIONS_PAGE_SIZE).toBeLessThanOrEqual(
+      GHG_PORTAL_MAX_PAGE_SIZE / 2,
+    );
+  });
+  describe('cadastro sincronizado', () => {
+    const organizations = ghgOrganizationFactory.buildMany(3);
+    const syncedAt = new Date().toISOString();
+
+    it('guarda o cadastro com a data da sincronizacao e nada alem das organizacoes', () => {
+      expect(
+        GhgOrganizationsSnapshotSchema.parse({
+          syncedAt,
+          organizations: organizations.map((org) => ({
+            ...org,
+            about: faker.lorem.sentence(),
+          })),
+        }),
+      ).toEqual({ syncedAt, organizations });
+    });
+
+    it.each([
+      ['sem organizacoes', { syncedAt, organizations: [] }],
+      ['sem data', { organizations }],
+      ['data invalida', { syncedAt: 'ontem', organizations }],
+      [
+        'organizacao sem nome',
+        { syncedAt, organizations: [{ id: 1, name: '' }] },
+      ],
+    ])('recusa cadastro %s', (_case, stored) => {
+      expect(GhgOrganizationsSnapshotSchema.safeParse(stored).success).toBe(
+        false,
+      );
+    });
+
+    it('vale sete dias, e o tempo da sincronizacao e o de uma listagem inteira', () => {
+      expect(GHG_ORGANIZATIONS_TTL_SECONDS).toBe(7 * 86_400);
+      expect(GHG_SYNC_BUDGET_MS).toBeGreaterThan(60_000);
+    });
   });
   it('le inventarios e rejeita avisos/erros/inventarios fora do contrato', () => {
     const response = {

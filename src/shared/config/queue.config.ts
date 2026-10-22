@@ -45,6 +45,17 @@ export const QUEUE_SCHEDULES: readonly QueueSchedule[] = [
     // curta da fila.
     retry: { attempts: 5, backoffMs: 300_000 },
   },
+  {
+    // Cadastro de organizações do GHG: uma listagem paginada que leva ~15 s e
+    // que a coleta de cada CNPJ lê já sincronizada. Um minuto de base (1, 2, 4 e
+    // 8 min) cobre a oscilação do portal sem esperar horas: o cadastro anterior
+    // vale por sete dias, e a próxima execução diária também tenta.
+    queue: QueueName.GHG_INVENTORY,
+    id: 'ghg-organizations-sync',
+    jobName: 'sync-ghg-organizations',
+    cron: '30 3 * * *',
+    retry: { attempts: 5, backoffMs: 60_000 },
+  },
 ];
 
 /**

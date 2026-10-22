@@ -16,11 +16,26 @@ export function ghgEnvelope(result: unknown) {
     __abp: true,
   };
 }
-/** Organizacao do cadastro do portal, no formato que a busca devolve (sem os campos que o adapter ignora). */
-export const ghgOrganizationFactory = defineFactory(() => ({
-  id: faker.number.int({ min: 1, max: 99_999 }),
-  name: faker.company.name(),
-}));
+/**
+ * Identificadores sequenciais a partir de um ponto aleatorio acima da faixa do
+ * `organizationId` de `ghgInventoryFactory` (ate 9999): o cadastro deduplica
+ * por identificador, entao duas organizacoes geradas nunca podem colidir, nem
+ * com a organizacao procurada pelo cenario.
+ */
+let nextOrganizationId = faker.number.int({ min: 10_000, max: 80_000 });
+/**
+ * Organizacao do cadastro do portal, no formato que a busca devolve (sem os
+ * campos que o adapter ignora). O nome leva o identificador no fim: o adapter
+ * localiza candidatos por um nome *conter* o outro, e dois nomes sorteados
+ * podem se conter por acaso, o que tornaria os cenarios de "sem candidato"
+ * intermitentes. Com o sufixo, um nome gerado aqui nunca esta contido no de
+ * uma empresa sorteada, nem o contem.
+ */
+export const ghgOrganizationFactory = defineFactory(() => {
+  const id = nextOrganizationId++;
+
+  return { id, name: `${faker.company.name()} ${id}` };
+});
 /** Tamanho da pagina que o portal devolve quando a busca nao informa `maxResultCount`. */
 export const GHG_PORTAL_DEFAULT_PAGE = 10;
 /** Maior `maxResultCount` aceito pelo portal; acima disso responde HTTP 400. */

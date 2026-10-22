@@ -19,6 +19,12 @@ export const CacheNamespace = {
   CGU_CNEP: 'cgu-cnep',
   /** Inventario sanitizado, por CNPJ e com data original. */
   GHG_INVENTORY: 'ghg-inventory',
+  /**
+   * Cadastro de organizações do Registro Público de Emissões, sincronizado uma vez
+   * por dia. O identificador é fixo, e não um CNPJ: o cadastro é da fonte, igual
+   * para toda empresa, e reconstruível por ela (não é fonte de verdade).
+   */
+  GHG_ORGANIZATIONS: 'ghg-organizations',
 
   /**
    * Descrição oficial de uma subclasse da CNAE (IBGE). O identificador é o
