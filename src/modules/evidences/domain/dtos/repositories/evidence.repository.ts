@@ -35,6 +35,9 @@ export interface StoredEvidence {
   /** Identificador da fonte (`data_sources.slug`). */
   sourceSlug: string;
 
+  /** Nome público da fonte no catálogo, para auditoria. */
+  sourceName: string;
+
   category: EvidenceCategory;
 
   /** Número do ODS (`ods.ods_number`). */

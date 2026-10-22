@@ -288,7 +288,7 @@ describe('PrismaEvidenceRepository', () => {
         valid_until: new Date('2026-10-22T00:00:00.000Z'),
         created_at: new Date(),
         updated_at: new Date(),
-        data_source: { slug: 'IBAMA' },
+        data_source: { slug: 'IBAMA', name: 'IBAMA — Dados Abertos' },
         ods: { ods_number: 15 },
         ...overrides,
       };
@@ -303,7 +303,7 @@ describe('PrismaEvidenceRepository', () => {
       expect(findMany).toHaveBeenCalledWith({
         where: { cnpj },
         include: {
-          data_source: { select: { slug: true } },
+          data_source: { select: { slug: true, name: true } },
           ods: { select: { ods_number: true } },
         },
         orderBy: [{ collected_at: 'desc' }, { evidence_key: 'asc' }],
@@ -320,6 +320,7 @@ describe('PrismaEvidenceRepository', () => {
           key: 'IBAMA:11222333000181:AI-1',
           cnpj: '11222333000181',
           sourceSlug: 'IBAMA',
+          sourceName: 'IBAMA — Dados Abertos',
           category: 'INFRACAO_AMBIENTAL',
           odsNumber: 15,
           state: 'CONFIRMED',
