@@ -51,7 +51,7 @@ const sha256 = (content: string | Buffer) =>
 
 /**
  * Lote diário do IBAMA ponta a ponta (UC14): o job publicado na fila
- * `environmental-evidences` é consumido pelo `IbamaIngestionProcessor` do
+ * `environmental-evidences` é consumido pelo `EnvironmentalEvidencesProcessor` do
  * próprio AppModule, baixa os dois dumps de um servidor local, grava as
  * evidências no MongoDB real e registra a execução em `ingestion_runs`.
  */

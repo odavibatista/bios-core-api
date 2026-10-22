@@ -156,6 +156,12 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       await queue.obliterate({ force: true });
       server.closeAllConnections();
       await new Promise<void>((r) => server.close(() => r()));
+      await prisma.reset([
+        'evidence_normalized',
+        'evidence_raw',
+        'company_profile',
+        'data_source_request_logs',
+      ]);
       await app.close();
     });
     it('fila real confirma CNPJ/ano, persiste somente whitelist e link original', async () => {

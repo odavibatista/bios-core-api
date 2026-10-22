@@ -1,56 +1,60 @@
+import { RequestTrigger } from '@prisma/client';
+import { GetCguCompanyEvidencesUseCase } from '@modules/cgu/infra/usecases/get-cgu-company-evidences.usecase.js';
+import {
+  CguJobSchema,
+  FETCH_CGU_EVIDENCES_JOB,
+} from '../../domain/cgu-job.dto.js';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { type Job, UnrecoverableError } from 'bullmq';
 import { FailIngestionRunUseCase } from '@modules/data-sources/infra/usecases/ingestion/fail-ingestion-run.usecase.js';
 import { QueueName } from '@shared/domain/dtos/providers/queue-job.dto.js';
-import { IbamaSourceDisabledError } from '../../domain/dtos/errors/ibama-ingestion.errors.js';
+import { IbamaSourceDisabledError } from '@modules/ibama/domain/dtos/errors/ibama-ingestion.errors.js';
 import {
   IbamaIngestionJobPayloadSchema,
   type IbamaIngestionJobResult,
   INGEST_IBAMA_DUMPS_JOB,
-} from '../../domain/dtos/providers/ibama-ingestion-job.dto.js';
+} from '@modules/ibama/domain/dtos/providers/ibama-ingestion-job.dto.js';
 import {
   IbamaCompanyJobPayloadSchema,
   type IbamaCompanyJobResult,
   INGEST_IBAMA_COMPANY_JOB,
-} from '../../domain/dtos/providers/ibama-company-job.dto.js';
-import { IngestIbamaCompanyUseCase } from '../usecases/ingest-ibama-company.usecase.js';
-import { IngestIbamaDumpsUseCase } from '../usecases/ingest-ibama-dumps.usecase.js';
-import { IBAMA_SLUG } from '../providers/ibama.data-source.js';
+} from '@modules/ibama/domain/dtos/providers/ibama-company-job.dto.js';
+import { IngestIbamaCompanyUseCase } from '@modules/ibama/infra/usecases/ingest-ibama-company.usecase.js';
+import { IngestIbamaDumpsUseCase } from '@modules/ibama/infra/usecases/ingest-ibama-dumps.usecase.js';
+import { IBAMA_SLUG } from '@modules/ibama/infra/providers/ibama.data-source.js';
 
-/**
- * Consome a fila `environmental-evidences` no core: executa o lote diário do
- * IBAMA publicado pelo agendador e a coleta avulsa por CNPJ (UC14).
- *
- * Despacha lote diário e coleta avulsa por CNPJ pelo nome do job. A futura
- * consolidação entra aqui ou num despachante acima deste módulo. Um nome que ninguém
- * conhece, ou um payload fora do contrato, falha **sem repetição**
- * (`UnrecoverableError`): repetir não o consertaria.
- *
- * Roda até três jobs ao mesmo tempo. O lote ocupa um deles por vários minutos,
- * e a fila é a mesma dos jobs por CNPJ, que não podem esperar atrás dele.
- *
- * **Repetição e `FAILED`.** Qualquer erro propaga, e a política do agendamento
- * (`QueueSchedule.retry`) repete o job. A execução em `ingestion_runs` só é
- * marcada `FAILED` na **última** tentativa (ou quando o erro não admite
- * repetição, como a fonte desabilitada): nas anteriores ela segue `RUNNING`, e
- * a tentativa seguinte a reabre. Falhar a execução não apaga evidência alguma.
+/** Unico consumidor ambiental: despacha IBAMA e CGU pelo nome do job.
+ * GHG permanece em sua fila exclusiva. Falhas CGU nao alteram runs IBAMA.
  */
 @Processor(QueueName.ENVIRONMENTAL_EVIDENCES, { concurrency: 3 })
-export class IbamaIngestionProcessor extends WorkerHost {
-  private readonly logger = new Logger(IbamaIngestionProcessor.name);
+export class EnvironmentalEvidencesProcessor extends WorkerHost {
+  private readonly logger = new Logger(EnvironmentalEvidencesProcessor.name);
 
   constructor(
     private readonly ingestIbamaDumps: IngestIbamaDumpsUseCase,
     private readonly ingestIbamaCompany: IngestIbamaCompanyUseCase,
     private readonly failIngestionRun: FailIngestionRunUseCase,
+    private readonly cgu: GetCguCompanyEvidencesUseCase,
   ) {
     super();
   }
 
   async process(
     job: Job<unknown>,
-  ): Promise<IbamaIngestionJobResult | IbamaCompanyJobResult> {
+  ): Promise<
+    IbamaIngestionJobResult | IbamaCompanyJobResult | { status: 'COLLECTED' }
+  > {
+    if (job.name === FETCH_CGU_EVIDENCES_JOB) {
+      const payload = CguJobSchema.safeParse(job.data);
+      if (!payload.success || !job.id)
+        throw new UnrecoverableError('Job CGU fora do contrato.');
+      await this.cgu.execute({
+        cnpj: payload.data.cnpj,
+        context: { trigger: RequestTrigger.ON_DEMAND_JOB },
+      });
+      return { status: 'COLLECTED' };
+    }
     const companyJob = job.name === INGEST_IBAMA_COMPANY_JOB;
     if (!companyJob && job.name !== INGEST_IBAMA_DUMPS_JOB) {
       throw new UnrecoverableError('Job desconhecido: "' + job.name + '".');
