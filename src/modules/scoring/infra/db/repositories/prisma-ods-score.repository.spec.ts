@@ -15,6 +15,7 @@ describe('PrismaOdsScoreRepository', () => {
   };
   const prisma = {
     ods: { findMany: vi.fn() },
+    companyOdsScore: { findFirst: vi.fn() },
     companyProfile: { findUnique: vi.fn() },
     $transaction: vi.fn(
       async (run: (client: TransactionClient) => Promise<void>) => run(tx),
@@ -33,6 +34,56 @@ describe('PrismaOdsScoreRepository', () => {
       select: { id_ods: true, ods_number: true },
       orderBy: { ods_number: 'asc' },
     });
+  });
+
+  it('lê o retrato do índice e mapeia as contribuições sem recálculo', async () => {
+    const id = faker.database.mongodbObjectId();
+    const calculatedAt = new Date();
+    prisma.companyOdsScore.findFirst.mockResolvedValue({
+      cnpj: '11222333000181',
+      ods_number: 15,
+      score_value: -5,
+      confidence_value: 0.2,
+      evidence_count: 1,
+      contributions: [
+        {
+          evidence_id: id,
+          category: 'CONDUTA_ADMINISTRATIVA',
+          signal: 'NEGATIVE',
+          weight: 5,
+          points: -5,
+        },
+      ],
+      rules_version: 'rf10-rf11-v2',
+      calculated_at: calculatedAt,
+    });
+    await expect(
+      repo.findByCnpjAndOdsNumber('11222333000181', 15),
+    ).resolves.toEqual({
+      cnpj: '11222333000181',
+      odsNumber: 15,
+      scoreValue: -5,
+      confidenceValue: 0.2,
+      evidenceCount: 1,
+      contributions: [
+        {
+          evidenceId: id,
+          category: 'CONDUTA_ADMINISTRATIVA',
+          signal: 'NEGATIVE',
+          weight: 5,
+          points: -5,
+        },
+      ],
+      rulesVersion: 'rf10-rf11-v2',
+      calculatedAt,
+    });
+    expect(prisma.companyOdsScore.findFirst).toHaveBeenCalledWith({
+      where: { cnpj: '11222333000181', ods_number: 15 },
+    });
+    prisma.companyOdsScore.findFirst.mockResolvedValue(null);
+    await expect(
+      repo.findByCnpjAndOdsNumber('11222333000181', 13),
+    ).resolves.toBeNull();
   });
 
   it('sem perfil não inventa localização ou CNAE', async () => {

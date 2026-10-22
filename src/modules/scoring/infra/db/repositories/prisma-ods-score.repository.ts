@@ -5,6 +5,7 @@ import {
   OdsScoreRepository,
   type ActiveOds,
   type OdsScoreToSave,
+  type OdsScoreSnapshot,
   type ScoreProfileLocation,
 } from '../../../domain/dtos/repositories/ods-score.repository.js';
 
@@ -24,6 +25,32 @@ export class PrismaOdsScoreRepository
       orderBy: { ods_number: 'asc' },
     });
     return rows.map((row) => ({ id: row.id_ods, number: row.ods_number }));
+  }
+
+  async findByCnpjAndOdsNumber(
+    cnpj: string,
+    odsNumber: number,
+  ): Promise<OdsScoreSnapshot | null> {
+    const row = await this.prisma.companyOdsScore.findFirst({
+      where: { cnpj, ods_number: odsNumber },
+    });
+    if (!row) return null;
+    return {
+      cnpj: row.cnpj,
+      odsNumber: row.ods_number,
+      scoreValue: row.score_value,
+      confidenceValue: row.confidence_value,
+      evidenceCount: row.evidence_count,
+      contributions: row.contributions.map((item) => ({
+        evidenceId: item.evidence_id,
+        category: item.category,
+        signal: item.signal,
+        weight: item.weight,
+        points: item.points,
+      })),
+      rulesVersion: row.rules_version,
+      calculatedAt: row.calculated_at,
+    };
   }
 
   async findProfileLocation(
