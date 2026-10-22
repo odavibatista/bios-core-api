@@ -19,17 +19,14 @@ import { CacheNamespace } from '@shared/domain/dtos/providers/cache-key.dto.js';
 import { parseCnpj } from '@shared/domain/value-objects/cnpj.js';
 import {
   GHG_SLUG,
-  GHG_ORGANIZATION_SEARCH,
-  GHG_ORGANIZATIONS_PAGE_SIZE,
   GHG_PUBLIC_API,
   GhgInventorySchema,
   candidateOrganizations,
   ghgBaseUrl,
   readInventories,
-  readOrganizationsPage,
   type GhgInventory,
-  type GhgOrganization,
 } from '../../domain/ghg-inventory.js';
+import { GhgOrganizationDirectory } from './ghg-organization-directory.provider.js';
 import { GhgReportReader } from './ghg-report-reader.provider.js';
 
 export interface GhgQuery {
@@ -59,6 +56,7 @@ export class GhgDataSource implements DataSourceInterface<GhgQuery, GhgAnswer> {
     private readonly ttl: ResolveSourceCacheTtlUseCase,
     private readonly cache: CacheProvider,
     private readonly reader: GhgReportReader,
+    private readonly directory: GhgOrganizationDirectory,
   ) {}
 
   async fetch(query: GhgQuery, context: SourceCallContext) {
@@ -84,6 +82,18 @@ export class GhgDataSource implements DataSourceInterface<GhgQuery, GhgAnswer> {
             data: { inventories: cached.data.inventories, collectedAt },
           };
       }
+      // Sem nome com o que procurar, nem o cadastro é consultado.
+      if (!query.names.some((n) => n.trim().length >= 5)) return unavailable();
+      // O cadastro de organizações é sincronizado em segundo plano: a coleta de
+      // um CNPJ não faz chamada externa para localizar candidatos. Só na
+      // primeira vez (ou com o cache limpo) ele é sincronizado aqui, antes de o
+      // prazo desta coleta começar a contar.
+      const snapshot =
+        (await this.directory.read()) ?? (await this.directory.sync(context));
+      const candidates = candidateOrganizations(
+        snapshot.organizations,
+        query.names,
+      );
       const collectedAt = new Date();
       const deadline =
         Date.now() + (source.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS);
@@ -92,14 +102,12 @@ export class GhgDataSource implements DataSourceInterface<GhgQuery, GhgAnswer> {
         segments: string[],
         params?: Record<string, string>,
         report = false,
-        body?: unknown,
       ) => {
         if (remaining() <= 0) return null;
         const result = await this.request.execute({
           slug: this.slug,
           segments,
           query: params,
-          body,
           cnpj,
           context,
           budgetMs: remaining(),
@@ -117,28 +125,6 @@ export class GhgDataSource implements DataSourceInterface<GhgQuery, GhgAnswer> {
           return null;
         return { body: result.body };
       };
-      if (!query.names.some((n) => n.trim().length >= 5)) return unavailable();
-      // O cadastro vem em páginas: listar só a primeira deixaria o resto invisível.
-      const organizations: GhgOrganization[] = [];
-      let total = 0;
-      do {
-        const page = await call(
-          [...GHG_ORGANIZATION_SEARCH],
-          undefined,
-          false,
-          {
-            maxResultCount: GHG_ORGANIZATIONS_PAGE_SIZE,
-            skipCount: organizations.length,
-          },
-        );
-        if (!page) return unavailable();
-        const read = readOrganizationsPage(page.body);
-        // Página vazia antes do total: o cadastro mudou no meio; não inferir nada.
-        if (read.organizations.length === 0) return unavailable();
-        total = read.total;
-        organizations.push(...read.organizations);
-      } while (organizations.length < total);
-      const candidates = candidateOrganizations(organizations, query.names);
       directory = await mkdtemp(join(tmpdir(), 'bios-ghg-'));
       for (const org of candidates) {
         const response = await call(
