@@ -15,9 +15,25 @@ export interface OdsScoreToSave extends CalculatedOdsScore {
   location: ScoreProfileLocation | null;
 }
 
+export type OdsScoreSnapshot = Pick<
+  CalculatedOdsScore,
+  | 'cnpj'
+  | 'odsNumber'
+  | 'scoreValue'
+  | 'confidenceValue'
+  | 'evidenceCount'
+  | 'contributions'
+  | 'rulesVersion'
+  | 'calculatedAt'
+>;
+
 /** Contrato da leitura dos ODS e da substituição atômica dos índices de uma empresa. */
 export abstract class OdsScoreRepository {
   abstract findActiveOds(): Promise<ActiveOds[]>;
+  abstract findByCnpjAndOdsNumber(
+    cnpj: string,
+    odsNumber: number,
+  ): Promise<OdsScoreSnapshot | null>;
   abstract findProfileLocation(
     cnpj: string,
   ): Promise<ScoreProfileLocation | null>;
