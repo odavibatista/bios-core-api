@@ -101,7 +101,11 @@ export class RequestDataSourceUseCase extends UseCase<
     let url: string;
 
     try {
-      url = buildSourceUrl(config.baseUrl, request.segments, request.query);
+      url = buildSourceUrl(
+        request.resolveBaseUrl?.(config.baseUrl) ?? config.baseUrl,
+        request.segments,
+        request.query,
+      );
     } catch (error) {
       return {
         outcome: SourceOutcome.FAILURE,
@@ -112,7 +116,13 @@ export class RequestDataSourceUseCase extends UseCase<
     const http = {
       url,
       headers: request.headers ?? {},
-      timeoutMs: config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
+      timeoutMs: Math.max(
+        1,
+        Math.min(
+          config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
+          request.budgetMs ?? Infinity,
+        ),
+      ),
     };
     const result = request.download
       ? await this.httpClient.download({ ...http, ...request.download })
