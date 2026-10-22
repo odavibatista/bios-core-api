@@ -57,10 +57,12 @@ describe('coleta CGU por empresa', () => {
       sourceSlug: 'CGU_CEIS',
       cnpj,
     });
-    list.execute.mockResolvedValue([
-      stored,
-      storedEvidenceFactory.build({ sourceSlug: 'IBAMA' }),
-    ]);
+    list.execute
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([
+        stored,
+        storedEvidenceFactory.build({ sourceSlug: 'IBAMA' }),
+      ]);
     expect(await useCase.execute({ cnpj, context })).toEqual([stored]);
     expect(entries.execute).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -104,5 +106,51 @@ describe('coleta CGU por empresa', () => {
     ).rejects.toThrow(/CNPJ/);
     expect(ceis.fetch).not.toHaveBeenCalled();
     expect(cnep.fetch).not.toHaveBeenCalled();
+  });
+
+  it('reutiliza CEIS fresco e consulta apenas CNEP pendente', async () => {
+    list.execute.mockResolvedValue([
+      storedEvidenceFactory.build({ cnpj, sourceSlug: 'CGU_CEIS' }),
+    ]);
+    await useCase.execute({ cnpj, context });
+    expect(ceis.fetch).not.toHaveBeenCalled();
+    expect(cnep.fetch).toHaveBeenCalledOnce();
+  });
+  it('placeholder UNKNOWN do produtor nao impede coleta do worker', async () => {
+    list.execute.mockResolvedValue([
+      storedEvidenceFactory.build({
+        cnpj,
+        sourceSlug: 'CGU_CEIS',
+        state: 'UNKNOWN',
+      }),
+    ]);
+    await useCase.execute({ cnpj, context });
+    expect(ceis.fetch).toHaveBeenCalledOnce();
+  });
+  it('excecao CEIS inesperada nao perde resposta CNEP', async () => {
+    ceis.fetch.mockRejectedValue(new Error('rede fora'));
+    await useCase.execute({ cnpj, context });
+    expect(collection.execute).toHaveBeenCalledWith({
+      cnpj,
+      sourceSlug: 'CGU_CEIS',
+      result: { status: 'UNAVAILABLE' },
+    });
+    expect(entries.execute).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceSlug: 'CGU_CNEP', entries: [] }),
+    );
+  });
+  it('espera ambas as gravacoes antes de propagar erro de persistencia', async () => {
+    let resolve!: () => void;
+    entries.execute.mockImplementation(({ sourceSlug }) =>
+      sourceSlug === 'CGU_CEIS'
+        ? Promise.reject(new Error('banco'))
+        : new Promise<void>((r) => {
+            resolve = r;
+          }),
+    );
+    const pending = useCase.execute({ cnpj, context });
+    await vi.waitFor(() => expect(resolve).toBeDefined());
+    resolve();
+    await expect(pending).rejects.toThrow('banco');
   });
 });

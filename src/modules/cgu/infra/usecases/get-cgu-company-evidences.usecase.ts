@@ -1,3 +1,4 @@
+import { EvidenceState } from '@prisma/client';
 import { Injectable } from '@nestjs/common';
 import { UseCase } from '@shared/domain/protocols/use-case.protocol.js';
 import { parseCnpj } from '@shared/domain/value-objects/cnpj.js';
@@ -34,9 +35,23 @@ export class GetCguCompanyEvidencesUseCase extends UseCase<
     const cnpj = parseCnpj(input.cnpj);
     if (!cnpj)
       throw new InvalidEvidenceError('CNPJ inválido para consultar CGU.');
-    await Promise.all(
+    const local = await this.list.execute(cnpj);
+    const results = await Promise.allSettled(
       [this.ceis, this.cnep].map(async (adapter) => {
-        const result = await adapter.fetch(cnpj, input.context);
+        const existing = local.filter((e) => e.sourceSlug === adapter.slug);
+        if (
+          existing.length &&
+          existing.every(
+            (e) =>
+              e.state !== EvidenceState.UNKNOWN &&
+              e.state !== EvidenceState.OUTDATED &&
+              e.validUntil > new Date(),
+          )
+        )
+          return;
+        const result = await adapter.fetch(cnpj, input.context).catch(() => ({
+          status: 'UNAVAILABLE' as const,
+        }));
         if (result.status === 'UNAVAILABLE') {
           await this.collection.execute({
             cnpj,
@@ -57,6 +72,8 @@ export class GetCguCompanyEvidencesUseCase extends UseCase<
         }
       }),
     );
+    const failed = results.find((result) => result.status === 'rejected');
+    if (failed?.status === 'rejected') throw failed.reason;
     return (await this.list.execute(cnpj)).filter((e) =>
       CGU_SLUGS.some((slug) => slug === e.sourceSlug),
     );
