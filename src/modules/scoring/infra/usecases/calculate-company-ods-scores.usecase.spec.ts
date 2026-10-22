@@ -63,6 +63,7 @@ describe('CalculateCompanyOdsScoresUseCase', () => {
   it('calcula ODS separados e persiste uma contribuição por evidência rastreável', async () => {
     const ghg = storedEvidenceFactory.build({
       category: EvidenceCategory.EMISSAO_GEE,
+      sourceSlug: 'GHG_PROTOCOL',
       odsNumber: 13,
       signal: EvidenceSignal.POSITIVE,
       sourceReference: '5091/19',
@@ -76,6 +77,7 @@ describe('CalculateCompanyOdsScoresUseCase', () => {
     });
     const cgu = storedEvidenceFactory.build({
       category: EvidenceCategory.CONDUTA_ADMINISTRATIVA,
+      sourceSlug: 'CGU_CEIS',
       odsNumber: 15,
       sourceReference: '370679',
       sourceUrl: null,
@@ -103,7 +105,7 @@ describe('CalculateCompanyOdsScoresUseCase', () => {
     expect(
       result.every(
         (score) =>
-          score.rulesVersion === 'rf10-v1' &&
+          score.rulesVersion === 'rf10-rf11-v2' &&
           score.calculatedAt instanceof Date,
       ),
     ).toBe(true);
