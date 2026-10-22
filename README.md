@@ -781,8 +781,26 @@ GHG 1); `U` e `O` contam fontes com `UNKNOWN` e `OUTDATED`, respectivamente.
 O teto é 0,25 para ODS 13, por sua baixa cobertura estrutural, e 1 para ODS 15.
 `NOT_FOUND` amplia somente a cobertura quando já existe um achado, sem pontuar.
 Fonte sem resposta não amplia cobertura; sinal incorreto ou achado sem
-rastreabilidade não acrescenta qualidade. A orquestração com perfil e a
-exposição pública do índice ficam na #81.
+rastreabilidade não acrescenta qualidade. A composição no perfil e a API
+pública completa ficam na #81.
+
+### Explicação do índice por ODS (RF12)
+
+`GET /companies/{cnpj}/scores/{odsNumber}/explanation` exige sessão JWT e
+lê o retrato já gravado em `company_ods_scores`, sem coletar fontes nem recalcular
+o índice. A resposta traz `score_value` e `confidence_value` separados,
+`rules_version`, data do cálculo e as contribuições em ordem determinística.
+Cada contribuição associa o ID da evidência ao nome público e slug da fonte,
+categoria, referência ou URL HTTPS original, sinal, peso e pontos efetivos.
+`state` é `CONFIRMED` no momento do cálculo; `current_state` informa se a
+evidência passou a `OUTDATED` desde então. A soma dos pontos reproduz o índice.
+Sanções CEIS/CNEP conservam a categoria `CONDUTA_ADMINISTRATIVA`.
+
+Índice calculado sem contribuição responde 200 com `index_status = UNAVAILABLE`,
+`score_value = null` e lista vazia. Empresa/ODS sem score gravado responde 404.
+Contribuição órfã, inconsistente ou sem proveniência auditável responde 409,
+para não apresentar uma explicação parcial como completa. A resposta não
+classifica a empresa como sustentável ou insustentável.
 
 ### CGU: CEIS e CNEP (conduta administrativa)
 
