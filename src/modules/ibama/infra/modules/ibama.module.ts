@@ -3,6 +3,8 @@ import { DataSourcesModule } from '@modules/data-sources/infra/modules/data-sour
 import { EvidencesModule } from '@modules/evidences/infra/modules/evidences.module.js';
 import { IbamaIngestionProcessor } from '../queue/ibama-ingestion.processor.js';
 import { IbamaDataSource } from '../providers/ibama.data-source.js';
+import { IngestIbamaCompanyUseCase } from '../usecases/ingest-ibama-company.usecase.js';
+import { GetIbamaCompanyEvidencesUseCase } from '../usecases/get-ibama-company-evidences.usecase.js';
 import { IngestIbamaDumpsUseCase } from '../usecases/ingest-ibama-dumps.usecase.js';
 import { NormalizeIbamaRecordsUseCase } from '../usecases/normalize-ibama-records.usecase.js';
 
@@ -17,7 +19,9 @@ import { NormalizeIbamaRecordsUseCase } from '../usecases/normalize-ibama-record
  *
  * Hospeda o consumidor da fila `environmental-evidences`
  * (`IbamaIngestionProcessor`), que executa o lote diário
- * (`IngestIbamaDumpsUseCase`) disparado pelo agendador (`QUEUE_SCHEDULES`).
+ * (`IngestIbamaDumpsUseCase`) disparado pelo agendador (`QUEUE_SCHEDULES`)
+ * e a coleta avulsa (`IngestIbamaCompanyUseCase`). A consulta local e publicação
+ * sem espera ficam em `GetIbamaCompanyEvidencesUseCase`, exportado ao perfil.
  */
 @Module({
   imports: [DataSourcesModule, EvidencesModule],
@@ -25,12 +29,16 @@ import { NormalizeIbamaRecordsUseCase } from '../usecases/normalize-ibama-record
     IbamaDataSource,
     NormalizeIbamaRecordsUseCase,
     IngestIbamaDumpsUseCase,
+    IngestIbamaCompanyUseCase,
+    GetIbamaCompanyEvidencesUseCase,
     IbamaIngestionProcessor,
   ],
   exports: [
     IbamaDataSource,
     NormalizeIbamaRecordsUseCase,
     IngestIbamaDumpsUseCase,
+    IngestIbamaCompanyUseCase,
+    GetIbamaCompanyEvidencesUseCase,
   ],
 })
 export class IbamaModule {}

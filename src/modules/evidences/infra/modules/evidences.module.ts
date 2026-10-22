@@ -7,6 +7,7 @@ import { PrismaRawEvidenceRepository } from '../db/repositories/prisma-raw-evide
 import { ListCompanyEvidencesUseCase } from '../usecases/list-company-evidences.usecase.js';
 import { OpenEvidenceBatchUseCase } from '../usecases/open-evidence-batch.usecase.js';
 import { RecordEvidenceCollectionUseCase } from '../usecases/record-evidence-collection.usecase.js';
+import { RecordEvidenceEntriesUseCase } from '../usecases/record-evidence-entries.usecase.js';
 import { RenewSourceEvidencesUseCase } from '../usecases/renew-source-evidences.usecase.js';
 
 /**
@@ -36,12 +37,14 @@ import { RenewSourceEvidencesUseCase } from '../usecases/renew-source-evidences.
 
     /* Casos de uso */
     RecordEvidenceCollectionUseCase,
+    RecordEvidenceEntriesUseCase,
     RenewSourceEvidencesUseCase,
     OpenEvidenceBatchUseCase,
     ListCompanyEvidencesUseCase,
   ],
   exports: [
     RecordEvidenceCollectionUseCase,
+    RecordEvidenceEntriesUseCase,
     RenewSourceEvidencesUseCase,
     OpenEvidenceBatchUseCase,
     ListCompanyEvidencesUseCase,

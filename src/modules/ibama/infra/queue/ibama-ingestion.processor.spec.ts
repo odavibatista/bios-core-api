@@ -12,6 +12,9 @@ import {
   type IbamaIngestionJobResult,
   INGEST_IBAMA_DUMPS_JOB,
 } from '../../domain/dtos/providers/ibama-ingestion-job.dto.js';
+import { IBAMA_CNPJ } from '@test/factories/ibama/ibama-dump.factory.js';
+import { INGEST_IBAMA_COMPANY_JOB } from '../../domain/dtos/providers/ibama-company-job.dto.js';
+import { IngestIbamaCompanyUseCase } from '../usecases/ingest-ibama-company.usecase.js';
 import { IngestIbamaDumpsUseCase } from '../usecases/ingest-ibama-dumps.usecase.js';
 import { IbamaIngestionProcessor } from './ibama-ingestion.processor.js';
 
@@ -55,17 +58,24 @@ function buildResult(): IbamaIngestionJobResult {
 
 describe('IbamaIngestionProcessor', () => {
   const ingest = { execute: vi.fn<IngestIbamaDumpsUseCase['execute']>() };
+  const company = { execute: vi.fn<IngestIbamaCompanyUseCase['execute']>() };
   const fail = { execute: vi.fn<FailIngestionRunUseCase['execute']>() };
   let processor: IbamaIngestionProcessor;
 
   beforeEach(async () => {
     ingest.execute.mockResolvedValue(buildResult());
+    company.execute.mockResolvedValue({
+      ...buildResult(),
+      cnpj: IBAMA_CNPJ,
+      outcome: 'SUCCEEDED',
+    });
     fail.execute.mockResolvedValue(true);
 
     const moduleRef = await Test.createTestingModule({
       providers: [
         IbamaIngestionProcessor,
         { provide: IngestIbamaDumpsUseCase, useValue: ingest },
+        { provide: IngestIbamaCompanyUseCase, useValue: company },
         { provide: FailIngestionRunUseCase, useValue: fail },
       ],
     }).compile();
@@ -227,6 +237,62 @@ describe('IbamaIngestionProcessor', () => {
         jobId: JOB_ID,
         errorMessage: disabled.message,
       });
+    });
+  });
+  describe('job avulso', () => {
+    const job = (over: Partial<JobShape> = {}) =>
+      buildJob({
+        name: INGEST_IBAMA_COMPANY_JOB,
+        data: { cnpj: IBAMA_CNPJ },
+        ...over,
+      });
+    it('despacha pelo nome e passa somente CNPJ canonico e id', async () => {
+      const result = {
+        ...buildResult(),
+        outcome: 'SUCCEEDED' as const,
+        cnpj: IBAMA_CNPJ,
+      };
+      company.execute.mockResolvedValue(result);
+      await expect(processor.process(job())).resolves.toBe(result);
+      expect(company.execute).toHaveBeenCalledWith({
+        jobId: JOB_ID,
+        cnpj: IBAMA_CNPJ,
+      });
+      expect(ingest.execute).not.toHaveBeenCalled();
+    });
+    it.each([
+      undefined,
+      null,
+      {},
+      { cnpj: '11.222.333/0001-81' },
+      { cnpj: 'invalid' },
+    ])('recusa payload avulso invalido %o', async (data) => {
+      await expect(processor.process(job({ data }))).rejects.toBeInstanceOf(
+        UnrecoverableError,
+      );
+      expect(company.execute).not.toHaveBeenCalled();
+      expect(fail.execute).not.toHaveBeenCalled();
+    });
+    it('preserva retry e marca FAILED somente na ultima tentativa', async () => {
+      const error = new Error(faker.lorem.word());
+      company.execute.mockRejectedValue(error);
+      await expect(processor.process(job())).rejects.toBe(error);
+      expect(fail.execute).not.toHaveBeenCalled();
+      await expect(
+        processor.process(job({ attemptsMade: ATTEMPTS - 1 })),
+      ).rejects.toBe(error);
+      expect(fail.execute).toHaveBeenCalledWith({
+        sourceSlug: 'IBAMA',
+        jobId: JOB_ID,
+        errorMessage: error.message,
+      });
+    });
+    it('fonte desabilitada falha o avulso sem repeticao', async () => {
+      company.execute.mockRejectedValue(new IbamaSourceDisabledError());
+      await expect(processor.process(job())).rejects.toBeInstanceOf(
+        UnrecoverableError,
+      );
+      expect(fail.execute).toHaveBeenCalledOnce();
     });
   });
 });

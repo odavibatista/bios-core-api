@@ -310,4 +310,51 @@ describe('FileIbamaDump', () => {
 
     expect(existsSync(directory)).toBe(false);
   });
+  it.each([AUTO, EMBARGO])(
+    'cabeçalho válido sem registros em $resource confirma dump vazio',
+    async (definition) => {
+      const columns =
+        definition === AUTO ? AUTO_INFRACAO_COLUMNS : TERMO_EMBARGO_COLUMNS;
+      const dump = await open(definition, toIbamaCsv(columns, []));
+      await expect(collect(dump)).resolves.toEqual([]);
+      expect(dump.stats.rows).toBe(0);
+    },
+  );
+  it.each([AUTO, EMBARGO])(
+    'cabeçalho incompleto sem registros em $resource não confirma ausência',
+    async (definition) => {
+      const columns =
+        definition === AUTO ? AUTO_INFRACAO_COLUMNS : TERMO_EMBARGO_COLUMNS;
+      const dump = await open(
+        definition,
+        toIbamaCsv(
+          columns.filter((column) => column !== definition.documentColumn),
+          [],
+        ),
+      );
+      await expect(collect(dump)).rejects.toBeInstanceOf(IbamaDumpFormatError);
+    },
+  );
+  it.each([AUTO, EMBARGO])(
+    'arquivo vazio em $resource não confirma ausência',
+    async (definition) => {
+      const dump = await open(definition, '');
+      await expect(collect(dump)).rejects.toThrow('não tem cabeçalho');
+    },
+  );
+  it('valida até CSV vazio com cabeçalho incorreto dentro de ZIP que já entregou registros', async () => {
+    const dump = await open(
+      AUTO,
+      buildZip([
+        {
+          name: 'primeiro.csv',
+          content: toIbamaCsv(AUTO_INFRACAO_COLUMNS, [
+            autoInfracaoRowFactory.build(),
+          ]),
+        },
+        { name: 'segundo.csv', content: toIbamaCsv(['COLUNA_INVALIDA'], []) },
+      ]),
+    );
+    await expect(collect(dump)).rejects.toBeInstanceOf(IbamaDumpFormatError);
+  });
 });

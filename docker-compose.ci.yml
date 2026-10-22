@@ -1,0 +1,9 @@
+# Somente CI: nomes locais das imagens oficiais obtidas por pull-ci-images.sh.
+# O script tenta registros alternativos e aplica estas tags antes do up --pull never.
+# Manter as tags alinhadas ao Compose base; somente o registro muda.
+# Replica set, portas, volumes e healthchecks são herdados sem alterações.
+services:
+  mongodb:
+    image: public.ecr.aws/docker/library/mongo:8.3.11
+  redis:
+    image: public.ecr.aws/docker/library/redis:7-alpine
