@@ -13,7 +13,7 @@ import {
   scoreOdsEvidences,
 } from '../../domain/ods-score-rules.js';
 
-/** UC15/RF10: recalcula ODS ativos a partir de evidências já normalizadas. */
+/** UC15/RF10/RF11: recalcula índice e confiança dos ODS ativos. */
 @Injectable()
 export class CalculateCompanyOdsScoresUseCase extends UseCase<
   string,

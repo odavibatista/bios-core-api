@@ -756,7 +756,7 @@ alteração de schema Prisma, variáveis de ambiente ou configuração de filas.
 `CalculateCompanyOdsScoresUseCase` recalcula, por CNPJ, todos os ODS ativos
 carregados do catálogo e substitui atomicamente os documentos da empresa em
 `company_ods_scores`. Cada documento guarda `score_value`, `confidence_value`,
-`evidence_count`, contribuições por ID de evidência, `rules_version = rf10-v1`,
+`evidence_count`, contribuições por ID de evidência, `rules_version = rf10-rf11-v2`,
 data de cálculo e, quando há perfil cadastral, UF, cidade e CNAEs. O recálculo
 preserva o ID e a criação dos documentos existentes e remove o score de um ODS
 desativado. Um ODS ativo sem regra explícita interrompe o cálculo antes da escrita.
@@ -771,12 +771,18 @@ que muitas sanções administrativas superem o sinal ambiental direto. Os dois
 Somente `CONFIRMED` vigente, com identificador não vazio ou URL HTTPS válida,
 gera contribuição. `NOT_FOUND` não dá bônus; `UNKNOWN`, `OUTDATED`, sinal
 inconsistente e confirmação sem referência não pontuam. Sem contribuição,
-`score_value` é nulo. A confiança inicial fica em campo separado: zero sem
-contribuição; caso contrário, `teto × N/(N + I + 1)`, em que `N` é o número de
-contribuições e `I` conta desconhecidas, vencidas ou não rastreáveis. O teto é
-0,25 para ODS 13 e 0,8 para ODS 15. A #78 acrescentará a política completa de
-confiança por cobertura e qualidade das fontes. Esta tarefa fornece o motor
-interno; a orquestração com perfil e a exposição do índice ficam na #81.
+`score_value` é nulo. A confiança RF11 fica em campo separado, entre 0 e 1,
+e é zero sem contribuição confirmada. Com contribuição, vale
+`teto × (S/M) × (N/(N+1)) × ((1+Q)/(2+Q)) × (S/(S+U+O))`:
+`N` é o número de contribuições; `M` é o número de fontes esperadas para o ODS;
+`S` são as fontes que responderam com `CONFIRMED` rastreável ou `NOT_FOUND`
+vigente; `Q` soma a qualidade dos achados confirmados (IBAMA 1, CEIS/CNEP 0,25,
+GHG 1); `U` e `O` contam fontes com `UNKNOWN` e `OUTDATED`, respectivamente.
+O teto é 0,25 para ODS 13, por sua baixa cobertura estrutural, e 1 para ODS 15.
+`NOT_FOUND` amplia somente a cobertura quando já existe um achado, sem pontuar.
+Fonte sem resposta não amplia cobertura; sinal incorreto ou achado sem
+rastreabilidade não acrescenta qualidade. A orquestração com perfil e a
+exposição pública do índice ficam na #81.
 
 ### CGU: CEIS e CNEP (conduta administrativa)
 
