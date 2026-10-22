@@ -101,6 +101,13 @@ describe('RecordEvidenceEntriesUseCase', () => {
     );
   });
 
+  it('coleta fora de job grava bruto sem execucao de ingestao', async () => {
+    await useCase.execute({ ...input([entry()]), ingestionRunId: undefined });
+    expect(raw.save).toHaveBeenCalledWith(
+      expect.objectContaining({ ingestionRunId: null }),
+    );
+  });
+
   it.each(['invalid', '11.222.333/0001-81'])(
     'recusa CNPJ nao canonico %s antes de escrever',
     async (cnpj) => {

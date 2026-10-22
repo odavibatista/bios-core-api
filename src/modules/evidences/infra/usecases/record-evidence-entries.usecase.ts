@@ -21,7 +21,7 @@ export interface RecordEvidenceEntriesInput {
   sourceSlug: string;
   entries: readonly EvidenceBatchEntry[];
   collectedAt: Date;
-  ingestionRunId: string;
+  ingestionRunId?: string;
 }
 
 /**
@@ -69,7 +69,7 @@ export class RecordEvidenceEntriesUseCase extends UseCase<
     for (const { entry, evidence } of entries) {
       const rawEvidenceId = await this.raw.save({
         dataSourceId: source.id,
-        ingestionRunId,
+        ingestionRunId: ingestionRunId ?? null,
         cnpj,
         externalReference: evidence.sourceReference ?? '',
         payload: entry.raw,
