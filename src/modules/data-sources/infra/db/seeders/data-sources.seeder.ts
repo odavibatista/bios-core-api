@@ -105,7 +105,7 @@ export const DATA_SOURCES: readonly DataSourceDefinition[] = [
   {
     slug: 'GHG_PROTOCOL',
     name: 'GHG Protocol — Registro Público de Emissões',
-    base_url: 'https://registropublicodeemissoes.fgv.br',
+    base_url: 'https://registropublicodeemissoesapi.fgv.br',
     role: DataSourceRole.EVIDENCE,
     ingestion_mode: IngestionMode.BEST_EFFORT,
     evidence_category: EvidenceCategory.EMISSAO_GEE,

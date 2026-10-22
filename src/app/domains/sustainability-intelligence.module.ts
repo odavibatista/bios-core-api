@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { GhgModule } from '@modules/ghg/infra/modules/ghg.module.js';
 import { DataSourcesModule } from '@modules/data-sources/infra/modules/data-sources.module.js';
 import { EvidencesModule } from '@modules/evidences/infra/modules/evidences.module.js';
 import { IbamaModule } from '@modules/ibama/infra/modules/ibama.module.js';
@@ -23,6 +24,7 @@ import { CguModule } from '@modules/cgu/infra/modules/cgu.module.js';
     IbgeCnaeModule,
     IbamaModule,
     CguModule,
+    GhgModule,
     EvidencesModule,
     CompaniesModule,
     ScoringModule,

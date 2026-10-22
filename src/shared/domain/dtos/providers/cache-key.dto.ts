@@ -17,6 +17,8 @@ export const CacheNamespace = {
   /** Retratos sanitizados de cada cadastro CGU, separados por fonte e CNPJ. */
   CGU_CEIS: 'cgu-ceis',
   CGU_CNEP: 'cgu-cnep',
+  /** Inventario sanitizado, por CNPJ e com data original. */
+  GHG_INVENTORY: 'ghg-inventory',
 
   /**
    * Descrição oficial de uma subclasse da CNAE (IBGE). O identificador é o
