@@ -126,7 +126,7 @@ export class PrismaEvidenceRepository
     const evidences = await this.prisma.evidenceNormalized.findMany({
       where: { cnpj },
       include: {
-        data_source: { select: { slug: true } },
+        data_source: { select: { slug: true, name: true } },
         ods: { select: { ods_number: true } },
       },
       orderBy: [{ collected_at: 'desc' }, { evidence_key: 'asc' }],
@@ -137,6 +137,7 @@ export class PrismaEvidenceRepository
       key: evidence.evidence_key,
       cnpj: evidence.cnpj,
       sourceSlug: evidence.data_source.slug,
+      sourceName: evidence.data_source.name,
       category: evidence.category,
       odsNumber: evidence.ods.ods_number,
       state: evidence.state,
