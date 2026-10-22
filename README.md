@@ -171,8 +171,8 @@ módulo dono do fluxo. Um consumidor por fila: dois na mesma fila competiriam pe
 | Fila | Conteúdo | Consumidor |
 | --- | --- | --- |
 | `company-profile` | Dados cadastrais por CNPJ | `CompanyProfileProcessor` (`companies/`) |
-| `environmental-evidences` | Evidências ambientais e de conduta (IBAMA, CEIS/CNEP) | `IbamaIngestionProcessor` (`ibama/`): lote diário e coleta avulsa por CNPJ |
-| `ghg-inventory` | Inventário de emissões (fallback do GHG Protocol) | ainda não implementado |
+| `environmental-evidences` | Evidências ambientais e de conduta (IBAMA, CEIS/CNEP) | `EnvironmentalEvidencesProcessor` (`evidences/`): lote diário/avulso IBAMA e consulta CGU por CNPJ |
+| `ghg-inventory` | Inventário de emissões (fallback do GHG Protocol) | `GhgInventoryProcessor` (`ghg/`), exclusivo, concorrência 1 |
 | `ods-scoring` | Recálculo de índice e confiança por ODS | ainda não implementado |
 | `email-dispatch` | E-mails transacionais | consumida nesta API (`mailing/`) |
 
@@ -200,7 +200,7 @@ await queues.schedule({ queue, id: 'ibama-daily-ingestion', jobName, cron: '0 4 
   não duplica o disparo. Desligue com `QUEUE_SCHEDULES_SYNC_ON_BOOT=false`.
 - **Retry por agendamento.** Um agendamento pode trazer a própria política (`retry`), no lugar da
   da fila. A fila `environmental-evidences` é compartilhada por jobs de naturezas opostas: o lote
-  diário do IBAMA (minutos por tentativa, fonte que costuma ficar horas fora do ar) e, adiante,
+  diário do IBAMA (minutos por tentativa, fonte que costuma ficar horas fora do ar) e
   os jobs por CNPJ (que erram rápido para quem espera). O lote declara **5 tentativas com
   backoff exponencial de base 5 min** (5, 10, 20 e 40 min entre elas); os demais jobs da fila
   mantêm a política curta da fila (5 tentativas, base de 5 s).
@@ -699,13 +699,43 @@ Um adapter novo declara o `slug` da fonte (que o seeder cria), chama
 `toLookupResult` com o seu *parser*. Fontes que não se consultam item a item, como o dump
 diário do IBAMA, definem o próprio fluxo de ingestão (próxima seção).
 
+### Consolidação das evidências por CNPJ (RF07)
+
+`EnvironmentalEvidencesModule` exporta `GetCompanyEnvironmentalEvidencesUseCase`.
+Recebe um CNPJ (pontuado ou canônico), valida antes de qualquer efeito e inicia em
+paralelo a leitura local IBAMA, o produtor CGU e o produtor GHG. O armazenamento
+continua em `EvidencesModule`, sem depender dos adapters e sem ciclo de módulos.
+
+- O IBAMA mantém a consulta ao índice/lote válido e o job avulso sem espera.
+- A CGU reutiliza cada cadastro válido na persistência. Quando precisa coletar,
+  publica `fetch-cgu-evidences` na fila `environmental-evidences`, deduplicado por
+  CNPJ/janela de 15 minutos, e espera até `QUEUE_WAIT_TIMEOUT_MS`. O único
+  `EnvironmentalEvidencesProcessor` despacha também os dois jobs IBAMA existentes,
+  com concorrência 3; erros CGU não marcam execuções IBAMA como falhas. O worker
+  consulta CEIS/CNEP em paralelo e persiste os resultados independentemente.
+- O GHG mantém fila, concorrência e prazo próprios; sua falha não cancela as
+  demais consultas. Os jobs podem terminar depois do prazo de quem espera.
+- Ao final, uma releitura local inclui resultados concluídos durante a espera.
+  A resposta validada por Zod tem `cnpj` e `categories`, sempre com as três
+  categorias. Cada evidência traz `source_slug`, ODS, estado, publicação, coleta,
+  validade, resumo, detalhes e referência/link original. A ordem é estável por
+  categoria, fonte e chave. Não há score, peso ou veredito de sustentabilidade.
+- Somente `CONFIRMED` traz `signal`; `NOT_FOUND`, `UNKNOWN` e `OUTDATED` trazem
+  `null`, preservando o sinal histórico no banco. Indisponibilidade preserva a
+  resposta anterior e suas datas; sem resposta anterior, registra `UNKNOWN`.
+  CEIS/CNEP ficam em `CONDUTA_ADMINISTRATIVA`. Ausência de inventário GHG nunca
+  vira `NOT_FOUND`. Falha global do banco continua sendo erro de infraestrutura.
+
+A exposição HTTP e a composição do perfil são etapas posteriores (#76/#81).
+Não há alteração de schema Prisma, variáveis de ambiente ou configuração de filas.
+
 ### CGU: CEIS e CNEP (conduta administrativa)
 
 `CguModule` exporta `CeisDataSource`, `CnepDataSource` e
 `GetCguCompanyEvidencesUseCase`. O caso de uso recebe CNPJ e `SourceCallContext`,
 consulta os dois cadastros separadamente e grava o retrato de cada fonte.
-A integração ao consumidor geral de evidências e ao perfil fica nas #75/#81;
-esta entrega não acrescenta endpoint ou cálculo de índice.
+O consumidor ambiental despacha a coleta CGU por fila na consolidação (#75).
+A composição do perfil fica na #81; esta entrega não acrescenta endpoint ou cálculo de índice.
 
 - Configure `CGU_API_KEY` no `.env` local ou secret do ambiente antes de iniciar
   a aplicação. O token é obrigatório no bootstrap, sem espaços/controles ou o
@@ -843,11 +873,11 @@ await batch.finish(); // remove o que o dump deixou de listar
 ### Job diário do IBAMA (consumidor, execuções, retry)
 
 O cron `0 4 * * *` (`QUEUE_SCHEDULES`, id `ibama-daily-ingestion`) publica o job `ingest-ibama-dumps`
-na fila `environmental-evidences`, e o `IbamaIngestionProcessor` (`ibama/infra/queue/`), hospedado
+na fila `environmental-evidences`, e o `EnvironmentalEvidencesProcessor` (`evidences/infra/queue/`), hospedado
 no core, o executa por `IngestIbamaDumpsUseCase` (UC14). O consumidor despacha pelo **nome** do
 job; nome desconhecido, payload que não seja um objeto ou job sem identificador falham sem
-repetição (`UnrecoverableError`). O mesmo consumidor também atende o avulso por CNPJ; a futura
-consolidação entra aqui ou num despachante acima do módulo.
+repetição (`UnrecoverableError`). O mesmo consumidor também atende o avulso IBAMA por CNPJ e a consulta CGU
+disparada pela consolidação, preservando o isolamento das execuções IBAMA.
 
 O fluxo de uma execução, nesta ordem:
 
@@ -1193,8 +1223,8 @@ evidências e os índices por ODS quando o perfil ambiental (UC07) existir.
 evidência local válida ou publica `fetch-ghg-inventory` na fila exclusiva
 `ghg-inventory` e aguarda com `data_sources.request_timeout_ms` (padrão 10 s).
 Timeout, job falho ou Redis indisponível preservam a resposta anterior; sem ela,
-`UNKNOWN`. O job pode concluir depois do timeout do chamador. A consolidação e a
-exposição no perfil continuam nas #75/#81; esta entrega não cria endpoint nem score.
+`UNKNOWN`. O job pode concluir depois do timeout do chamador. A consolidação já reúne o GHG
+na #75; a exposição no perfil fica na #81. Não há endpoint nem score novo.
 
 O processor lê razão social/nome fantasia do perfil local para localizar até três
 candidatos no catálogo público. Os serviços usados pelo próprio portal foram

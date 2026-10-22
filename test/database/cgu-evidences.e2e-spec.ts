@@ -115,6 +115,11 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       await new Promise<void>((resolve) => server.close(() => resolve()));
       await resetCache(redisUrl);
       await resetSourceRateLimits(redisUrl);
+      await prisma.reset([
+        'evidence_normalized',
+        'evidence_raw',
+        'data_source_request_logs',
+      ]);
       await app.close();
     });
 
@@ -293,6 +298,11 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       responses['/ceis'].pages = [[row()], []];
       await run();
       cnpj = firstCnpj;
+      // Limpar cache nao invalida a resposta local ainda valida (RF07).
+      await prisma.evidenceNormalized.updateMany({
+        where: { cnpj, data_source: { slug: 'CGU_CEIS' } },
+        data: { valid_until: new Date(0) },
+      });
       await resetCache(redisUrl);
       responses['/ceis'].pages = [[]];
       const result = await run();

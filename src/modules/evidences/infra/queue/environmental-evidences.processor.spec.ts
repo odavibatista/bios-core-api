@@ -1,3 +1,6 @@
+import { RequestTrigger } from '@prisma/client';
+import { FETCH_CGU_EVIDENCES_JOB } from '../../domain/cgu-job.dto.js';
+import { GetCguCompanyEvidencesUseCase } from '@modules/cgu/infra/usecases/get-cgu-company-evidences.usecase.js';
 import { Test } from '@nestjs/testing';
 import { type Job, UnrecoverableError } from 'bullmq';
 import { FailIngestionRunUseCase } from '@modules/data-sources/infra/usecases/ingestion/fail-ingestion-run.usecase.js';
@@ -7,16 +10,16 @@ import { faker } from '@test/support/faker.js';
 import {
   IbamaDumpUnavailableError,
   IbamaSourceDisabledError,
-} from '../../domain/dtos/errors/ibama-ingestion.errors.js';
+} from '@modules/ibama/domain/dtos/errors/ibama-ingestion.errors.js';
 import {
   type IbamaIngestionJobResult,
   INGEST_IBAMA_DUMPS_JOB,
-} from '../../domain/dtos/providers/ibama-ingestion-job.dto.js';
+} from '@modules/ibama/domain/dtos/providers/ibama-ingestion-job.dto.js';
 import { IBAMA_CNPJ } from '@test/factories/ibama/ibama-dump.factory.js';
-import { INGEST_IBAMA_COMPANY_JOB } from '../../domain/dtos/providers/ibama-company-job.dto.js';
-import { IngestIbamaCompanyUseCase } from '../usecases/ingest-ibama-company.usecase.js';
-import { IngestIbamaDumpsUseCase } from '../usecases/ingest-ibama-dumps.usecase.js';
-import { IbamaIngestionProcessor } from './ibama-ingestion.processor.js';
+import { INGEST_IBAMA_COMPANY_JOB } from '@modules/ibama/domain/dtos/providers/ibama-company-job.dto.js';
+import { IngestIbamaCompanyUseCase } from '@modules/ibama/infra/usecases/ingest-ibama-company.usecase.js';
+import { IngestIbamaDumpsUseCase } from '@modules/ibama/infra/usecases/ingest-ibama-dumps.usecase.js';
+import { EnvironmentalEvidencesProcessor } from './environmental-evidences.processor.js';
 
 const JOB_ID = `repeat:ibama-daily-ingestion:${faker.number.int()}`;
 const ATTEMPTS = 5;
@@ -56,11 +59,12 @@ function buildResult(): IbamaIngestionJobResult {
   };
 }
 
-describe('IbamaIngestionProcessor', () => {
+describe('EnvironmentalEvidencesProcessor', () => {
   const ingest = { execute: vi.fn<IngestIbamaDumpsUseCase['execute']>() };
   const company = { execute: vi.fn<IngestIbamaCompanyUseCase['execute']>() };
   const fail = { execute: vi.fn<FailIngestionRunUseCase['execute']>() };
-  let processor: IbamaIngestionProcessor;
+  const cgu = { execute: vi.fn() };
+  let processor: EnvironmentalEvidencesProcessor;
 
   beforeEach(async () => {
     ingest.execute.mockResolvedValue(buildResult());
@@ -73,24 +77,31 @@ describe('IbamaIngestionProcessor', () => {
 
     const moduleRef = await Test.createTestingModule({
       providers: [
-        IbamaIngestionProcessor,
+        EnvironmentalEvidencesProcessor,
         { provide: IngestIbamaDumpsUseCase, useValue: ingest },
         { provide: IngestIbamaCompanyUseCase, useValue: company },
         { provide: FailIngestionRunUseCase, useValue: fail },
+        {
+          provide: GetCguCompanyEvidencesUseCase,
+          useValue: cgu,
+        },
       ],
     }).compile();
 
-    processor = moduleRef.get(IbamaIngestionProcessor);
+    processor = moduleRef.get(EnvironmentalEvidencesProcessor);
   });
 
   it('atende a fila environmental-evidences com concorrência para os jobs por CNPJ não esperarem o lote', () => {
     expect(
-      Reflect.getMetadata('bullmq:processor_metadata', IbamaIngestionProcessor),
+      Reflect.getMetadata(
+        'bullmq:processor_metadata',
+        EnvironmentalEvidencesProcessor,
+      ),
     ).toMatchObject({ name: QueueName.ENVIRONMENTAL_EVIDENCES });
     expect(
       Reflect.getMetadata(
         'bullmq:worker_metadata',
-        IbamaIngestionProcessor,
+        EnvironmentalEvidencesProcessor,
       ) as { concurrency: number },
     ).toMatchObject({ concurrency: 3 });
   });
@@ -293,6 +304,44 @@ describe('IbamaIngestionProcessor', () => {
         UnrecoverableError,
       );
       expect(fail.execute).toHaveBeenCalledOnce();
+    });
+  });
+  describe('job CGU', () => {
+    const job = (data: unknown = { cnpj: IBAMA_CNPJ }) =>
+      buildJob({ name: FETCH_CGU_EVIDENCES_JOB, data });
+    it('despacha uma coleta e devolve ACK serializavel, sem runs IBAMA', async () => {
+      await expect(processor.process(job())).resolves.toEqual({
+        status: 'COLLECTED',
+      });
+      expect(cgu.execute).toHaveBeenCalledWith({
+        cnpj: IBAMA_CNPJ,
+        context: { trigger: RequestTrigger.ON_DEMAND_JOB },
+      });
+      expect(ingest.execute).not.toHaveBeenCalled();
+      expect(company.execute).not.toHaveBeenCalled();
+      expect(fail.execute).not.toHaveBeenCalled();
+    });
+    it.each([
+      {},
+      null,
+      { cnpj: 'invalido' },
+      { cnpj: IBAMA_CNPJ, extra: true },
+    ])('recusa payload %o sem repetir', async (data) => {
+      await expect(processor.process(job(data))).rejects.toBeInstanceOf(
+        UnrecoverableError,
+      );
+      expect(cgu.execute).not.toHaveBeenCalled();
+    });
+    it('exige id', async () => {
+      await expect(
+        processor.process({ ...job(), id: undefined } as Job),
+      ).rejects.toBeInstanceOf(UnrecoverableError);
+    });
+    it('erro CGU segue retry sem marcar ingestao IBAMA', async () => {
+      const error = new Error('CGU indisponivel');
+      cgu.execute.mockRejectedValueOnce(error);
+      await expect(processor.process(job())).rejects.toBe(error);
+      expect(fail.execute).not.toHaveBeenCalled();
     });
   });
 });
