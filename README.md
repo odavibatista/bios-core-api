@@ -726,8 +726,30 @@ continua em `EvidencesModule`, sem depender dos adapters e sem ciclo de módulos
   CEIS/CNEP ficam em `CONDUTA_ADMINISTRATIVA`. Ausência de inventário GHG nunca
   vira `NOT_FOUND`. Falha global do banco continua sendo erro de infraestrutura.
 
-A exposição HTTP e a composição do perfil são etapas posteriores (#76/#81).
-Não há alteração de schema Prisma, variáveis de ambiente ou configuração de filas.
+### Referências às fontes originais (RF09)
+
+`GET /companies/:cnpj/evidences` exige sessão JWT e devolve a consolidação por
+categoria, validada e documentada no OpenAPI. A rota aceita CNPJ numérico ou
+alfanumérico; omita a barra de formatação na URL. CNPJ inválido responde 422 e
+ausência de sessão responde 401 antes de consultar fontes.
+
+Cada evidência traz `source` (nome público atual do catálogo), `source_slug`,
+`source_reference` e `source_url`, além das datas de publicação/coleta/validade.
+O link, quando presente, deve ser HTTPS absoluto e não conter credenciais. O
+IBAMA aponta ao dataset oficial porque o dump não oferece link individual; o
+identificador permite localizar o registro. Recursos CGU podem exigir chave no
+próprio órgão, sem incluir a credencial do BIOS na resposta. Uma referência sem
+URL é preservada: a API não inventa um endereço para completá-la.
+
+Uma evidência legada `CONFIRMED` sem identificador não vazio nem link HTTPS
+válido é projetada como `UNKNOWN`, com sinal, resumo e detalhes nulos. A regra
+também é exigida pelo schema de resposta. A projeção preserva o registro no banco
+e suas datas; URLs inválidas são removidas da resposta, sem alterar o histórico.
+`UNKNOWN`, `NOT_FOUND` e `OUTDATED` não se tornam confirmações e podem ter os
+campos de proveniência nulos. Ausência de inventário GHG continua sendo `UNKNOWN`.
+
+A composição do perfil completo e da API pública permanece na #81. Não há
+alteração de schema Prisma, variáveis de ambiente ou configuração de filas.
 
 ### CGU: CEIS e CNEP (conduta administrativa)
 
