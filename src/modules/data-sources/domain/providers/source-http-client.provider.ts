@@ -8,6 +8,15 @@ export interface SourceHttpRequest {
 }
 
 /**
+ * Chamada `POST` com corpo JSON, para fontes cuja consulta só existe assim (a
+ * busca paginada de organizações do Registro Público de Emissões).
+ */
+export interface SourcePostRequest extends SourceHttpRequest {
+  /** Corpo da chamada, enviado como JSON. */
+  body: unknown;
+}
+
+/**
  * Download de um arquivo grande (um dump em lote), gravado em disco em vez de
  * lido para a memória.
  */
@@ -56,6 +65,12 @@ export type SourceHttpResult =
 export abstract class SourceHttpClient {
   /** `GET` com tempo máximo, sem seguir redirecionamentos. */
   abstract get(request: SourceHttpRequest): Promise<SourceHttpResult>;
+
+  /**
+   * `POST` com corpo JSON, com as mesmas garantias de `get` (tempo máximo,
+   * sem redirecionamentos, corpo da resposta limitado, nunca lança).
+   */
+  abstract post(request: SourcePostRequest): Promise<SourceHttpResult>;
 
   /**
    * `GET` de um arquivo grande, gravado em `destination`, com tempo máximo,
