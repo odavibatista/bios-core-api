@@ -699,6 +699,44 @@ Um adapter novo declara o `slug` da fonte (que o seeder cria), chama
 `toLookupResult` com o seu *parser*. Fontes que não se consultam item a item, como o dump
 diário do IBAMA, definem o próprio fluxo de ingestão (próxima seção).
 
+### CGU: CEIS e CNEP (conduta administrativa)
+
+`CguModule` exporta `CeisDataSource`, `CnepDataSource` e
+`GetCguCompanyEvidencesUseCase`. O caso de uso recebe CNPJ e `SourceCallContext`,
+consulta os dois cadastros separadamente e grava o retrato de cada fonte.
+A integração ao consumidor geral de evidências e ao perfil fica nas #75/#81;
+esta entrega não acrescenta endpoint ou cálculo de índice.
+
+- Configure `CGU_API_KEY` no `.env` local ou secret do ambiente antes de iniciar
+  a aplicação. O token é obrigatório no bootstrap, sem espaços/controles ou o
+  placeholder do exemplo. Obtenha-o em
+  <https://portaldatransparencia.gov.br/api-de-dados/cadastrar-email>.
+  Informe só o valor: o adapter monta o header `chave-api-dados`; nunca envie
+  o JSON de headers como variável, nem registre ou versione o token.
+- As URLs completas dos endpoints vêm do catálogo. A consulta usa
+  `codigoSancionado=<CNPJ>` e `pagina=1,2,...`, sem filtro por órgão sancionador.
+  Só uma página vazia em HTTP 200 encerra a consulta; página curta ou contendo
+  somente CPF não encerra. Página repetida, formato inválido ou limite de 100
+  páginas torna a coleta indisponível, sem persistir o resultado parcial.
+- Cache separado por cadastro/CNPJ, com TTL do catálogo (seed: um dia), somente
+  para consultas completas. O cache contém apenas a whitelist sanitizada e
+  mantém a data de coleta original: sua leitura não renova a validade.
+  A habilitação no catálogo é verificada antes do cache. Limite por minuto,
+  timeout e log de cada página usam a infraestrutura comum (seed: 90/min e 5 s).
+- Cada sanção vira uma evidência `CONFIRMED`, categoria `CONDUTA_ADMINISTRATIVA`,
+  ODS 15 e sinal negativo. ID, órgão, tipo e datas são preservados; o link aponta
+  ao recurso por ID na API oficial, cujo acesso também exige chave. Ausência
+  confirmada vira `NOT_FOUND` e não gera bônus. O motor de scoring é posterior.
+- CPF, nomes do sancionado/PessoaDTO, contatos, links fornecidos pela resposta e
+  textos livres não entram no cache nem no bruto. Sanções com data final já
+  vencida ainda retornadas pela fonte permanecem como registros históricos;
+  confirmação da existência do registro não afirma vigência jurídica.
+- Falha, timeout, 401/403/404/429 ou resposta parcial não comprovam ausência.
+  Sem resposta anterior, a fonte fica `UNKNOWN`; respostas anteriores são
+  preservadas e envelhecem para `OUTDATED`. Uma fonte pode responder mesmo
+  quando a outra falha. Sem job, o bruto não tem `ingestion_run_id`; cada chamada
+  permanece auditada por fonte, CNPJ e origem no log de requisições.
+
 ### Lote diário: IBAMA (download e leitura dos dumps)
 
 O IBAMA não tem consulta por CNPJ: publica o dump inteiro de cada recurso, e o MVP ingere dois

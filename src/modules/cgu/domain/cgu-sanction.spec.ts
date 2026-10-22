@@ -44,10 +44,10 @@ describe('normalização CGU', () => {
   });
 
   it('CNPJ alfanumérico não é confundido com CPF pela quantidade de dígitos', () => {
-    const cnpj = '12ABC34501DE35';
+    const cnpj = '12ABC345000188';
     const row = {
       id: 3,
-      sancionado: { codigoFormatado: '12.ABC.345/01DE-35' },
+      sancionado: { codigoFormatado: '12.ABC.345/0001-88' },
     };
     expect(readCguPage([row], cnpj).sanctions[0]?.cnpj).toBe(cnpj);
   });
