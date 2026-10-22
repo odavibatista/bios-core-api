@@ -1,3 +1,7 @@
+import {
+  EvidenceSourceUrlSchema,
+  projectEvidenceProvenance,
+} from './evidence-provenance.js';
 import { z } from 'zod';
 import {
   EvidenceCategory,
@@ -31,18 +35,39 @@ export const CompanyEnvironmentalEvidencesResponseSchema = z
               .object({
                 id: z.string(),
                 source_slug: z.string(),
+                source: z
+                  .string()
+                  .min(1)
+                  .describe(
+                    'Nome público do órgão/programa no catálogo de fontes',
+                  ),
                 ods_number: z.number().int(),
                 state: z.enum(EvidenceState),
                 signal: z.enum(EvidenceSignal).nullable(),
                 summary: z.string().nullable(),
-                source_reference: z.string().nullable(),
-                source_url: z.string().nullable(),
+                source_reference: z.string().trim().min(1).nullable(),
+                source_url: EvidenceSourceUrlSchema.nullable().describe(
+                  'Link HTTPS original; pode exigir autenticação no órgão',
+                ),
                 details: z.json().nullable(),
                 published_at: z.iso.datetime().nullable(),
                 collected_at: z.iso.datetime(),
                 valid_until: z.iso.datetime(),
               })
-              .strict(),
+              .strict()
+              .superRefine((evidence, ctx) => {
+                if (
+                  evidence.state === EvidenceState.CONFIRMED &&
+                  !evidence.source_reference &&
+                  !evidence.source_url
+                )
+                  ctx.addIssue({
+                    code: 'custom',
+                    path: ['source_reference'],
+                    message:
+                      'Evidência confirmada exige referência ou link rastreável.',
+                  });
+              }),
           ),
         })
         .strict(),
@@ -77,20 +102,25 @@ export function groupCompanyEvidences(
             a.sourceSlug.localeCompare(b.sourceSlug) ||
             a.key.localeCompare(b.key),
         )
-        .map((e) => ({
-          id: e.id,
-          source_slug: e.sourceSlug,
-          ods_number: e.odsNumber,
-          state: e.state,
-          signal: e.state === EvidenceState.CONFIRMED ? e.signal : null,
-          summary: e.summary,
-          source_reference: e.sourceReference,
-          source_url: e.sourceUrl,
-          details: e.details,
-          published_at: e.publishedAt?.toISOString() ?? null,
-          collected_at: e.collectedAt.toISOString(),
-          valid_until: e.validUntil.toISOString(),
-        })),
+        .map((e) => {
+          const provenance = projectEvidenceProvenance(e);
+          return {
+            id: e.id,
+            source_slug: e.sourceSlug,
+            source: e.sourceName,
+            ods_number: e.odsNumber,
+            state: provenance.state,
+            signal:
+              provenance.state === EvidenceState.CONFIRMED ? e.signal : null,
+            summary: provenance.summary,
+            source_reference: provenance.sourceReference,
+            source_url: provenance.sourceUrl,
+            details: provenance.details,
+            published_at: e.publishedAt?.toISOString() ?? null,
+            collected_at: e.collectedAt.toISOString(),
+            valid_until: e.validUntil.toISOString(),
+          };
+        }),
     })),
   });
 }

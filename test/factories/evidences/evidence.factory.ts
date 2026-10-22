@@ -31,6 +31,7 @@ export const storedEvidenceFactory = defineFactory<StoredEvidence>(() => {
     key: `${sourceSlug}:${cnpj}:${reference}`,
     cnpj,
     sourceSlug,
+    sourceName: `IBAMA — ${faker.company.name()}`,
     category: EvidenceCategory.INFRACAO_AMBIENTAL,
     odsNumber: 15,
     state: EvidenceState.CONFIRMED,
