@@ -736,6 +736,9 @@ continua em `EvidencesModule`, sem depender dos adapters e sem ciclo de módulos
 categoria, validada e documentada no OpenAPI. A rota aceita CNPJ numérico ou
 alfanumérico; omita a barra de formatação na URL. CNPJ inválido responde 422 e
 ausência de sessão responde 401 antes de consultar fontes.
+Um CNPJ válido sem `company_profile` local responde 404 (`COMPANY_NOT_FOUND`)
+antes de qualquer leitura de evidências, gravação ou publicação de job. A rota
+tem limite próprio de 20 consultas por minuto por IP, além do limite global.
 
 Cada evidência traz `source` (nome público atual do catálogo), `source_slug`,
 `source_reference` e `source_url`, além das datas de publicação/coleta/validade.

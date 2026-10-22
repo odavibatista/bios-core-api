@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { EvidencesController } from '../../http/controllers/evidences.controller.js';
+import { CompaniesModule } from '@modules/companies/infra/modules/companies.module.js';
 import { DataSourcesModule } from '@modules/data-sources/infra/modules/data-sources.module.js';
 import { IbamaModule } from '@modules/ibama/infra/modules/ibama.module.js';
 import { CguModule } from '@modules/cgu/infra/modules/cgu.module.js';
@@ -11,6 +12,7 @@ import { GetCompanyEnvironmentalEvidencesUseCase } from '../usecases/get-company
 /** Orquestracao acima dos adapters; o armazenamento nao depende deles. */
 @Module({
   imports: [
+    CompaniesModule,
     DataSourcesModule,
     EvidencesModule,
     IbamaModule,
