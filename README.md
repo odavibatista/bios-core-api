@@ -587,7 +587,11 @@ Cada fonte externa fica atrás de um adapter próprio, que implementa o contrato
   seguir um `Location` levaria a chamada para onde a fonte mandasse) e com corpo limitado a
   5 MiB, lido em fluxo (os dumps em lote, que passam disso, usam o modo `download`, descrito na
   seção do IBAMA). Os segmentos do caminho são codificados na montagem da URL: um valor como
-  `../admin` não escapa do caminho da fonte.
+  `../admin` não escapa do caminho da fonte. A consulta é um `GET`, salvo quando o pedido
+  informa `body`: aí é um `POST` com esse corpo em JSON (`content-type: application/json`), com
+  as mesmas garantias (prazo, limite por minuto, sem redirecionamento, resposta limitada). Só
+  existe para fontes cuja busca não tem `GET`, como a listagem de organizações do GHG; o
+  corpo, como os cabeçalhos, nunca vai ao log.
 - **Log de requisições.** Cada chamada vira uma linha em `data_source_request_logs`: fonte,
   CNPJ, origem (`trigger`), resultado, status HTTP e duração. As recusadas pelo limite entram
   também, sem status. Cabeçalhos (a chave de API da fonte, por exemplo) nunca são gravados.
@@ -1303,11 +1307,30 @@ O processor lê razão social/nome fantasia do perfil local para localizar até 
 candidatos no catálogo público. Os serviços usados pelo próprio portal foram
 verificados em `assets/appconfig.json` e no JavaScript público: JSON ABP em
 `registropublicodeemissoesapi.fgv.br/api/services/app/EstatisticaPublica/`
-(`GetAllOrganizations` e `GetReportedInventories?organizationId=...`) e PDF em
+(`SearchAllOrganizations` e `GetReportedInventories?organizationId=...`) e PDF em
 `sistema-registropublicodeemissoesapi.fgv.br/GenerateReport/GenerateInventoryReport/<org>/<ciclo>/true`.
 São recursos do portal sem contrato REST oficial estável. HTML de erro com HTTP
 200, HTTP 206/404, erro de envelope, relatório sem identidade ou ano divergente
 não são aceitos como dados nem como prova de ausência.
+
+**O cadastro de organizações é paginado.** A única rota que o lista é
+`SearchAllOrganizations`, um `POST` com corpo JSON `{ maxResultCount, skipCount }`
+que responde `{ total, organizations }`. Sem `maxResultCount` ela devolve só **10**
+organizações, o máximo aceito é **1000** (acima disso, HTTP 400) e uma página além do
+fim volta vazia, com o `total`. O adapter pede 1000 por vez e avança pelo que
+recebeu até cobrir o `total`; uma página vazia antes do total, um total acima de
+20 000 ou uma página fora do contrato são resposta anormal (`UNKNOWN`), nunca dado.
+A rota `GetAllOrganizations`, que a primeira versão usava, **não** é o cadastro:
+devolve a mesma amostra de 10 organizações, e tomá-la por ele deixava a coleta cega
+para a quase totalidade das empresas (em 22/10/2026, o portal tinha 1029
+organizações). Cada chamada leva cerca de 3 s no portal e uma página de 1000 pesa
+cerca de 1,5 MB, então a listagem completa (duas páginas hoje) não cabe no prazo
+padrão de 10 s do catálogo: a coleta com esse prazo ainda termina em `UNKNOWN`. Medido
+com o portal real (22/10/2026), para uma organização fora das 10 primeiras (id 5979,
+inventário 2025, confirmada pelo CNPJ e pelo ano do PDF): 4 chamadas, todas 200, em
+**11,5 s** no total (páginas de 6,9 s e 3,1 s, lista de inventários 0,2 s, PDF 0,7 s);
+uma empresa sem organização no portal voltou `UNKNOWN`. Mantê-la dentro do prazo é a
+sincronização diária do cadastro (#250), que tira a listagem do caminho de cada consulta.
 
 O catálogo não traz CNPJ. Nome é somente uma pista: o CNPJ exato e o ano do PDF
 precisam corresponder à empresa e ao inventário listado. Verifica-se o ano mais

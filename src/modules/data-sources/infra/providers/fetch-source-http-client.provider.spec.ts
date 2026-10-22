@@ -262,6 +262,84 @@ describe('FetchSourceHttpClient', () => {
     });
   });
 
+  describe('POST com corpo JSON', () => {
+    const body = { maxResultCount: 1000, skipCount: 0 };
+
+    beforeEach(() => {
+      fetchMock.mockResolvedValue(Response.json({ total: 1 }));
+    });
+
+    it('envia o corpo como JSON, com o tipo de conteúdo, na URL pedida e sem seguir redirecionamentos', async () => {
+      await client.post({ ...request, body });
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        request.url,
+        expect.objectContaining({
+          method: 'POST',
+          redirect: 'manual',
+          body: JSON.stringify(body),
+        }),
+      );
+      const [, init] = fetchMock.mock.calls[0];
+      expect(init?.headers).toEqual({
+        accept: 'application/json',
+        'content-type': 'application/json',
+        'user-agent': 'bios-core-api',
+      });
+    });
+
+    it('os cabeçalhos da fonte prevalecem sobre os padrões', async () => {
+      await client.post({
+        ...request,
+        body,
+        headers: { 'content-type': 'application/json-patch+json' },
+      });
+
+      const [, init] = fetchMock.mock.calls[0];
+      expect(init?.headers).toMatchObject({
+        'content-type': 'application/json-patch+json',
+      });
+    });
+
+    it('devolve o status e o JSON lido, com as mesmas garantias do GET', async () => {
+      await expect(client.post({ ...request, body })).resolves.toEqual({
+        kind: 'RESPONSE',
+        status: 200,
+        json: { total: 1 },
+      });
+    });
+
+    it('resposta que não é 2xx traz só o status', async () => {
+      fetchMock.mockResolvedValue(new Response('inválido', { status: 400 }));
+
+      await expect(client.post({ ...request, body })).resolves.toEqual({
+        kind: 'RESPONSE',
+        status: 400,
+      });
+    });
+
+    it('amarra a chamada ao tempo máximo e nunca lança', async () => {
+      const timeout = vi.spyOn(AbortSignal, 'timeout');
+      fetchMock.mockRejectedValue(
+        Object.assign(new Error('prazo'), { name: 'TimeoutError' }),
+      );
+
+      await expect(
+        client.post({ ...request, body, timeoutMs: 2_345 }),
+      ).resolves.toEqual({ kind: 'TIMEOUT' });
+
+      expect(timeout).toHaveBeenCalledWith(2_345);
+    });
+
+    it('o GET não leva corpo nem tipo de conteúdo', async () => {
+      await client.get(request);
+
+      const [, init] = fetchMock.mock.calls[0];
+      expect(init).not.toHaveProperty('body');
+      expect(init?.headers).not.toHaveProperty('content-type');
+    });
+  });
+
   describe('download: resposta 2xx sem corpo', () => {
     it('é falha, não um arquivo vazio gravado', async () => {
       fetchMock.mockResolvedValue(new Response(null, { status: 200 }));

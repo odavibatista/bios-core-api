@@ -21,6 +21,7 @@ import {
 import {
   ghgEnvelope,
   ghgInventoryFactory,
+  ghgOrganizationsPage,
   ghgPdf,
 } from '../factories/ghg/ghg.factory.js';
 import { faker } from '../support/faker.js';
@@ -93,14 +94,20 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
             res
               .writeHead(200, { 'Content-Type': 'application/json' })
               .end(JSON.stringify(pages[source][page - 1] ?? []));
-          } else if (url.pathname.endsWith('GetAllOrganizations')) {
+          } else if (url.pathname.endsWith('SearchAllOrganizations')) {
+            // Como o portal: so POST; o cadastro cabe numa pagina de 1000.
+            if (req.method !== 'POST') {
+              res.writeHead(405).end();
+              return;
+            }
             res
               .writeHead(200, { 'Content-Type': 'application/json' })
               .end(
                 JSON.stringify(
-                  ghgEnvelope([
-                    { id: inventory.organizationId, name, about: personal },
-                  ]),
+                  ghgOrganizationsPage(
+                    [{ id: inventory.organizationId, name, about: personal }],
+                    { maxResultCount: 1000 },
+                  ),
                 ),
               );
           } else if (url.pathname.endsWith('GetReportedInventories')) {

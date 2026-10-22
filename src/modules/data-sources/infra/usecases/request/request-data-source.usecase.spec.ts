@@ -29,6 +29,7 @@ describe('RequestDataSourceUseCase', () => {
   const rateLimiter = { tryAcquire: vi.fn<SourceRateLimiter['tryAcquire']>() };
   const httpClient = {
     get: vi.fn<SourceHttpClient['get']>(),
+    post: vi.fn<SourceHttpClient['post']>(),
     download: vi.fn<SourceHttpClient['download']>(),
   };
   let config: DataSourceRequestConfig;
@@ -155,6 +156,76 @@ describe('RequestDataSourceUseCase', () => {
         durationMs: 120,
         errorMessage: undefined,
       });
+    });
+  });
+
+  describe('POST com corpo JSON', () => {
+    const body = { maxResultCount: 1000, skipCount: 0 };
+
+    beforeEach(() => {
+      httpClient.post.mockResolvedValue({
+        kind: 'RESPONSE',
+        status: 200,
+        json: { total: 1 },
+      });
+    });
+
+    it('com corpo, a chamada é um POST e não um GET, com a URL, os cabeçalhos e o prazo de sempre', async () => {
+      const response = await useCase.execute({
+        ...request,
+        body,
+        headers: { 'x-fonte': 'abc' },
+      });
+
+      expect(httpClient.post).toHaveBeenCalledWith({
+        url: 'https://brasilapi.com.br/api/cnpj/v1/11222333000181',
+        headers: { 'x-fonte': 'abc' },
+        timeoutMs: 5_000,
+        body,
+      });
+      expect(httpClient.get).not.toHaveBeenCalled();
+      expect(response).toEqual({
+        outcome: SourceOutcome.SUCCESS,
+        status: 200,
+        body: { total: 1 },
+      });
+    });
+
+    it('sem corpo, segue o GET', async () => {
+      await useCase.execute(request);
+
+      expect(httpClient.get).toHaveBeenCalledOnce();
+      expect(httpClient.post).not.toHaveBeenCalled();
+    });
+
+    it('um corpo vazio ({} ou lista) ainda é um POST', async () => {
+      await useCase.execute({ ...request, body: {} });
+
+      expect(httpClient.post).toHaveBeenCalledWith(
+        expect.objectContaining({ body: {} }),
+      );
+    });
+
+    it('registra a chamada no log sem o corpo enviado', async () => {
+      await useCase.execute({ ...request, body });
+
+      expect(
+        JSON.stringify(requestLogRepository.record.mock.calls),
+      ).not.toContain('maxResultCount');
+      expect(requestLogRepository.record).toHaveBeenCalledWith(
+        expect.objectContaining({ httpStatus: 200 }),
+      );
+    });
+
+    it('respeita o limite por minuto antes de chamar', async () => {
+      config.rateLimitPerMinute = 1;
+      rateLimiter.tryAcquire.mockResolvedValue(false);
+
+      await expect(
+        useCase.execute({ ...request, body }),
+      ).resolves.toMatchObject({ outcome: SourceOutcome.RATE_LIMITED });
+
+      expect(httpClient.post).not.toHaveBeenCalled();
     });
   });
 
