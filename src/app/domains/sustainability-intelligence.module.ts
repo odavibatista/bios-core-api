@@ -6,6 +6,7 @@ import { IbgeCnaeModule } from '@modules/ibge-cnae/infra/modules/ibge-cnae.modul
 import { ReceitaModule } from '@modules/receita/infra/modules/receita.module.js';
 import { CompaniesModule } from '@modules/companies/infra/modules/companies.module.js';
 import { ScoringModule } from '@modules/scoring/infra/modules/scoring.module.js';
+import { CguModule } from '@modules/cgu/infra/modules/cgu.module.js';
 
 /**
  * Agregador do domínio de inteligência socioambiental: fontes de dados e seus
@@ -21,6 +22,7 @@ import { ScoringModule } from '@modules/scoring/infra/modules/scoring.module.js'
     ReceitaModule,
     IbgeCnaeModule,
     IbamaModule,
+    CguModule,
     EvidencesModule,
     CompaniesModule,
     ScoringModule,
