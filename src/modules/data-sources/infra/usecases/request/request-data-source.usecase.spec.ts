@@ -79,6 +79,24 @@ describe('RequestDataSourceUseCase', () => {
     vi.useRealTimers();
   });
 
+  it('adapter resolve host oficial e somente reduz o prazo do catalogo', async () => {
+    await useCase.execute({
+      ...request,
+      resolveBaseUrl: () => 'https://example.org/api',
+      budgetMs: 100,
+    });
+    expect(httpClient.get).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        url: 'https://example.org/api/11222333000181',
+        timeoutMs: 100,
+      }),
+    );
+    await useCase.execute({ ...request, budgetMs: 9000 });
+    expect(httpClient.get).toHaveBeenLastCalledWith(
+      expect.objectContaining({ timeoutMs: 5000 }),
+    );
+  });
+
   describe('chamada bem-sucedida', () => {
     it('devolve o corpo da fonte', async () => {
       await expect(useCase.execute(request)).resolves.toEqual({
