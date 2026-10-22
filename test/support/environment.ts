@@ -16,6 +16,7 @@ export function buildTestEnvironment(
     // Sem isto a configuração montada na suíte assumiria `development`, e as
     // operações de preparação de banco (`seed`, `reset`) seriam recusadas.
     NODE_ENV: 'test',
+    CGU_API_KEY: 'token-exclusivo-dos-testes-locais',
     DATABASE_URL: 'mongodb://localhost:27017/bios_test?directConnection=true',
     REDIS_URL: 'redis://localhost:6379/1',
     ENCRYPTION_KEYS: `1:${'e'.repeat(43)}=`,
