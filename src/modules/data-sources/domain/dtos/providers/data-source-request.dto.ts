@@ -42,6 +42,12 @@ export interface DataSourceRequest {
    */
   download?: { destination: string; maxBytes: number };
 
+  /** Rota de um adapter para fontes com mais de um host oficial; nunca vem do usuario. */
+  resolveBaseUrl?: (configuredBaseUrl: string) => string;
+
+  /** Orcamento restante da coleta; so pode reduzir o timeout do catalogo. */
+  budgetMs?: number;
+
   context: SourceCallContext;
 }
 

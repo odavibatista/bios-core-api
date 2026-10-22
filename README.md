@@ -1187,6 +1187,47 @@ evidências e os índices por ODS quando o perfil ambiental (UC07) existir.
 - **Separação das credenciais.** A sessão (JWT) não vale na API pública, e a chave de API não vale
   nas rotas do painel, inclusive no gerenciamento das próprias chaves.
 
+## Inventário GHG Protocol (UC07)
+
+`GhgModule` exporta `GetGhgCompanyEvidencesUseCase.execute(cnpj)`. Ele reutiliza a
+evidência local válida ou publica `fetch-ghg-inventory` na fila exclusiva
+`ghg-inventory` e aguarda com `data_sources.request_timeout_ms` (padrão 10 s).
+Timeout, job falho ou Redis indisponível preservam a resposta anterior; sem ela,
+`UNKNOWN`. O job pode concluir depois do timeout do chamador. A consolidação e a
+exposição no perfil continuam nas #75/#81; esta entrega não cria endpoint nem score.
+
+O processor lê razão social/nome fantasia do perfil local para localizar até três
+candidatos no catálogo público. Os serviços usados pelo próprio portal foram
+verificados em `assets/appconfig.json` e no JavaScript público: JSON ABP em
+`registropublicodeemissoesapi.fgv.br/api/services/app/EstatisticaPublica/`
+(`GetAllOrganizations` e `GetReportedInventories?organizationId=...`) e PDF em
+`sistema-registropublicodeemissoesapi.fgv.br/GenerateReport/GenerateInventoryReport/<org>/<ciclo>/true`.
+São recursos do portal sem contrato REST oficial estável. HTML de erro com HTTP
+200, HTTP 206/404, erro de envelope, relatório sem identidade ou ano divergente
+não são aceitos como dados nem como prova de ausência.
+
+O catálogo não traz CNPJ. Nome é somente uma pista: o CNPJ exato e o ano do PDF
+precisam corresponder à empresa e ao inventário listado. Verifica-se o ano mais
+recente, sem inferir cobertura histórica ou vínculo entre empresas de um grupo.
+Sem cadastro local, candidato ou inventário verificável, registra-se `UNKNOWN`,
+com nova tentativa após 15 minutos. Resposta anterior vencida permanece `OUTDATED`.
+
+Cada coleta usa um prazo total; cada chamada respeita também limite, timeout e
+log da infraestrutura comum. O PDF (máximo 5 MiB) é lido nas três primeiras páginas
+por `pdfjs-dist` em thread descartável, com limite de 128 MiB no heap V8 e prazo restante.
+Somente CNPJ, organização, ciclo e ano saem da extração. O bruto é esse retrato
+reduzido, sem contato, nome de responsável ou texto integral; o arquivo temporário
+é removido. `published_at` permanece nulo: ano inventariado não é publicação.
+O cache por CNPJ guarda o mesmo retrato por 30 dias (TTL do catálogo), conservando
+`collectedAt`. Fonte desabilitada não usa esse cache nem a rede. A persistência
+mantém a idempotência por etapas existente, sem transação global ou ordenação
+atômica entre coletas concorrentes.
+
+A seed nova aponta para o host JSON. Catálogos existentes que ainda usam
+`https://registropublicodeemissoes.fgv.br` continuam compatíveis: o adapter resolve
+os dois hosts oficiais, conforme o portal. O seed não sobrescreve configurações.
+Nenhuma variável de ambiente ou migração de schema foi adicionada.
+
 ## Testes
 
 Vitest com a API de mocks equivalente à do Jest (`vi.fn`, `vi.spyOn`). Dependências são

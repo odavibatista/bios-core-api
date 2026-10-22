@@ -31,6 +31,7 @@ import { SearchCompaniesByNameUseCase } from '../usecases/search-companies-by-na
 @Module({
   imports: [DataSourcesModule, ApiKeysModule, ReceitaModule, IbgeCnaeModule],
   controllers: [CompaniesController, PublicCompaniesController],
+  exports: [CompanyProfileRepository],
   providers: [
     /* Repositórios */
     {
