@@ -47,6 +47,7 @@ export default defineConfig({
     },
     env: {
       NODE_ENV: 'test',
+      CGU_API_KEY: 'token-exclusivo-dos-testes-locais',
       DATABASE_URL: TEST_DATABASE_URL,
       REDIS_URL: TEST_REDIS_URL,
       DATA_RETENTION_SYNC_ON_BOOT: 'false',

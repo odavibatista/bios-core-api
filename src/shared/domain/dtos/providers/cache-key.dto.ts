@@ -14,6 +14,9 @@ export const CacheNamespace = {
 
   /** Índice e confiança por ODS de uma empresa. */
   COMPANY_SCORES: 'company-scores',
+  /** Retratos sanitizados de cada cadastro CGU, separados por fonte e CNPJ. */
+  CGU_CEIS: 'cgu-ceis',
+  CGU_CNEP: 'cgu-cnep',
 
   /**
    * Descrição oficial de uma subclasse da CNAE (IBGE). O identificador é o
