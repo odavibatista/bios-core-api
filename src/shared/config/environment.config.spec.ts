@@ -20,6 +20,7 @@ const REDIS_URL = `redis://${faker.internet.domainName()}:${faker.internet.port(
 
 /** Variáveis sem valor padrão: a aplicação não sobe sem elas. */
 const REQUIRED = {
+  CGU_API_KEY: faker.string.uuid(),
   DATABASE_URL,
   REDIS_URL,
   ENCRYPTION_KEYS: buildKeyring(),
@@ -34,6 +35,25 @@ const REQUIRED = {
 };
 
 describe('validateEnvironment', () => {
+  it.each(['', ' ', 'token\r\ninjetado', 'troque-esta-chave'])(
+    'recusa chave CGU inválida sem expor o valor: caso %#',
+    (key) => {
+      let message = '';
+      try {
+        validateEnvironment({ ...REQUIRED, CGU_API_KEY: key });
+      } catch (error) {
+        message = (error as Error).message;
+      }
+      expect(message).toContain('CGU_API_KEY');
+      if (key.trim()) expect(message).not.toContain(key);
+    },
+  );
+
+  it('preserva o token CGU para o cabeçalho HTTP', () => {
+    expect(validateEnvironment(REQUIRED).CGU_API_KEY).toBe(
+      REQUIRED.CGU_API_KEY,
+    );
+  });
   it('aplica os valores padrão quando só as variáveis obrigatórias são informadas', () => {
     const environment = validateEnvironment({ ...REQUIRED });
 

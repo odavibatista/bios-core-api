@@ -74,6 +74,17 @@ export const environmentSchema = z.object({
     .enum(Object.values(RuntimeEnvironment))
     .default(RuntimeEnvironment.DEVELOPMENT),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+  // Somente o valor do token, enviado em chave-api-dados; nunca o JSON de headers.
+  CGU_API_KEY: z
+    .string()
+    .regex(
+      /^[\x21-\x7e]{1,4096}$/,
+      'deve ser um token HTTP sem espaços ou controles',
+    )
+    .refine(
+      (key) => !key.startsWith('troque-'),
+      'substitua o exemplo pelo token da CGU',
+    ),
   DATABASE_URL: z
     .string()
     .regex(/^mongodb(\+srv)?:\/\//, 'deve ser uma connection string MongoDB'),
