@@ -10,6 +10,8 @@ const COVERAGE_EXCLUDE = [
   // Os próprios testes e o bootstrap da aplicação.
   'src/**/*.spec.ts',
   'src/app/main.ts',
+  // Entrada do comando de sincronização do catálogo (a lógica está no runner, testado).
+  'src/app/cli/*.main.ts',
   // Seeders de catálogo, exercitados contra o banco real nos testes e2e.
   'src/**/*seeder.ts',
   // Configuração da aplicação, validada na inicialização.

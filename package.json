@@ -33,6 +33,7 @@
     "prisma:format": "prisma format",
     "keys:generate": "node scripts/generate-keys.mjs",
     "db:push": "prisma db push",
+    "catalog:sync": "nest build && node dist/app/cli/sync-catalog.main.js",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "postinstall": "prisma generate",
