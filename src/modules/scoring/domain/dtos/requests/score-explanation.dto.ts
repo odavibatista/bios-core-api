@@ -56,6 +56,9 @@ export const ScoreExplanationResponseSchema = z
             })
             .strict(),
           weight: z.number().positive(),
+          weight_reason: z
+            .enum(['CGU_SANCTION_EXPIRED', 'IBAMA_EMBARGO_LIFTED'])
+            .nullable(),
           signal: z.enum(EvidenceSignal),
           points: z.number().min(-100).max(100),
         })

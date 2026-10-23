@@ -21,6 +21,7 @@ describe('contrato de cálculo por ODS', () => {
       category: EvidenceCategory.INFRACAO_AMBIENTAL,
       signal: EvidenceSignal.NEGATIVE,
       weight: 40,
+      weightReason: null,
       points: -40,
     };
     const score = {

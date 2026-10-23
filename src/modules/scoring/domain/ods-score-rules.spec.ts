@@ -41,7 +41,7 @@ describe('RF10: regras fixas por ODS', () => {
     });
 
   it('versiona regras e falha explicitamente para ODS ativo sem regra', () => {
-    expect(ODS_SCORE_RULES_VERSION).toBe('rf10-rf11-v2');
+    expect(ODS_SCORE_RULES_VERSION).toBe('rf10-rf11-v3');
     expect(() => scoreOdsEvidences(16, [])).toThrow('ODS 16 sem regras');
   });
 
@@ -106,6 +106,69 @@ describe('RF10: regras fixas por ODS', () => {
     expect(result.contributions.reduce((sum, c) => sum + c.points, 0)).toBe(
       result.scoreValue,
     );
+  });
+
+  it('reduz a 25% apenas sanção vencida e embargo levantado, preservando a soma', () => {
+    const now = new Date('2026-10-22T02:00:00.000Z'); // 21/10 em São Paulo
+    const rows = [
+      { ...cgu('expired'), details: { endDate: '2026-10-20' } },
+      { ...cgu('ends-today'), details: { endDate: '2026-10-21' } },
+      { ...cgu('without-end'), details: { endDate: null } },
+      {
+        ...ibama('lifted'),
+        details: { resource: 'TERMO_EMBARGO', lifted: true },
+      },
+      {
+        ...ibama('active'),
+        details: { resource: 'TERMO_EMBARGO', lifted: false },
+      },
+    ];
+    const result = scoreOdsEvidences(15, rows, now);
+    expect(
+      result.contributions.map(({ weight, weightReason, points }) => ({
+        weight,
+        weightReason,
+        points,
+      })),
+    ).toEqual([
+      { weight: 5, weightReason: null, points: -5 },
+      { weight: 1.25, weightReason: 'CGU_SANCTION_EXPIRED', points: -1.25 },
+      { weight: 5, weightReason: null, points: -5 },
+      { weight: 40, weightReason: null, points: -40 },
+      { weight: 10, weightReason: 'IBAMA_EMBARGO_LIFTED', points: -10 },
+    ]);
+    expect(result.scoreValue).toBe(-61.25);
+    expect(
+      result.contributions.reduce((sum, item) => sum + item.points, 0),
+    ).toBe(result.scoreValue);
+  });
+
+  it('não reduz auto nem registro de outra fonte com detalhes parecidos', () => {
+    const rows = [
+      {
+        ...ibama('auto'),
+        details: { resource: 'AUTO_INFRACAO', lifted: true },
+      },
+      {
+        ...cgu('other'),
+        sourceSlug: 'OTHER',
+        details: { endDate: '2020-01-01' },
+      },
+    ];
+    expect(
+      scoreOdsEvidences(
+        15,
+        rows,
+        new Date('2026-10-22T12:00:00.000Z'),
+      ).contributions.map((item) => item.weight),
+    ).toEqual([5, 40]);
+    expect(
+      scoreOdsEvidences(15, [{ ...cgu('no-details'), details: null }])
+        .contributions[0],
+    ).toMatchObject({
+      weight: 5,
+      weightReason: null,
+    });
   });
 
   it('aplica tetos por categoria sem superar 100 pontos e mantém uma contribuição por evidência', () => {
