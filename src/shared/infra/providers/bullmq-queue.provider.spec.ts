@@ -30,6 +30,7 @@ interface FakeQueue {
   getJobState: ReturnType<typeof vi.fn>;
   getJob: ReturnType<typeof vi.fn>;
   upsertJobScheduler: ReturnType<typeof vi.fn>;
+  removeJobScheduler: ReturnType<typeof vi.fn>;
 }
 
 /**
@@ -48,6 +49,7 @@ function fakeQueue(
     getJobState: vi.fn(() => Promise.resolve(pending.shift() ?? 'waiting')),
     getJob: vi.fn().mockResolvedValue(job),
     upsertJobScheduler: vi.fn().mockResolvedValue({}),
+    removeJobScheduler: vi.fn().mockResolvedValue(true),
   };
 }
 
@@ -333,6 +335,18 @@ describe('BullMqQueueProvider', () => {
         schedule.id,
         { pattern: schedule.cron },
         expect.objectContaining({ name: schedule.jobName }),
+      );
+    });
+
+    it('remove um agendamento antigo pelo identificador', async () => {
+      const queue = fakeQueue();
+
+      await createProvider({
+        [QueueName.ENVIRONMENTAL_EVIDENCES]: queue,
+      }).unschedule(QueueName.ENVIRONMENTAL_EVIDENCES, 'ibama-daily-ingestion');
+
+      expect(queue.removeJobScheduler).toHaveBeenCalledWith(
+        'ibama-daily-ingestion',
       );
     });
 
