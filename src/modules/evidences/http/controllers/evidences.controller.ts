@@ -1,4 +1,5 @@
 import { Controller, Get, HttpStatus, Param } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -28,10 +29,11 @@ export class EvidencesController implements EvidencesControllerInterface {
   ) {}
 
   @Get(':cnpj/evidences')
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @ApiOperation({
     summary: 'Consulta evidências e referências às fontes originais',
     description:
-      'Reúne IBAMA local, CGU e GHG com degradação independente e agrupa por categoria. source é o nome público do catálogo. source_reference identifica o registro; source_url é um link HTTPS original, inclusive para o recurso oficial quando não existe link individual. O acesso ao recurso CGU pode exigir credencial do próprio órgão. Sem referência ou link rastreável, uma evidência guardada como CONFIRMED é apresentada como UNKNOWN, sem sinal, resumo ou detalhes confirmatórios. Não inventa links, não altera o histórico e não calcula score. UNKNOWN e NOT_FOUND podem ter referências nulas. Aceita CNPJ numérico ou alfanumérico; omita a barra de formatação na URL.',
+      'Exige perfil cadastral local; sem ele, responde 404 sem iniciar coletas. Limite de 20 consultas por minuto por IP, além do limite global. Reúne IBAMA local, CGU e GHG com degradação independente e agrupa por categoria. source é o nome público do catálogo. source_reference identifica o registro; source_url é um link HTTPS original, inclusive para o recurso oficial quando não existe link individual. O acesso ao recurso CGU pode exigir credencial do próprio órgão. Sem referência ou link rastreável, uma evidência guardada como CONFIRMED é apresentada como UNKNOWN, sem sinal, resumo ou detalhes confirmatórios. Não inventa links, não altera o histórico e não calcula score. UNKNOWN e NOT_FOUND podem ter referências nulas. Aceita CNPJ numérico ou alfanumérico; omita a barra de formatação na URL.',
   })
   @ApiParam({
     name: 'cnpj',
@@ -43,6 +45,7 @@ export class EvidencesController implements EvidencesControllerInterface {
   })
   @ErrorResponses(
     HttpStatus.UNAUTHORIZED,
+    HttpStatus.NOT_FOUND,
     HttpStatus.UNPROCESSABLE_ENTITY,
     HttpStatus.TOO_MANY_REQUESTS,
     HttpStatus.SERVICE_UNAVAILABLE,
