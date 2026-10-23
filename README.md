@@ -1537,6 +1537,53 @@ com o motivo registrado: Prisma 7 (sem suporte a MongoDB), TypeScript 7 (recusad
 do `@nestjs/swagger` e do `typescript-eslint`) e Vitest 5 (binário nativo do Rolldown que o
 npm não instala a partir do lockfile).
 
+#### Imagens do CI fixadas por digest
+
+O job Testes obtém o MongoDB e o Redis por registros alternativos (espelho do Google, ECR
+Public e Docker Hub, nesta ordem), e uma tag publicada pode passar a apontar para outro
+conteúdo sem aviso. Por isso o conteúdo é decidido pelo **digest do índice multi-arquitetura**
+em `.github/ci-images.lock` (o mesmo nos três registros): `pull-ci-images.sh` puxa
+`<registro>/<imagem>@sha256:…`, o motor recusa conteúdo diferente e só então aplica a tag
+local que o `docker-compose.ci.yml` espera. Imagem do Compose sem digest no lock interrompe a
+etapa antes de subir a infraestrutura. O Compose de desenvolvimento segue por tag.
+
+Para subir uma versão (mudança deliberada, em PR próprio):
+
+1. alterar a tag em `docker-compose.yml`, em `docker-compose.ci.yml` e na primeira coluna de
+   `.github/ci-images.lock`;
+2. rodar `bash .github/scripts/update-ci-images.sh` (precisa de Docker com buildx e rede), que
+   resolve o digest atual de cada tag e regrava o lock;
+3. rodar `bash .github/scripts/pull-ci-images.test.sh` e `update-ci-images.test.sh` (sem rede).
+
+O Dependabot não atualiza o lock. Quem vigia a defasagem é o job **Imagens do CI** do workflow
+de contrato (abaixo), que roda `update-ci-images.sh --check` e falha quando a tag passou a
+apontar para outro digest (rebuild da imagem base, por exemplo). A falha é um aviso: o lock só
+muda pelo procedimento acima.
+
+#### Testes de contrato das fontes reais
+
+Os e2e simulam cada fonte com a forma que o código supõe, e foi assim que o erro do GHG (10
+organizações em vez de 1029) passou. O workflow `.github/workflows/contract.yml` (toda segunda
+às 09:00 UTC e sob demanda, em *Actions → Contrato das fontes → Run workflow*) consulta as
+fontes reais com os mesmos leitores do código de produção e acusa mudança de formato.
+**Não é status check de PR** e não entra em `verify` nem no pre-push.
+
+| Fonte | O que o contrato confere |
+| --- | --- |
+| IBAMA | Download dos dois dumps em `200` e fora de página HTML; tamanho entre 1 MB e o limite do adapter; cabeçalho do CSV com todas as colunas lidas; amostra de 50 mil linhas com registros de pessoa jurídica que o mapper aceita. |
+| CGU (CEIS e CNEP) | `200` em JSON com a chave no cabeçalho `chave-api-dados`; linhas aceitas pelo leitor da página; página 2 diferente da 1; chamada sem chave recusada (`401`/`403`). |
+| GHG | `SearchAllOrganizations` entrega a página inteira pedida (não uma amostra) com total acima dela; página seguinte sem repetir organizações; inventário publicado; relatório em PDF (`%PDF`, abaixo do limite) cujo CNPJ e ano o leitor identifica. |
+
+Os endereços vêm do catálogo semeado (`data_sources.seeder.ts`), ou seja, o que vai a produção.
+A chave da CGU é o secret `CGU_API_KEY` do repositório: chega só como variável de ambiente do
+passo (mascarada nos logs), e os testes não a imprimem nem a repassam a mensagens de erro. No
+CI, secret ausente reprova a execução; localmente a suíte da CGU é pulada com aviso.
+
+```bash
+npm run test:contract      # as três fontes (baixa ~330 MB do IBAMA); CGU_API_KEY no ambiente
+npx vitest run --config vitest.config.contract.ts test/contract/ghg.contract-spec.ts   # uma fonte
+```
+
 ### Fluxo de contribuição
 
 1. Abrir a issue pelo template adequado (tarefa, bug ou configuração), colando os artefatos

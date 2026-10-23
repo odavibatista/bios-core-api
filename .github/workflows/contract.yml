@@ -1,0 +1,70 @@
+# Testes de contrato contra as fontes externas reais (IBAMA, CGU e GHG) e
+# conferência das imagens do CI.
+#
+# NÃO bloqueia pull request: depende de rede, de credencial e de terceiros, e
+# existe para acusar mudança de formato antes de ela chegar à produção (os e2e
+# simulam a fonte com a forma que o código supõe). Roda toda segunda-feira e sob
+# demanda (Actions → Contrato das fontes → Run workflow). Não é um status check
+# exigido pela proteção de branches.
+
+name: Contrato das fontes
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: contract
+  cancel-in-progress: false
+
+env:
+  HUSKY: '0'
+  # Usada apenas pelo `prisma generate` do postinstall (sem conexão).
+  DATABASE_URL: mongodb://localhost:27017/bios_ci?directConnection=true
+
+jobs:
+  sources:
+    name: Fontes reais
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22.x
+          cache: npm
+
+      # O lockfile é gerado com o npm 11 (mesmo motivo do ci.yml).
+      - name: Alinhar versão do npm com a do lockfile
+        run: npm install -g npm@11
+
+      - name: Instalar dependências
+        run: npm ci
+
+      # A credencial só existe neste passo, vem de secret do GitHub (mascarado nos
+      # logs) e os testes nunca a imprimem nem a repassam a mensagens de erro.
+      # Sem o secret, o teste da CGU falha em vez de ser ignorado.
+      - name: Contrato do IBAMA, da CGU e do GHG
+        env:
+          CGU_API_KEY: ${{ secrets.CGU_API_KEY }}
+        run: npm run test:contract
+
+  images:
+    name: Imagens do CI
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Avisa quando a tag publicada passou a apontar para outro conteúdo. Não muda
+      # nada: a atualização do lock é deliberada (README, seção CI).
+      - name: Digests de ci-images.lock ainda são os das tags
+        run: bash .github/scripts/update-ci-images.sh --check

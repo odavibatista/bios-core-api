@@ -1,0 +1,10 @@
+# Imagens da infraestrutura de teste do CI, fixadas por digest.
+#
+# Formato: <imagem>:<tag> <digest do indice multi-arquitetura>
+# O digest e o mesmo no Docker Hub, no espelho do Google e no ECR Public, entao
+# pull-ci-images.sh puxa por ele em qualquer registro e o motor recusa conteudo
+# diferente. A tag existe so para localizar a entrada no Compose.
+#
+# Nao edite a mao: use .github/scripts/update-ci-images.sh (procedimento no README).
+mongo:8.3.11 sha256:d731d77bfd7afd66bd487bdf627b5bf7ce4c3602ec461d635977021db529ebbc
+redis:7-alpine sha256:57e4255cc971b1c8d6f8a6ca283ac01bc3ecdd914273ef6bfaede87aaecd6541
