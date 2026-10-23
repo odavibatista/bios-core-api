@@ -24,6 +24,11 @@ export async function createDatabaseTestingApp(
 
   const app = (await builder.compile()).createNestApplication();
   await app.init();
+  // O supertest sobe o servidor a cada requisição enquanto ele não está ouvindo, e
+  // as requisições simultâneas se enfileiram em `once('listening' | 'error' |
+  // 'close')` do mesmo servidor: com 11 ou mais, o Node avisa de vazamento de
+  // ouvintes (#259). Ouvindo desde já, em porta livre, cada requisição vai direto.
+  await app.listen(0);
 
   return { app, prisma: app.get(PrismaService) };
 }
