@@ -161,7 +161,7 @@ export function toGhgEvidence(inventory: GhgInventory): EvidenceBatchEntry {
     finding: {
       reference: `${organizationId}/${cycleId}`,
       url: `https://sistema-registropublicodeemissoesapi.fgv.br/GenerateReport/GenerateInventoryReport/${organizationId}/${cycleId}/true`,
-      summary: `Inventario de emissoes de GEE publicado: ano ${year}.`,
+      summary: `Inventário de emissões de GEE publicado: ano ${year}.`,
       details: { organizationId, cycleId, inventoryYear: year },
       // Ano inventariado nao e data de publicacao; a fonte nao informa esta data.
     },

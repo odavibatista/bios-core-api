@@ -5,7 +5,7 @@ export class ScoreNotFoundException extends DomainException {
   constructor() {
     super(
       'SCORE_NOT_FOUND',
-      'Indice nao calculado para a empresa e o ODS informados.',
+      'Índice não calculado para a empresa e o ODS informados.',
       HttpStatus.NOT_FOUND,
     );
   }
@@ -16,7 +16,7 @@ export class ScoreExplanationStaleException extends DomainException {
   constructor() {
     super(
       'SCORE_EXPLANATION_STALE',
-      'O indice precisa ser recalculado antes de exibir sua explicacao.',
+      'O índice precisa ser recalculado antes de exibir sua explicação.',
       HttpStatus.CONFLICT,
     );
   }

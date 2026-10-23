@@ -10,7 +10,7 @@ export const CalculateOdsScoresRequestSchema = z
       if (cnpj) return cnpj;
       ctx.addIssue({
         code: 'custom',
-        message: 'CNPJ invalido para calcular indices.',
+        message: 'CNPJ inválido para calcular índices.',
       });
       return z.NEVER;
     }),
@@ -54,13 +54,13 @@ export const CalculatedOdsScoreSchema = z
       ctx.addIssue({
         code: 'custom',
         path: ['scoreValue'],
-        message: 'O indice deve reproduzir a soma das contribuicoes.',
+        message: 'O índice deve reproduzir a soma das contribuições.',
       });
     if (score.evidenceCount !== score.contributions.length)
       ctx.addIssue({
         code: 'custom',
         path: ['evidenceCount'],
-        message: 'A contagem deve corresponder as contribuicoes.',
+        message: 'A contagem deve corresponder às contribuições.',
       });
     if (
       (score.coverageStatus === 'HAS_RECORDS') !==
@@ -69,7 +69,7 @@ export const CalculatedOdsScoreSchema = z
       ctx.addIssue({
         code: 'custom',
         path: ['coverageStatus'],
-        message: 'A cobertura deve corresponder as contribuicoes.',
+        message: 'A cobertura deve corresponder às contribuições.',
       });
   });
 
