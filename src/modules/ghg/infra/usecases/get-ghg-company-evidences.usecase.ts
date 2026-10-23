@@ -33,7 +33,7 @@ export class GetGhgCompanyEvidencesUseCase extends UseCase<
   override async execute(input: string): Promise<StoredEvidence[]> {
     const cnpj = parseCnpj(input);
     if (!cnpj)
-      throw new InvalidEvidenceError('CNPJ invalido para consultar GHG.');
+      throw new InvalidEvidenceError('CNPJ inválido para consultar GHG.');
     const local = await this.local(cnpj);
     if (
       local.length &&

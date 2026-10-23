@@ -33,13 +33,13 @@ export class GhgInventoryProcessor extends WorkerHost {
       !input.success ||
       parseCnpj(input.data.cnpj) !== input.data.cnpj
     )
-      throw new UnrecoverableError('Job GHG invalido.');
+      throw new UnrecoverableError('Job GHG inválido.');
     return this.collect.execute(input.data.cnpj);
   }
   /** O agendador publica o job sem carga; qualquer outra coisa é malformada. */
   private async sync(job: Job<unknown>) {
     if (!GhgSyncJobPayloadSchema.safeParse(job.data ?? {}).success)
-      throw new UnrecoverableError('Job GHG invalido.');
+      throw new UnrecoverableError('Job GHG inválido.');
     try {
       return await this.syncOrganizations.execute();
     } catch (error) {

@@ -29,10 +29,10 @@ export class CalculateCompanyOdsScoresUseCase extends UseCase<
   override async execute(input: string): Promise<CalculatedOdsScore[]> {
     const { cnpj } = CalculateOdsScoresRequestSchema.parse({ cnpj: input });
     const ods = await this.scores.findActiveOds();
-    if (!ods.length) throw new Error('Nenhum ODS ativo para calcular indices.');
+    if (!ods.length) throw new Error('Nenhum ODS ativo para calcular índices.');
     for (const item of ods)
       if (!ODS_SCORE_RULES[item.number])
-        throw new Error(`ODS ${item.number} sem regras de pontuacao.`);
+        throw new Error(`ODS ${item.number} sem regras de pontuação.`);
 
     const evidences = await this.evidences.execute(cnpj);
     const location = await this.scores.findProfileLocation(cnpj);
