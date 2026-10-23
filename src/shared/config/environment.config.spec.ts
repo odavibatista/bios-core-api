@@ -3,6 +3,9 @@ import {
   buildKeyring,
 } from '@test/factories/shared/encryption-key.factory.js';
 import { faker } from '@test/support/faker.js';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { Test } from '@nestjs/testing';
+import { buildTestEnvironmentWithout } from '@test/support/environment.js';
 import { EnvironmentException } from '../domain/errors/environment.exception.js';
 import {
   RuntimeEnvironment,
@@ -35,7 +38,7 @@ const REQUIRED = {
 };
 
 describe('validateEnvironment', () => {
-  it.each(['', ' ', 'token\r\ninjetado', 'troque-esta-chave'])(
+  it.each([' ', 'token\r\ninjetado', 'troque-esta-chave'])(
     'recusa chave CGU inválida sem expor o valor: caso %#',
     (key) => {
       let message = '';
@@ -53,6 +56,30 @@ describe('validateEnvironment', () => {
     expect(validateEnvironment(REQUIRED).CGU_API_KEY).toBe(
       REQUIRED.CGU_API_KEY,
     );
+  });
+  it('aceita CGU_API_KEY ausente ou vazia sem desativar a API', () => {
+    const withoutCgu = Object.fromEntries(
+      Object.entries(REQUIRED).filter(([name]) => name !== 'CGU_API_KEY'),
+    );
+    expect(validateEnvironment(withoutCgu).CGU_API_KEY).toBeUndefined();
+    expect(
+      validateEnvironment({ ...withoutCgu, CGU_API_KEY: '' }).CGU_API_KEY,
+    ).toBeUndefined();
+  });
+  it('monta o módulo de configuração sem CGU_API_KEY', async () => {
+    const module = await Test.createTestingModule({
+      imports: [
+        ConfigModule.forRoot({
+          ignoreEnvFile: true,
+          ignoreEnvVars: true,
+          skipProcessEnv: true,
+          validate: () =>
+            validateEnvironment(buildTestEnvironmentWithout('CGU_API_KEY')),
+        }),
+      ],
+    }).compile();
+    expect(module.get(ConfigService).get('CGU_API_KEY')).toBeUndefined();
+    await module.close();
   });
   it('aplica os valores padrão quando só as variáveis obrigatórias são informadas', () => {
     const environment = validateEnvironment({ ...REQUIRED });
@@ -421,11 +448,16 @@ describe('validateEnvironment', () => {
     expect(attempt).toThrow(/NODE_ENV/);
   });
 
-  it.each(Object.keys(REQUIRED))('exige %s', (variable) => {
-    const incomplete = Object.fromEntries(
-      Object.entries(REQUIRED).filter(([name]) => name !== variable),
-    );
+  it.each(Object.keys(REQUIRED).filter((name) => name !== 'CGU_API_KEY'))(
+    'exige %s',
+    (variable) => {
+      const incomplete = Object.fromEntries(
+        Object.entries(REQUIRED).filter(([name]) => name !== variable),
+      );
 
-    expect(() => validateEnvironment(incomplete)).toThrow(new RegExp(variable));
-  });
+      expect(() => validateEnvironment(incomplete)).toThrow(
+        new RegExp(variable),
+      );
+    },
+  );
 });
