@@ -5,7 +5,7 @@ import { inject } from 'vitest';
 import request from 'supertest';
 import { CATALOG_SEEDERS } from '@app/database/catalog.seeders.js';
 import { GetCguCompanyEvidencesUseCase } from '@modules/cgu/infra/usecases/get-cgu-company-evidences.usecase.js';
-import { RequestCguCompanyEvidencesUseCase } from '@modules/evidences/infra/usecases/request-cgu-company-evidences.usecase.js';
+import { RequestCguCompanyEvidencesUseCase } from '@modules/environmental-intelligence/infra/usecases/request-cgu-company-evidences.usecase.js';
 import {
   QUEUE_REGISTRY,
   type QueueRegistry,

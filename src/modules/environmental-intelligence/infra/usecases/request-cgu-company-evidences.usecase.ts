@@ -14,9 +14,9 @@ import {
   cguJobId,
   FETCH_CGU_EVIDENCES_JOB,
 } from '../../domain/cgu-job.dto.js';
-import type { StoredEvidence } from '../../domain/dtos/repositories/evidence.repository.js';
-import { ListCompanyEvidencesUseCase } from './list-company-evidences.usecase.js';
-import { RecordEvidenceCollectionUseCase } from './record-evidence-collection.usecase.js';
+import type { StoredEvidence } from '@modules/evidences/domain/dtos/repositories/evidence.repository.js';
+import { ListCompanyEvidencesUseCase } from '@modules/evidences/infra/usecases/list-company-evidences.usecase.js';
+import { RecordEvidenceCollectionUseCase } from '@modules/evidences/infra/usecases/record-evidence-collection.usecase.js';
 /** Produtor sem HTTP: prepara UNKNOWN, publica uma vez e espera no limite global. */
 @Injectable()
 export class RequestCguCompanyEvidencesUseCase extends UseCase<

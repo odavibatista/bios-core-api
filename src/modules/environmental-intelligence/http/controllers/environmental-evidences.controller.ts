@@ -10,20 +10,20 @@ import {
   ErrorResponses,
   ResponseSchema,
 } from '@shared/http/decorators/response-schema.decorator.js';
-import type { EvidencesControllerInterface } from '../../domain/dtos/controllers/evidences.controller.dto.js';
+import type { EnvironmentalEvidencesControllerInterface } from '../../domain/dtos/controllers/environmental-evidences.controller.dto.js';
 import {
   CompanyEnvironmentalEvidencesRequestSchema,
   CompanyEnvironmentalEvidencesResponseSchema,
   type CompanyEnvironmentalEvidencesRequest,
   type CompanyEnvironmentalEvidencesResponse,
-} from '../../domain/dtos/requests/company-evidences.dto.js';
+} from '@modules/evidences/domain/dtos/requests/company-evidences.dto.js';
 import { GetCompanyEnvironmentalEvidencesUseCase } from '../../infra/usecases/get-company-environmental-evidences.usecase.js';
 
 /** Rota privada por padrão: expõe proveniência sem compor score ou perfil completo. */
 @ApiTags('Evidências')
 @ApiBearerAuth('jwt')
 @Controller('companies')
-export class EvidencesController implements EvidencesControllerInterface {
+export class EnvironmentalEvidencesController implements EnvironmentalEvidencesControllerInterface {
   constructor(
     private readonly getEvidences: GetCompanyEnvironmentalEvidencesUseCase,
   ) {}
