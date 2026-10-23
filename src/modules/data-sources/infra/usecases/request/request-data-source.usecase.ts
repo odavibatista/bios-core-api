@@ -38,7 +38,8 @@ const MAX_ERROR_MESSAGE_LENGTH = 500;
  *     fonte ou mudar seu limite vale na chamada seguinte, sem novo deploy;
  *  2. fonte desabilitada: não chama;
  *  3. respeita o limite por minuto (`rate_limit_per_minute`): estourado, não
- *     chama e responde `RATE_LIMITED`;
+ *     chama e responde `RATE_LIMITED`. O contador é o da fonte, ou o do grupo
+ *     (`rateLimitGroup`) quando várias fontes dividem a mesma credencial;
  *  4. chama com o tempo máximo da fonte (`request_timeout_ms`);
  *  5. classifica o desfecho e o grava em `data_source_request_logs`.
  *
@@ -91,7 +92,7 @@ export class RequestDataSourceUseCase extends UseCase<
   ): Promise<CalledResponse> {
     if (config.rateLimitPerMinute !== null) {
       const refused = await this.refuseByRateLimit(
-        config.slug,
+        request.rateLimitGroup ?? config.slug,
         config.rateLimitPerMinute,
       );
 
@@ -135,11 +136,14 @@ export class RequestDataSourceUseCase extends UseCase<
 
   /** `null` quando a chamada pode seguir. */
   private async refuseByRateLimit(
-    slug: string,
+    counter: string,
     limitPerMinute: number,
   ): Promise<CalledResponse | null> {
     try {
-      const acquired = await this.rateLimiter.tryAcquire(slug, limitPerMinute);
+      const acquired = await this.rateLimiter.tryAcquire(
+        counter,
+        limitPerMinute,
+      );
 
       return acquired
         ? null

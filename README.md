@@ -819,6 +819,38 @@ Contribuição órfã, inconsistente ou sem proveniência auditável responde 40
 para não apresentar uma explicação parcial como completa. A resposta não
 classifica a empresa como sustentável ou insustentável.
 
+### Motivos de UNKNOWN das fontes de evidência (observabilidade)
+
+Os adapters da CGU e do GHG devolvem `UNAVAILABLE` (e a evidência fica `UNKNOWN`) sem lançar
+exceção, e antes isso saía mudo: credencial recusada, limite atingido, formato novo e defeito de
+programa pareciam a mesma coisa. Agora cada saída sem dado registra **um motivo de um conjunto
+fechado** (`UnknownReason`, em `data-sources/domain/unknown-reason.ts`), por uma linha estruturada
+(`logSourceUnknown`):
+
+```json
+{ "event": "source_unknown", "source": "CGU_CEIS", "reason": "CREDENTIAL_REJECTED" }
+```
+
+| Motivo | Quando |
+| --- | --- |
+| `INVALID_INPUT` | CNPJ ou nome de busca inutilizável |
+| `CREDENTIAL_MISSING` / `CREDENTIAL_REJECTED` | sem `CGU_API_KEY` neste ambiente / a fonte respondeu 401 ou 403 |
+| `SOURCE_NOT_CONFIGURED` / `SOURCE_DISABLED` | fonte ausente / desabilitada em `data_sources` |
+| `RATE_LIMITED` / `TIMEOUT` | limite (o nosso ou HTTP 429) / prazo esgotado |
+| `ENDPOINT_NOT_FOUND` / `UNEXPECTED_STATUS` | 404 onde só 200 vale / 2xx diferente de 200 |
+| `SOURCE_ERROR` | 5xx, conexão recusada, resposta ilegível |
+| `CONTRACT_MISMATCH` | a resposta não tem o formato lido (a fonte mudou de contrato) |
+| `PAGINATION_LIMIT` | paginação sem fim (página repetida ou teto de páginas) |
+| `NO_CONFIRMED_MATCH` | a fonte respondeu, mas nada foi confirmado como da empresa (ausência não provada) |
+| `UNEXPECTED_ERROR` | defeito do programa: sai como **erro**, com o nome da exceção e as linhas da pilha |
+
+O registro nunca leva a credencial, os cabeçalhos, o corpo da resposta, a mensagem de exceção nem
+o CNPJ. Falhas esperadas saem como aviso; só `UNEXPECTED_ERROR` sai como erro, para que defeito de
+programa continue visível sem arrastar texto vindo da fonte. Contador por fonte e motivo não foi
+criado: a linha estruturada já permite contar no agregador de logs. Um valor novo de motivo é uma
+decisão deste arquivo, e não texto livre do adapter. O IBAMA fica de fora: suas falhas viram
+exceção e `ingestion_runs` com status `FAILED`.
+
 ### CGU: CEIS e CNEP (conduta administrativa)
 
 `CguModule` exporta `CeisDataSource`, `CnepDataSource` e
@@ -846,6 +878,18 @@ A composição do perfil fica na #81; esta entrega não acrescenta endpoint ou c
   mantém a data de coleta original: sua leitura não renova a validade.
   A habilitação no catálogo é verificada antes do cache. Limite por minuto,
   timeout e log de cada página usam a infraestrutura comum (seed: 90/min e 5 s).
+- **O limite por minuto é um só para CEIS e CNEP.** As duas fontes usam a mesma chave e o teto
+  da CGU é por token, então os dois cadastros dividem um único contador (`CGU_RATE_LIMIT_GROUP`,
+  passado como `rateLimitGroup` à infraestrutura comum): a soma das chamadas aos dois nunca passa
+  do `rate_limit_per_minute` do catálogo (seed: 90 no total, e não 90 para cada). O teto aplicado
+  é o da fonte que está chamando; mantenha o mesmo valor nos dois registros de `data_sources`
+  (com valores diferentes, a soma fica limitada pelo maior). Limite atingido, nosso ou HTTP 429,
+  vira `UNKNOWN` com motivo `RATE_LIMITED` sem repetir a requisição nem gravar cache.
+  **Valor oficial a confirmar:** a página da CGU não pôde ser lida automaticamente; uma cópia da
+  documentação (de terceiros) fala em 400/min no horário comercial e 700/min entre 0h e 6h, com
+  180/min em oito endpoints restritos, entre os quais não estão o CEIS nem o CNEP, e suspensão do
+  token por 8 horas ao exceder. O 90 do seed é conservador diante disso e pode ser ajustado no
+  banco, sem deploy, depois de conferido na documentação oficial.
 - Cada sanção vira uma evidência `CONFIRMED`, categoria `CONDUTA_ADMINISTRATIVA`,
   ODS 15 e sinal negativo. ID, órgão, tipo e datas são preservados; o link aponta
   ao recurso por ID na API oficial, cujo acesso também exige chave. Ausência

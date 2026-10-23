@@ -3,6 +3,10 @@ import {
   SourceOutcome,
   type SourceCallContext,
 } from '@modules/data-sources/domain/dtos/providers/data-source-request.dto.js';
+import {
+  UnknownReason,
+  unknownReasonOf,
+} from '@modules/data-sources/domain/unknown-reason.js';
 import { ResolveSourceRequestConfigUseCase } from '@modules/data-sources/infra/usecases/request/resolve-source-request-config.usecase.js';
 import { RequestDataSourceUseCase } from '@modules/data-sources/infra/usecases/request/request-data-source.usecase.js';
 import { CacheNamespace } from '@shared/domain/dtos/providers/cache-key.dto.js';
@@ -40,7 +44,11 @@ export class GhgSourceDisabledError extends Error {
  * anterior, se houver, segue valendo: nada foi gravado.
  */
 export class GhgOrganizationsUnavailableError extends Error {
-  constructor(reason: string) {
+  constructor(
+    reason: string,
+    /** Motivo classificado, para o registro do UNKNOWN (RF08). */
+    readonly unknownReason: UnknownReason = UnknownReason.SOURCE_ERROR,
+  ) {
     super(`Cadastro de organizações do GHG indisponível: ${reason}.`);
     this.name = 'GhgOrganizationsUnavailableError';
   }
@@ -98,7 +106,10 @@ export class GhgOrganizationDirectory {
     const source = await this.config.execute(GHG_SLUG);
 
     if (!source) {
-      throw new GhgOrganizationsUnavailableError('fonte ausente do catálogo');
+      throw new GhgOrganizationsUnavailableError(
+        'fonte ausente do catálogo',
+        UnknownReason.SOURCE_NOT_CONFIGURED,
+      );
     }
 
     if (!source.isEnabled) throw new GhgSourceDisabledError();
@@ -114,6 +125,7 @@ export class GhgOrganizationDirectory {
       if (remaining <= 0) {
         throw new GhgOrganizationsUnavailableError(
           'prazo da sincronização esgotado',
+          UnknownReason.TIMEOUT,
         );
       }
 
@@ -129,12 +141,17 @@ export class GhgOrganizationDirectory {
         resolveBaseUrl: (base) => ghgBaseUrl(base),
       });
 
-      if (
-        response.outcome !== SourceOutcome.SUCCESS ||
-        response.status !== 200
-      ) {
+      if (response.outcome !== SourceOutcome.SUCCESS) {
         throw new GhgOrganizationsUnavailableError(
           `o portal respondeu ${response.outcome}`,
+          unknownReasonOf(response),
+        );
+      }
+
+      if (response.status !== 200) {
+        throw new GhgOrganizationsUnavailableError(
+          `o portal respondeu ${response.outcome}`,
+          UnknownReason.UNEXPECTED_STATUS,
         );
       }
 
@@ -145,6 +162,7 @@ export class GhgOrganizationDirectory {
       } catch {
         throw new GhgOrganizationsUnavailableError(
           'resposta fora do contrato esperado',
+          UnknownReason.CONTRACT_MISMATCH,
         );
       }
 
@@ -152,6 +170,7 @@ export class GhgOrganizationDirectory {
       if (page.organizations.length === 0) {
         throw new GhgOrganizationsUnavailableError(
           'página vazia antes do total',
+          UnknownReason.CONTRACT_MISMATCH,
         );
       }
 
