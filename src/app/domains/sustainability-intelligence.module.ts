@@ -1,4 +1,4 @@
-import { EnvironmentalEvidencesModule } from '@modules/evidences/infra/modules/environmental-evidences.module.js';
+import { EnvironmentalIntelligenceModule } from '@modules/environmental-intelligence/infra/modules/environmental-intelligence.module.js';
 import { Module } from '@nestjs/common';
 import { GhgModule } from '@modules/ghg/infra/modules/ghg.module.js';
 import { DataSourcesModule } from '@modules/data-sources/infra/modules/data-sources.module.js';
@@ -27,7 +27,7 @@ import { CguModule } from '@modules/cgu/infra/modules/cgu.module.js';
     CguModule,
     GhgModule,
     EvidencesModule,
-    EnvironmentalEvidencesModule,
+    EnvironmentalIntelligenceModule,
     CompaniesModule,
     ScoringModule,
   ],

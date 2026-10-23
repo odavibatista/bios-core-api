@@ -4,14 +4,14 @@ import { CompanyNotFoundException } from '@modules/companies/domain/dtos/errors/
 import { GetIbamaCompanyEvidencesUseCase } from '@modules/ibama/infra/usecases/get-ibama-company-evidences.usecase.js';
 import { GetGhgCompanyEvidencesUseCase } from '@modules/ghg/infra/usecases/get-ghg-company-evidences.usecase.js';
 import { UseCase } from '@shared/domain/protocols/use-case.protocol.js';
-import { InvalidEvidenceError } from '../../domain/dtos/errors/evidence.errors.js';
+import { InvalidEvidenceError } from '@modules/evidences/domain/dtos/errors/evidence.errors.js';
 import {
   CompanyEnvironmentalEvidencesRequestSchema,
   groupCompanyEvidences,
   type CompanyEnvironmentalEvidencesResponse,
-} from '../../domain/company-environmental-evidences.dto.js';
-import { ListCompanyEvidencesUseCase } from './list-company-evidences.usecase.js';
-import { RecordEvidenceCollectionUseCase } from './record-evidence-collection.usecase.js';
+} from '@modules/evidences/domain/company-environmental-evidences.dto.js';
+import { ListCompanyEvidencesUseCase } from '@modules/evidences/infra/usecases/list-company-evidences.usecase.js';
+import { RecordEvidenceCollectionUseCase } from '@modules/evidences/infra/usecases/record-evidence-collection.usecase.js';
 import { RequestCguCompanyEvidencesUseCase } from './request-cgu-company-evidences.usecase.js';
 /** UC07: fontes independentes; releitura local inclui jobs que terminaram durante a espera. */
 @Injectable()

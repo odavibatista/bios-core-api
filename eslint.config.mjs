@@ -60,4 +60,44 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // O armazenamento de evidências não conhece as fontes que o alimentam nem o
+    // orquestrador que as reúne (#254): a dependência vai só de fora para dentro.
+    // Este bloco vem depois do anterior de propósito: `no-restricted-imports` não
+    // se mescla entre blocos, então o aviso do Faker é repetido aqui.
+    files: ['src/modules/evidences/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@faker-js/faker', '@faker-js/faker/*'],
+              message:
+                'Nos testes, importe `faker` de test/support/faker.ts (instância com semente reproduzível).',
+            },
+            {
+              group: [
+                '@modules/ibama',
+                '@modules/ibama/*',
+                '@modules/cgu',
+                '@modules/cgu/*',
+                '@modules/ghg',
+                '@modules/ghg/*',
+                '@modules/environmental-intelligence',
+                '@modules/environmental-intelligence/*',
+              ],
+              message:
+                'evidences não depende das fontes (ibama, cgu, ghg) nem do orquestrador: a orquestração fica em environmental-intelligence, que depende de evidences.',
+            },
+            {
+              regex: '^(\.\./)+(ibama|cgu|ghg|environmental-intelligence)(/|$)',
+              message:
+                'evidences não depende das fontes (ibama, cgu, ghg) nem do orquestrador: a orquestração fica em environmental-intelligence, que depende de evidences.',
+            },
+          ],
+        },
+      ],
+    },
+  },
 );
