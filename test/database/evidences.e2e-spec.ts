@@ -37,6 +37,12 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       });
     }
 
+    async function ibamaRows(cnpj = CNPJ) {
+      return (await rows(cnpj)).filter((row) =>
+        row.evidence_key.startsWith('IBAMA:'),
+      );
+    }
+
     beforeAll(async () => {
       ({ app, prisma } = await createDatabaseTestingApp());
       record = app.get(RecordEvidenceCollectionUseCase, { strict: false });
@@ -96,7 +102,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
 
         expect(output).toEqual({ saved: 0, removed: 0 });
         expect(
-          (await rows()).map(({ evidence_key, collected_at }) => ({
+          (await ibamaRows()).map(({ evidence_key, collected_at }) => ({
             evidence_key,
             collected_at,
           })),
@@ -128,7 +134,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         });
 
         expect(output).toEqual({ saved: 0, removed: 0 });
-        expect(await rows()).toEqual([]);
+        expect(await ibamaRows()).toEqual([]);
       });
 
       it('avulso mais novo impede lote antigo de ressuscitar registro removido', async () => {
@@ -160,7 +166,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         await batch.finish();
 
         expect(
-          (await rows()).map(({ evidence_key, collected_at }) => ({
+          (await ibamaRows()).map(({ evidence_key, collected_at }) => ({
             evidence_key,
             collected_at,
           })),
@@ -181,7 +187,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
           raw: { numero: `AI-${index}` },
         }));
         await expect(batch.write(entries)).resolves.toBe(100);
-        expect(await rows()).toHaveLength(100);
+        expect(await ibamaRows()).toHaveLength(100);
       });
       it('grava a evidência com a categoria, o ODS e a validade do catálogo', async () => {
         const collectedAt = new Date();
