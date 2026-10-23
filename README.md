@@ -817,9 +817,12 @@ consulta os dois cadastros separadamente e grava o retrato de cada fonte.
 O consumidor ambiental despacha a coleta CGU por fila na consolidação (#75).
 A composição do perfil fica na #81; esta entrega não acrescenta endpoint ou cálculo de índice.
 
-- Configure `CGU_API_KEY` no `.env` local ou secret do ambiente antes de iniciar
-  a aplicação. O token é obrigatório no bootstrap, sem espaços/controles ou o
-  placeholder do exemplo. Obtenha-o em
+- `CGU_API_KEY` é opcional no bootstrap. Sem token, a API continua disponível,
+  `/health` informa `checks.cgu_credentials = missing` sem retornar erro, e
+  CEIS/CNEP ficam `UNKNOWN` sem publicar coleta nem chamar a CGU. Evidências
+  anteriores são preservadas. Configure o token no `.env` local ou secret do
+  ambiente para habilitar novas consultas; quando informado, ele deve vir sem
+  espaços/controles nem o placeholder do exemplo. Obtenha-o em
   <https://portaldatransparencia.gov.br/api-de-dados/cadastrar-email>.
   Informe só o valor: o adapter monta o header `chave-api-dados`; nunca envie
   o JSON de headers como variável, nem registre ou versione o token.

@@ -1,4 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import type { Environment } from '@shared/config/environment.config.js';
 import { EvidenceState } from '@prisma/client';
 import { QueueName } from '@shared/domain/dtos/providers/queue-job.dto.js';
 import { QueueProvider } from '@shared/domain/providers/queue.provider.js';
@@ -21,7 +23,9 @@ export class RequestCguCompanyEvidencesUseCase extends UseCase<
   string,
   StoredEvidence[]
 > {
+  private readonly logger = new Logger(RequestCguCompanyEvidencesUseCase.name);
   constructor(
+    private readonly config: ConfigService<Environment, true>,
     private readonly list: ListCompanyEvidencesUseCase,
     private readonly collection: RecordEvidenceCollectionUseCase,
     private readonly queue: QueueProvider,
@@ -51,6 +55,12 @@ export class RequestCguCompanyEvidencesUseCase extends UseCase<
         });
     }
     const pending = await this.local(cnpj);
+    if (!this.config.get('CGU_API_KEY', { infer: true })) {
+      this.logger.warn(
+        'CEIS/CNEP indisponíveis: credencial ausente (CGU_API_KEY).',
+      );
+      return pending;
+    }
     try {
       await this.queue.enqueueAndWait(
         QueueName.ENVIRONMENTAL_EVIDENCES,
