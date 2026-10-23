@@ -4,7 +4,7 @@ import type { INestApplication } from '@nestjs/common';
 import { inject } from 'vitest';
 import type { Queue } from 'bullmq';
 import { CATALOG_SEEDERS } from '@app/database/catalog.seeders.js';
-import { GetCompanyEnvironmentalEvidencesUseCase } from '@modules/evidences/infra/usecases/get-company-environmental-evidences.usecase.js';
+import { GetCompanyEnvironmentalEvidencesUseCase } from '@modules/environmental-intelligence/infra/usecases/get-company-environmental-evidences.usecase.js';
 import { RecordEvidenceCollectionUseCase } from '@modules/evidences/infra/usecases/record-evidence-collection.usecase.js';
 import type { CompanyEnvironmentalEvidencesResponse } from '@modules/evidences/domain/company-environmental-evidences.dto.js';
 import { QueueName } from '@shared/domain/dtos/providers/queue-job.dto.js';
