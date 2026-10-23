@@ -105,6 +105,7 @@ describe('adapters CGU', () => {
         context,
         query: { codigoSancionado: cnpj, pagina: String(page) },
         headers: { 'chave-api-dados': token },
+        rateLimitGroup: 'CGU',
       });
     expect(JSON.stringify(cache.set.mock.calls)).not.toContain(
       cpf.sancionado.codigoFormatado,
@@ -127,6 +128,34 @@ describe('adapters CGU', () => {
       expect(cache.set).not.toHaveBeenCalled();
     },
   );
+
+  it.each(['CGU_CEIS', 'CGU_CNEP'] as const)(
+    '%s divide o contador de limite com o outro cadastro (uma chave, um teto)',
+    async (slug) => {
+      await provider.fetch(slug, cnpj, context);
+
+      expect(request.execute).toHaveBeenCalledWith(
+        expect.objectContaining({ slug, rateLimitGroup: 'CGU' }),
+      );
+    },
+  );
+
+  it('limite atingido vira UNAVAILABLE sem repetir a requisição nem gravar cache', async () => {
+    request.execute.mockResolvedValue({
+      outcome: 'RATE_LIMITED' as const,
+      message: 'limite de 90 requisições por minuto atingido',
+    });
+
+    await expect(
+      provider.fetch('CGU_CEIS', cnpj, context),
+    ).resolves.toMatchObject({
+      status: 'UNAVAILABLE',
+      reason: 'RATE_LIMITED',
+    });
+
+    expect(request.execute).toHaveBeenCalledOnce();
+    expect(cache.set).not.toHaveBeenCalled();
+  });
 
   it('CNEP usa namespace próprio e cache de ausência com TTL do catálogo', async () => {
     await expect(cnep.fetch(cnpj, context)).resolves.toMatchObject({
