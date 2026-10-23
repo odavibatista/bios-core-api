@@ -7,7 +7,7 @@ export const healthCheckResponseFactory = defineFactory<HealthCheckResponse>(
   () => ({
     status: 'ok',
     uptime_seconds: faker.number.int({ max: 30 * 86_400 }),
-    checks: { database: 'up', redis: 'up' },
+    checks: { database: 'up', redis: 'up', cgu_credentials: 'configured' },
     timestamp: faker.date.recent().toISOString(),
   }),
 );

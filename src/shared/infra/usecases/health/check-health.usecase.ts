@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import type { Environment } from '../../../config/environment.config.js';
 import type { HealthCheckResponse } from '../../../domain/dtos/requests/health-check.dto.js';
 import { DependencyUnavailableException } from '../../../domain/errors/dependency-unavailable.exception.js';
 import { UseCase } from '../../../domain/protocols/use-case.protocol.js';
@@ -17,6 +19,7 @@ import { RedisHealthProvider } from '../../../domain/providers/redis-health.prov
 @Injectable()
 export class CheckHealthUseCase extends UseCase<void, HealthCheckResponse> {
   constructor(
+    private readonly config: ConfigService<Environment, true>,
     private readonly databaseHealthProvider: DatabaseHealthProvider,
     private readonly redisHealthProvider: RedisHealthProvider,
   ) {
@@ -42,7 +45,13 @@ export class CheckHealthUseCase extends UseCase<void, HealthCheckResponse> {
     return {
       status: 'ok',
       uptime_seconds: Math.floor(process.uptime()),
-      checks: { database: 'up', redis: 'up' },
+      checks: {
+        database: 'up',
+        redis: 'up',
+        cgu_credentials: this.config.get('CGU_API_KEY', { infer: true })
+          ? 'configured'
+          : 'missing',
+      },
       timestamp: new Date().toISOString(),
     };
   }

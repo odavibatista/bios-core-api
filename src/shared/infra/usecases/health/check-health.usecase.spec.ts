@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { HealthCheckResponseSchema } from '../../../domain/dtos/requests/health-check.dto.js';
 import { DependencyUnavailableException } from '../../../domain/errors/dependency-unavailable.exception.js';
 import { DatabaseHealthProvider } from '../../../domain/providers/database-health.provider.js';
@@ -12,15 +13,18 @@ describe('CheckHealthUseCase', () => {
   const redisHealthProvider = {
     isAvailable: vi.fn<() => Promise<boolean>>(),
   };
+  const config = { get: vi.fn() };
   let useCase: CheckHealthUseCase;
 
   beforeEach(async () => {
     databaseHealthProvider.isAvailable.mockResolvedValue(true);
     redisHealthProvider.isAvailable.mockResolvedValue(true);
+    config.get.mockReturnValue('token-de-teste');
 
     const moduleRef = await Test.createTestingModule({
       providers: [
         CheckHealthUseCase,
+        { provide: ConfigService, useValue: config },
         { provide: DatabaseHealthProvider, useValue: databaseHealthProvider },
         { provide: RedisHealthProvider, useValue: redisHealthProvider },
       ],
@@ -33,7 +37,19 @@ describe('CheckHealthUseCase', () => {
     const response = await useCase.execute();
 
     expect(HealthCheckResponseSchema.parse(response)).toEqual(response);
-    expect(response.checks).toEqual({ database: 'up', redis: 'up' });
+    expect(response.checks).toEqual({
+      database: 'up',
+      redis: 'up',
+      cgu_credentials: 'configured',
+    });
+  });
+  it('informa credencial CGU ausente sem falhar a disponibilidade geral', async () => {
+    config.get.mockReturnValue(undefined);
+    expect((await useCase.execute()).checks).toEqual({
+      database: 'up',
+      redis: 'up',
+      cgu_credentials: 'missing',
+    });
   });
 
   it.each([
