@@ -74,6 +74,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       queues = [
         registry.get(QueueName.ENVIRONMENTAL_EVIDENCES)!,
         registry.get(QueueName.GHG_INVENTORY)!,
+        registry.get(QueueName.IBAMA_INGESTION)!,
       ];
       server = createServer((req, res) => {
         const url = new URL(req.url ?? '/', 'http://localhost');
@@ -351,7 +352,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
           .filter((e) => e.source_slug !== 'IBAMA')
           .every((e) => e.state === 'CONFIRMED'),
       ).toBe(true);
-      expect((await queues[0].getFailed()).map((j) => j.name)).toEqual([
+      expect((await queues[2].getFailed()).map((j) => j.name)).toEqual([
         'ingest-ibama-company',
       ]);
     });

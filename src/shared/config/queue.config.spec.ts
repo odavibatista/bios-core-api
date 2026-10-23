@@ -70,19 +70,18 @@ describe('configuração de filas', () => {
       expect(new Set(identifiers).size).toBe(identifiers.length);
     });
 
-    it('declara o lote diário do IBAMA na fila de evidências ambientais', () => {
+    it('declara o lote diário do IBAMA na fila própria do IBAMA', () => {
       const daily = QUEUE_SCHEDULES.find(({ id }) => id.includes('ibama'));
 
       expect(daily).toMatchObject({
-        queue: QueueName.ENVIRONMENTAL_EVIDENCES,
+        queue: QueueName.IBAMA_INGESTION,
         cron: expect.stringMatching(/^\d+ \d+ \* \* \*$/),
       });
     });
 
     it('o lote diário do IBAMA espera minutos entre as tentativas, e a fila continua curta', () => {
       const daily = QUEUE_SCHEDULES.find(({ id }) => id.includes('ibama'));
-      const queuePolicy =
-        QUEUE_RETRY_POLICIES[QueueName.ENVIRONMENTAL_EVIDENCES];
+      const queuePolicy = QUEUE_RETRY_POLICIES[QueueName.IBAMA_INGESTION];
 
       expect(daily?.retry).toEqual({ attempts: 5, backoffMs: 300_000 });
       // Os jobs por CNPJ da mesma fila seguem errando rápido.

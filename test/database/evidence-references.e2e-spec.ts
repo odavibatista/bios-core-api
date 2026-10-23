@@ -76,6 +76,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       queues = [
         registry.get(QueueName.ENVIRONMENTAL_EVIDENCES)!,
         registry.get(QueueName.GHG_INVENTORY)!,
+        registry.get(QueueName.IBAMA_INGESTION)!,
       ];
     });
     beforeEach(async () => {

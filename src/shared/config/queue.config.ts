@@ -20,6 +20,7 @@ export const QUEUE_RETRY_POLICIES: Readonly<
 > = {
   [QueueName.COMPANY_PROFILE]: { attempts: 3, backoffMs: 1_000 },
   [QueueName.ENVIRONMENTAL_EVIDENCES]: { attempts: 5, backoffMs: 5_000 },
+  [QueueName.IBAMA_INGESTION]: { attempts: 5, backoffMs: 5_000 },
   [QueueName.GHG_INVENTORY]: { attempts: 3, backoffMs: 5_000 },
   [QueueName.ODS_SCORING]: { attempts: 3, backoffMs: 1_000 },
   [QueueName.EMAIL_DISPATCH]: { attempts: 5, backoffMs: 30_000 },
@@ -29,12 +30,12 @@ export const QUEUE_RETRY_POLICIES: Readonly<
  * Jobs repetíveis registrados na inicialização.
  *
  * O lote diário do IBAMA é disparado pelo agendador e consumido no próprio core,
- * pelo `EnvironmentalEvidencesProcessor` (`08-Artefatos-de-Análise.md`, diagrama 4). O
+ * pelo `IbamaIngestionProcessor` (`08-Artefatos-de-Análise.md`, diagrama 4). O
  * horário evita o pico de acesso aos Dados Abertos no começo do dia útil.
  */
 export const QUEUE_SCHEDULES: readonly QueueSchedule[] = [
   {
-    queue: QueueName.ENVIRONMENTAL_EVIDENCES,
+    queue: QueueName.IBAMA_INGESTION,
     id: 'ibama-daily-ingestion',
     jobName: 'ingest-ibama-dumps',
     cron: '0 4 * * *',
@@ -56,6 +57,18 @@ export const QUEUE_SCHEDULES: readonly QueueSchedule[] = [
     cron: '30 3 * * *',
     retry: { attempts: 5, backoffMs: 60_000 },
   },
+];
+
+/**
+ * Agendamentos que mudaram de fila e precisam sair da anterior: o BullMQ
+ * guarda o agendador no Redis, e o antigo continuaria disparando o lote na
+ * fila errada depois do deploy.
+ */
+export const QUEUE_RETIRED_SCHEDULES: readonly {
+  queue: QueueName;
+  id: string;
+}[] = [
+  { queue: QueueName.ENVIRONMENTAL_EVIDENCES, id: 'ibama-daily-ingestion' },
 ];
 
 /**

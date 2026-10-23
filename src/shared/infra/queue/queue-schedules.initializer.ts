@@ -5,7 +5,10 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Environment } from '../../config/environment.config.js';
-import { QUEUE_SCHEDULES } from '../../config/queue.config.js';
+import {
+  QUEUE_RETIRED_SCHEDULES,
+  QUEUE_SCHEDULES,
+} from '../../config/queue.config.js';
 import { QueueProvider } from '../../domain/providers/queue.provider.js';
 import { RedisHealthProvider } from '../../domain/providers/redis-health.provider.js';
 
@@ -49,6 +52,18 @@ export class QueueSchedulesInitializer implements OnApplicationBootstrap {
       );
       return;
     }
+
+    const retired = await Promise.allSettled(
+      QUEUE_RETIRED_SCHEDULES.map(({ queue, id }) =>
+        this.queueProvider.unschedule(queue, id),
+      ),
+    );
+    retired.forEach((result, position) => {
+      if (result.status === 'rejected')
+        this.logger.error(
+          `Agendamento antigo "${QUEUE_RETIRED_SCHEDULES[position].id}" não removido.`,
+        );
+    });
 
     const results = await Promise.allSettled(
       QUEUE_SCHEDULES.map((schedule) => this.queueProvider.schedule(schedule)),
