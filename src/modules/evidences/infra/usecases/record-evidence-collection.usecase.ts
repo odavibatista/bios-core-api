@@ -95,37 +95,30 @@ export class RecordEvidenceCollectionUseCase extends UseCase<
   }
 
   private async recordUnavailable(context: Context) {
-    const { cnpj, source, collectedAt } = context;
+    const { collectedAt } = context;
 
     // Uma coleta anterior que respondeu continua valendo até o prazo: perder a
     // fonte por uns minutos não pode apagar o que ela já tinha dito.
-    if (await this.evidenceRepository.hasAnsweredCollection(cnpj, source.id)) {
-      return { saved: 0, removed: 0 };
-    }
-
     const unknown = placeholder(EvidenceState.UNKNOWN, {
       ...context,
       validUntil: addSeconds(collectedAt, UNKNOWN_RETRY_WINDOW_SECONDS),
     });
 
-    return this.replaceSnapshot(context, [unknown]);
+    return this.replaceSnapshot(context, [unknown], true);
   }
 
   private async replaceSnapshot(
     { cnpj, source }: Context,
     evidences: EvidenceToSave[],
+    ifUnanswered = false,
   ): Promise<RecordEvidenceCollectionOutput> {
-    for (const evidence of evidences) {
-      await this.evidenceRepository.save(evidence);
-    }
-
-    const removed = await this.evidenceRepository.deleteOthers(
+    return this.evidenceRepository.replaceSnapshot(
       cnpj,
       source.id,
-      evidences.map(({ key }) => key),
+      evidences[0].collectedAt,
+      evidences,
+      ifUnanswered,
     );
-
-    return { saved: evidences.length, removed };
   }
 
   private async validityFrom(

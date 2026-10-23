@@ -422,7 +422,9 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         const { refreshed_at, ...profile } =
           companyProfileResponseFactory.build({
             cnpj: other.cnpj,
-            legal_name: faker.company.name(),
+            // Nome sem relacao com o unico cadastro do portal: um nome do
+            // Faker pode ser trecho da organizacao sorteada para o cenario.
+            legal_name: 'Empresa Sem Vinculo Zqrxptv',
             trade_name: null,
           });
         await prisma.companyProfile.create({

@@ -70,15 +70,14 @@ export abstract class EvidenceRepository {
    */
   abstract save(evidence: EvidenceToSave): Promise<void>;
 
-  /**
-   * Remove as evidências da empresa e da fonte cuja chave não está em
-   * `keepKeys`. Devolve quantas removeu.
-   */
-  abstract deleteOthers(
+  /** Publica um retrato inteiro somente se sua coleta não for mais antiga. */
+  abstract replaceSnapshot(
     cnpj: string,
     dataSourceId: string,
-    keepKeys: readonly string[],
-  ): Promise<number>;
+    collectedAt: Date,
+    evidences: readonly EvidenceToSave[],
+    ifUnanswered?: boolean,
+  ): Promise<{ saved: number; removed: number }>;
 
   /**
    * Remove as evidências da fonte, de **qualquer empresa**, coletadas antes de
