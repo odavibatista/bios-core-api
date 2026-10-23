@@ -142,6 +142,12 @@ src/
   pelos aliases `@app/*`, `@shared/*` e `@modules/*`; os testes de `src/` chegam ao apoio de
   teste (`test/`) por `@test/*`. Por ser ESM, todo import relativo ou por alias termina em
   `.js`.
+- **Textos em pt-BR, com acentuação (#258).** Tudo que a API expõe — mensagens de erro,
+  descrições do OpenAPI, resumos de evidência e e-mails — é escrito com acento, til e cedilha
+  (`inválido`, `índice`, `explicação`). O teste `src/shared/domain/portuguese-accents.spec.ts` varre os
+  literais de texto do código de produção e dos e-mails e **reprova** a grafia sem acento de uma
+  lista de palavras (`invalido`, `nao`, `indice`...); ao achar uma nova, acrescente a grafia errada à
+  lista do teste. Identificadores, nomes de campo das fontes, URLs e comentários ficam de fora.
 
 ## Banco de dados (Prisma)
 
@@ -1271,6 +1277,15 @@ perfil em `GET /companies/:cnpj`. Exige sessão, como a consulta por CNPJ.
   de sair do repositório.
 
 ## Evidências (modelo e persistência)
+
+> **Mudar o texto de um resumo não duplica nada (#258).** A evidência é gravada por *upsert* na
+> chave `<fonte>:<cnpj>:<referência>`, que não contém o resumo, e o hash do registro bruto cobre só
+> `{ chave, bruto }` (o payload vem da fonte, nunca do texto que o BIOS escreve). Corrigir a
+> acentuação de um resumo atualiza a linha existente. Evidências já gravadas mantêm o texto antigo
+> até a próxima coleta daquele CNPJ: GHG e CGU, quando a validade vence e a coleta se repete; IBAMA,
+> no próximo dump alterado (um dump idêntico só renova a validade). Não há migração: o texto antigo
+> é correto quanto ao conteúdo e some sozinho. O e2e `evidences.e2e-spec.ts` prova que recolher
+> com o resumo novo deixa uma evidência e um bruto só.
 
 `EvidencesModule` guarda o resultado de consultar cada fonte de evidências para cada empresa
 (RF08, UC14). Ainda não há rota: quem grava são as ingestões de cada fonte (IBAMA, CGU, GHG), e
