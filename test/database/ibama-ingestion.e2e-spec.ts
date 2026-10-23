@@ -169,8 +169,25 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
     });
 
     afterEach(async () => {
-      // Nenhuma pasta temporária de dump sobra, com sucesso, skip ou falha.
-      expect(tempDirectories()).toEqual(tempBefore);
+      // Nenhuma pasta temporária de dump sobra, com sucesso, skip ou falha. O job
+      // grava a execução como SUCCEEDED antes de apagar as pastas (`finally` do
+      // caso de uso), e um teste que só espera o status termina nesse intervalo:
+      // por isso se espera a limpeza, e não se confere na hora. Pasta que de fato
+      // sobra esgota a espera e reprova o teste.
+      await vi.waitFor(
+        () => {
+          expect(tempDirectories()).toEqual(tempBefore);
+        },
+        { timeout: 10_000, interval: 50 },
+      );
+      // O worker também precisa ter terminado o job antes de a fila ser apagada
+      // debaixo dele (senão sobra o erro "Missing key for job" no log).
+      await vi.waitFor(
+        async () => {
+          expect(await queue.getActiveCount()).toBe(0);
+        },
+        { timeout: 10_000, interval: 50 },
+      );
       await queue.obliterate({ force: true });
     });
 
