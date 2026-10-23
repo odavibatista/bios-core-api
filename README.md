@@ -809,6 +809,11 @@ Sanções CEIS/CNEP conservam a categoria `CONDUTA_ADMINISTRATIVA`.
 
 Índice calculado sem contribuição responde 200 com `index_status = UNAVAILABLE`,
 `score_value = null` e lista vazia. Empresa/ODS sem score gravado responde 404.
+A resposta traz também `coverage_status` (`HAS_RECORDS`, `NO_RECORDS_IN_ALL_SOURCES`,
+`NO_RECORDS_IN_SOME_SOURCES` ou `NO_DATA`; nulo em retratos anteriores ao recálculo) e
+`sources_without_records`, que distinguem "consultado e sem registros" de "sem dados"
+sem pontuar nem criar confiança para a ausência (decisão da #253, em 14 §4.2).
+`coverage_status` incoerente com as contribuições responde 409.
 Contribuição órfã, inconsistente ou sem proveniência auditável responde 409,
 para não apresentar uma explicação parcial como completa. A resposta não
 classifica a empresa como sustentável ou insustentável.

@@ -7,6 +7,7 @@ import type { StoredEvidence } from '@modules/evidences/domain/dtos/repositories
 import { EvidenceSourceUrlSchema } from '@modules/evidences/domain/evidence-provenance.js';
 import type { CalculatedOdsScore } from './dtos/requests/calculate-ods-scores.dto.js';
 import { calculateOdsConfidence } from './ods-confidence-rules.js';
+import { summarizeOdsCoverage } from './ods-coverage-rules.js';
 
 export const ODS_SCORE_RULES_VERSION = 'rf10-rf11-v3';
 
@@ -89,7 +90,12 @@ export function scoreOdsEvidences(
   now: Date = new Date(),
 ): Pick<
   CalculatedOdsScore,
-  'scoreValue' | 'confidenceValue' | 'evidenceCount' | 'contributions'
+  | 'scoreValue'
+  | 'confidenceValue'
+  | 'evidenceCount'
+  | 'contributions'
+  | 'coverageStatus'
+  | 'sourcesWithoutRecords'
 > {
   const rules = ODS_SCORE_RULES[odsNumber];
   if (!rules) throw new Error(`ODS ${odsNumber} sem regras de pontuacao.`);
@@ -145,5 +151,11 @@ export function scoreOdsEvidences(
     new Set(contributions.map((item) => item.evidenceId)),
     now,
   );
-  return { scoreValue, confidenceValue, evidenceCount: count, contributions };
+  return {
+    scoreValue,
+    confidenceValue,
+    evidenceCount: count,
+    contributions,
+    ...summarizeOdsCoverage(odsNumber, evidences, count, now),
+  };
 }

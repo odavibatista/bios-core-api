@@ -6,6 +6,7 @@ import {
 import { parseCnpj } from '@shared/domain/value-objects/cnpj.js';
 import { EvidenceSourceUrlSchema } from '@modules/evidences/domain/evidence-provenance.js';
 import { z } from 'zod';
+import { ODS_COVERAGE_STATUSES } from '../../ods-coverage-rules.js';
 
 export const ScoreExplanationRequestSchema = z
   .object({
@@ -32,6 +33,8 @@ export const ScoreExplanationResponseSchema = z
     score_value: z.number().min(-100).max(100).nullable(),
     confidence_value: z.number().min(0).max(1),
     evidence_count: z.number().int().nonnegative(),
+    coverage_status: z.enum(ODS_COVERAGE_STATUSES).nullable(),
+    sources_without_records: z.array(z.string().min(1)),
     rules_version: z.string().min(1),
     calculated_at: z.iso.datetime(),
     contributions: z.array(
