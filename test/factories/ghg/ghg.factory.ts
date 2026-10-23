@@ -26,10 +26,12 @@ let nextOrganizationId = faker.number.int({ min: 10_000, max: 80_000 });
 /**
  * Organizacao do cadastro do portal, no formato que a busca devolve (sem os
  * campos que o adapter ignora). O nome leva o identificador no fim: o adapter
- * localiza candidatos por um nome *conter* o outro, e dois nomes sorteados
- * podem se conter por acaso, o que tornaria os cenarios de "sem candidato"
- * intermitentes. Com o sufixo, um nome gerado aqui nunca esta contido no de
- * uma empresa sorteada, nem o contem.
+ * localiza candidatos por um nome *conter* o outro. O sufixo numerico impede
+ * que o nome da empresa contenha o gerado aqui, mas nao o contrario: um nome
+ * gerado aqui contem o da empresa se o faker repetir a base. Por isso o teste
+ * da empresa procurada acrescenta ao nome um sufixo alfabetico proprio
+ * (`ghg-inventory.e2e-spec.ts`), e os cenarios de "sem candidato" deixam de
+ * ser intermitentes.
  */
 export const ghgOrganizationFactory = defineFactory(() => {
   const id = nextOrganizationId++;
