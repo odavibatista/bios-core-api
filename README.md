@@ -715,8 +715,8 @@ continua em `EvidencesModule`, sem depender dos adapters e sem ciclo de módulos
 - A CGU reutiliza cada cadastro válido na persistência. Quando precisa coletar,
   publica `fetch-cgu-evidences` na fila `environmental-evidences`, deduplicado por
   CNPJ/janela de 15 minutos, e espera até `QUEUE_WAIT_TIMEOUT_MS`. O único
-  `EnvironmentalEvidencesProcessor` despacha também os dois jobs IBAMA existentes,
-  com concorrência 3; erros CGU não marcam execuções IBAMA como falhas. O worker
+  `EnvironmentalEvidencesProcessor` atende apenas a CGU, com concorrência 3; os jobs IBAMA
+  usam a fila própria `ibama-ingestion`. O worker CGU
   consulta CEIS/CNEP em paralelo e persiste os resultados independentemente.
 - O GHG mantém fila, concorrência e prazo próprios; sua falha não cancela as
   demais consultas. Os jobs podem terminar depois do prazo de quem espera.
@@ -1022,10 +1022,10 @@ O fluxo de uma execução, nesta ordem:
   para a fila.
 - **Retry e backoff.** O agendamento declara 5 tentativas com backoff exponencial de base 5 min (5, 10,
   20 e 40 min) — ver "Filas (BullMQ)". Jobs fora do agendador seguem a política da fila.
-- **Concorrência 3.** O lote ocupa um worker por vários minutos; a fila é a mesma dos jobs por CNPJ,
-  que não podem esperar atrás dele. Um job travado por queda do processo é reexecutado do início, e a
-  carga é idempotente (mesmas chaves). Não há trava nem garantia de ordenação entre lotes e avulsos
-  concorrentes; o job avulso limita todas as suas gravações e remoções ao CNPJ solicitado.
+- **Concorrência e data.** Lote e avulso compartilham `ibama-ingestion`, com concorrência 1 por
+  consumidor. Como o avulso pode reutilizar um dump baixado antes do lote, a persistência compara
+  `collected_at`: uma coleta antiga não substitui um retrato mais novo, mesmo se concluir depois.
+  Uma reexecução de job mantém as chaves idempotentes e o avulso só altera o CNPJ solicitado.
 - **Recálculo do índice fica fora.** O passo 5 do UC14 (recalcular o índice dos CNPJs afetados) é o
   gatilho de ingestão do recálculo por fila (UC15). O conjunto de afetados não é guardado: toda evidência
   da execução tem `collected_at` igual ao `started_at` dela, e o bruto aponta a execução.
@@ -1090,10 +1090,10 @@ presente gerou 2 535 evidências; o ausente terminou como `NOT_FOUND`, preservan
 empresa. O arquivo completo teve 829 239 linhas. Essa validação usa os arquivos preservados,
 sem afirmar uma nova consulta ao armazenamento público.
 
-Os temporários são descartados no `finally`. A deduplicação é por janela; não é uma trava
-entre lote diário e avulso, nem entre janelas diferentes. A persistência mantém o modelo
-idempotente existente, sem transação global ou garantia de ordenação entre coletas
-concorrentes. O recálculo por fila continua no UC15 (#80).
+Os temporários são descartados no `finally`. A deduplicação é por janela; a guarda temporal
+na persistência cobre também jobs de janelas diferentes. O instante do download do avulso
+é comparado ao da coleta completa ou avulsa mais recente. O recálculo por fila continua no
+UC15 (#80).
 
 ## Consulta de empresa por CNPJ
 
@@ -1257,9 +1257,14 @@ e `<fonte>:<cnpj>#NOT_FOUND` / `#UNKNOWN` para o resultado da consulta. O CNPJ e
 que a mesma referência em duas empresas (um auto com mais de um autuado) nunca sobrescreva a
 evidência da outra. Repetir uma coleta atualiza em vez de duplicar, preserva `created_at`, renova
 a data e a validade e **limpa** o campo que a fonte deixou de informar (grava `null`, e não omite).
-O índice único da chave decide a disputa entre gravações simultâneas: quem perde a criação repete
-uma vez, agora como atualização. O fluxo não usa transação: cada passo é idempotente, e uma falha
-no meio se corrige repetindo a coleta (a fila já repete).
+O retrato de uma empresa e fonte usa uma transação MongoDB e um relógio por fonte/CNPJ em
+`evidence_collection_clocks`. Assim, inclusão, atualização e remoção obedecem à mesma data de
+coleta, inclusive quando o retrato novo está vazio. A coleta `UNAVAILABLE` só grava `UNKNOWN`
+quando a transação confirma que não há resposta anterior. A carga em fluxo usa ainda um relógio
+do dump completo da fonte. Uma coleta antiga é ignorada; uma data igual pode reprocessar a mesma
+coleta. O índice único continua garantindo a identidade de cada evidência.
+Antes de ativar esta versão em um banco existente, aplicar `npm run db:push` para criar o
+índice único de `scope_key`; sem ele, instâncias simultâneas não disputam o mesmo relógio.
 
 Quando a referência que a fonte exibe **não é única** (o IBAMA repete o número de um auto em
 registros diferentes), o registro informa uma `identity`, que passa a compor a chave no lugar da
@@ -1400,8 +1405,7 @@ reduzido, sem contato, nome de responsável ou texto integral; o arquivo tempor�
 é removido. `published_at` permanece nulo: ano inventariado não é publicação.
 O cache por CNPJ guarda o mesmo retrato por 30 dias (TTL do catálogo), conservando
 `collectedAt`. Fonte desabilitada não usa esse cache nem a rede. A persistência
-mantém a idempotência por etapas existente, sem transação global ou ordenação
-atômica entre coletas concorrentes.
+aplica a guarda temporal por fonte/CNPJ; a falha do portal não apaga uma resposta anterior.
 
 A seed nova aponta para o host JSON. Catálogos existentes que ainda usam
 `https://registropublicodeemissoes.fgv.br` continuam compatíveis: o adapter resolve

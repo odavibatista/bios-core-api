@@ -9,14 +9,18 @@ import {
 } from '../../../domain/dtos/repositories/evidence.repository.js';
 
 const UNIQUE_CONSTRAINT_VIOLATION = 'P2002';
+const WRITE_CONFLICT = 'P2034';
+
+function scopeKey(sourceId: string, cnpj: string): string {
+  return `${sourceId}:${cnpj}`;
+}
 
 /**
  * Evidências normalizadas no MongoDB.
  *
- * A gravação é um `upsert` pela `evidence_key` (índice único). O MongoDB não
- * tem upsert nativo no Prisma, então duas gravações simultâneas da mesma chave
- * podem disputar a criação: quem perde recebe a violação do índice único e
- * repete uma vez, agora como atualização.
+ * O relógio por fonte/CNPJ serializa as transações de retrato e carga. Uma
+ * transação que perde uma disputa de escrita é repetida e reavalia a data;
+ * o índice único da chave preserva a identidade da evidência.
  */
 @Injectable()
 export class PrismaEvidenceRepository
@@ -47,42 +51,171 @@ export class PrismaEvidenceRepository
       evidence_raw_id: evidence.rawEvidenceId,
     } satisfies Prisma.EvidenceNormalizedUncheckedUpdateInput;
 
-    const write = () =>
-      this.prisma.evidenceNormalized.upsert({
-        where: { evidence_key: evidence.key },
-        create: { evidence_key: evidence.key, ...data },
-        update: data,
-      });
-
-    try {
-      await write();
-    } catch (error) {
-      if (!isUniqueViolation(error)) throw error;
-
-      await write();
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      try {
+        await this.prisma.$transaction(async (tx) => {
+          const [companyClock, fullDumpClock] = await Promise.all([
+            tx.evidenceCollectionClock.findUnique({
+              where: {
+                scope_key: scopeKey(evidence.dataSourceId, evidence.cnpj),
+              },
+            }),
+            tx.evidenceCollectionClock.findUnique({
+              where: { scope_key: scopeKey(evidence.dataSourceId, '*') },
+            }),
+          ]);
+          if (
+            [companyClock, fullDumpClock].some(
+              (clock) => clock && clock.collected_at > evidence.collectedAt,
+            )
+          )
+            return;
+          await tx.evidenceCollectionClock.upsert({
+            where: {
+              scope_key: scopeKey(evidence.dataSourceId, evidence.cnpj),
+            },
+            create: {
+              scope_key: scopeKey(evidence.dataSourceId, evidence.cnpj),
+              collected_at: evidence.collectedAt,
+            },
+            update: { collected_at: evidence.collectedAt },
+          });
+          const updated = await tx.evidenceNormalized.updateMany({
+            where: {
+              evidence_key: evidence.key,
+              collected_at: { lte: evidence.collectedAt },
+            },
+            data,
+          });
+          if (updated.count) return;
+          const existing = await tx.evidenceNormalized.findUnique({
+            where: { evidence_key: evidence.key },
+            select: { id_evidence: true },
+          });
+          if (existing) return;
+          await tx.evidenceNormalized.create({
+            data: { evidence_key: evidence.key, ...data },
+          });
+        });
+        return;
+      } catch (error) {
+        if (
+          attempt === 11 ||
+          (!isUniqueViolation(error) && !isWriteConflict(error))
+        )
+          throw error;
+        await new Promise((resolve) => setTimeout(resolve, 5 * (attempt + 1)));
+      }
     }
   }
 
-  async deleteOthers(
+  async replaceSnapshot(
     cnpj: string,
     dataSourceId: string,
-    keepKeys: readonly string[],
-  ): Promise<number> {
-    const { count } = await this.prisma.evidenceNormalized.deleteMany({
-      where: {
-        cnpj,
-        data_source_id: dataSourceId,
-        evidence_key: { notIn: [...keepKeys] },
-      },
-    });
+    collectedAt: Date,
+    evidences: readonly EvidenceToSave[],
+    ifUnanswered = false,
+  ): Promise<{ saved: number; removed: number }> {
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(async (tx) => {
+          const [companyClock, fullDumpClock] = await Promise.all([
+            tx.evidenceCollectionClock.findUnique({
+              where: { scope_key: scopeKey(dataSourceId, cnpj) },
+            }),
+            tx.evidenceCollectionClock.findUnique({
+              where: { scope_key: scopeKey(dataSourceId, '*') },
+            }),
+          ]);
+          if (
+            [companyClock, fullDumpClock].some(
+              (clock) => clock && clock.collected_at > collectedAt,
+            )
+          )
+            return { saved: 0, removed: 0 };
+          if (ifUnanswered) {
+            const answered = await tx.evidenceNormalized.findFirst({
+              where: {
+                cnpj,
+                data_source_id: dataSourceId,
+                state: {
+                  in: [EvidenceState.CONFIRMED, EvidenceState.NOT_FOUND],
+                },
+              },
+              select: { id_evidence: true },
+            });
+            if (answered) return { saved: 0, removed: 0 };
+          }
 
-    return count;
+          // Toda publicação da empresa escreve o mesmo relógio. Transações
+          // concorrentes disputam esse documento e a perdedora é repetida.
+          // UNKNOWN é apenas um marcador de tentativa. Ele não avança a
+          // versão do dado, pois um cache válido coletado antes ainda pode
+          // responder depois dessa tentativa.
+          if (!ifUnanswered)
+            await tx.evidenceCollectionClock.upsert({
+              where: { scope_key: scopeKey(dataSourceId, cnpj) },
+              create: {
+                scope_key: scopeKey(dataSourceId, cnpj),
+                collected_at: collectedAt,
+              },
+              update: { collected_at: collectedAt },
+            });
+          for (const evidence of evidences) {
+            const data = {
+              cnpj: evidence.cnpj,
+              data_source_id: evidence.dataSourceId,
+              ods_id: evidence.odsId,
+              category: evidence.category,
+              state: evidence.state,
+              signal: evidence.signal,
+              summary: evidence.summary,
+              source_reference: evidence.sourceReference,
+              source_url: evidence.sourceUrl,
+              details: evidence.details,
+              published_at: evidence.publishedAt,
+              collected_at: evidence.collectedAt,
+              valid_until: evidence.validUntil,
+              evidence_raw_id: evidence.rawEvidenceId,
+            } satisfies Prisma.EvidenceNormalizedUncheckedUpdateInput;
+            await tx.evidenceNormalized.upsert({
+              where: { evidence_key: evidence.key },
+              create: { evidence_key: evidence.key, ...data },
+              update: data,
+            });
+          }
+          const removed = await tx.evidenceNormalized.deleteMany({
+            where: {
+              cnpj,
+              data_source_id: dataSourceId,
+              evidence_key: { notIn: evidences.map(({ key }) => key) },
+              OR: ifUnanswered
+                ? [{ collected_at: { lte: collectedAt } }]
+                : [
+                    { collected_at: { lte: collectedAt } },
+                    { state: EvidenceState.UNKNOWN },
+                  ],
+            },
+          });
+          return { saved: evidences.length, removed: removed.count };
+        });
+      } catch (error) {
+        if (
+          attempt === 11 ||
+          (!isUniqueViolation(error) && !isWriteConflict(error))
+        )
+          throw error;
+        await new Promise((resolve) => setTimeout(resolve, 5 * (attempt + 1)));
+      }
+    }
+    throw new Error('Não foi possível publicar o retrato da fonte.');
   }
 
   async deleteNotCollectedSince(
     dataSourceId: string,
     before: Date,
   ): Promise<number> {
+    await this.advanceFullDumpClock(dataSourceId, before);
     const { count } = await this.prisma.evidenceNormalized.deleteMany({
       where: { data_source_id: dataSourceId, collected_at: { lt: before } },
     });
@@ -95,15 +228,40 @@ export class PrismaEvidenceRepository
     collectedAt: Date,
     validUntil: Date,
   ): Promise<number> {
+    await this.advanceFullDumpClock(dataSourceId, collectedAt);
     const { count } = await this.prisma.evidenceNormalized.updateMany({
       where: {
         data_source_id: dataSourceId,
         state: { in: [EvidenceState.CONFIRMED, EvidenceState.NOT_FOUND] },
+        collected_at: { lte: collectedAt },
       },
       data: { collected_at: collectedAt, valid_until: validUntil },
     });
 
     return count;
+  }
+
+  private async advanceFullDumpClock(sourceId: string, collectedAt: Date) {
+    const key = scopeKey(sourceId, '*');
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const updated = await this.prisma.evidenceCollectionClock.updateMany({
+        where: { scope_key: key, collected_at: { lt: collectedAt } },
+        data: { collected_at: collectedAt },
+      });
+      if (updated.count) return;
+      const current = await this.prisma.evidenceCollectionClock.findUnique({
+        where: { scope_key: key },
+      });
+      if (current) return;
+      try {
+        await this.prisma.evidenceCollectionClock.create({
+          data: { scope_key: key, collected_at: collectedAt },
+        });
+        return;
+      } catch (error) {
+        if (!isUniqueViolation(error) || attempt === 3) throw error;
+      }
+    }
   }
 
   async hasAnsweredCollection(
@@ -158,5 +316,12 @@ function isUniqueViolation(error: unknown): boolean {
   return (
     error instanceof Prisma.PrismaClientKnownRequestError &&
     error.code === UNIQUE_CONSTRAINT_VIOLATION
+  );
+}
+
+function isWriteConflict(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === WRITE_CONFLICT
   );
 }

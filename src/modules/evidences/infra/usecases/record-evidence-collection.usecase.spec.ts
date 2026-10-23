@@ -19,8 +19,7 @@ import { RecordEvidenceCollectionUseCase } from './record-evidence-collection.us
 
 describe('RecordEvidenceCollectionUseCase', () => {
   const evidenceRepository = {
-    save: vi.fn<EvidenceRepository['save']>(),
-    deleteOthers: vi.fn<EvidenceRepository['deleteOthers']>(),
+    replaceSnapshot: vi.fn<EvidenceRepository['replaceSnapshot']>(),
     hasAnsweredCollection: vi.fn<EvidenceRepository['hasAnsweredCollection']>(),
   };
   const resolveEvidenceSource = {
@@ -40,12 +39,17 @@ describe('RecordEvidenceCollectionUseCase', () => {
   });
 
   function savedEvidences(): EvidenceToSave[] {
-    return evidenceRepository.save.mock.calls.map(([evidence]) => evidence);
+    return (
+      (evidenceRepository.replaceSnapshot.mock
+        .calls[0]?.[3] as EvidenceToSave[]) ?? []
+    );
   }
 
   beforeEach(async () => {
-    evidenceRepository.save.mockResolvedValue(undefined);
-    evidenceRepository.deleteOthers.mockResolvedValue(0);
+    evidenceRepository.replaceSnapshot.mockImplementation(
+      (_cnpj, _source, _at, items) =>
+        Promise.resolve({ saved: items.length, removed: 0 }),
+    );
     evidenceRepository.hasAnsweredCollection.mockResolvedValue(false);
     resolveEvidenceSource.execute.mockResolvedValue(source);
     resolveSourceCacheTtl.execute.mockResolvedValue(TTL_SECONDS);
@@ -130,7 +134,10 @@ describe('RecordEvidenceCollectionUseCase', () => {
     });
 
     it('remove da fonte o que a coleta não lista mais (inclusive NOT_FOUND e UNKNOWN antigos)', async () => {
-      evidenceRepository.deleteOthers.mockResolvedValue(3);
+      evidenceRepository.replaceSnapshot.mockImplementation(
+        (_cnpj, _source, _at, items) =>
+          Promise.resolve({ saved: items.length, removed: 3 }),
+      );
 
       const output = await useCase.execute({
         cnpj,
@@ -138,10 +145,15 @@ describe('RecordEvidenceCollectionUseCase', () => {
         result: { status: 'COLLECTED', findings },
       });
 
-      expect(evidenceRepository.deleteOthers).toHaveBeenCalledWith(
+      expect(evidenceRepository.replaceSnapshot).toHaveBeenCalledWith(
         cnpj,
         source.id,
-        [`IBAMA:${cnpj}:AI-1`, `IBAMA:${cnpj}:AI-2`],
+        expect.any(Date),
+        expect.arrayContaining([
+          expect.objectContaining({ key: `IBAMA:${cnpj}:AI-1` }),
+          expect.objectContaining({ key: `IBAMA:${cnpj}:AI-2` }),
+        ]),
+        false,
       );
       expect(output).toEqual({ saved: 2, removed: 3 });
     });
@@ -236,15 +248,17 @@ describe('RecordEvidenceCollectionUseCase', () => {
           }),
         ).rejects.toBeInstanceOf(InvalidEvidenceError);
 
-        expect(evidenceRepository.save).not.toHaveBeenCalled();
-        expect(evidenceRepository.deleteOthers).not.toHaveBeenCalled();
+        expect(evidenceRepository.replaceSnapshot).not.toHaveBeenCalled();
       },
     );
   });
 
   describe('a fonte respondeu sem registro', () => {
     it('grava um NOT_FOUND no lugar das evidências anteriores da fonte', async () => {
-      evidenceRepository.deleteOthers.mockResolvedValue(2);
+      evidenceRepository.replaceSnapshot.mockImplementation(
+        (_cnpj, _source, _at, items) =>
+          Promise.resolve({ saved: items.length, removed: 2 }),
+      );
 
       const output = await useCase.execute({
         cnpj,
@@ -272,10 +286,12 @@ describe('RecordEvidenceCollectionUseCase', () => {
           rawEvidenceId: null,
         },
       ]);
-      expect(evidenceRepository.deleteOthers).toHaveBeenCalledWith(
+      expect(evidenceRepository.replaceSnapshot).toHaveBeenCalledWith(
         cnpj,
         source.id,
-        [`IBAMA:${cnpj}#NOT_FOUND`],
+        collectedAt,
+        [expect.objectContaining({ key: `IBAMA:${cnpj}#NOT_FOUND` })],
+        false,
       );
       expect(output).toEqual({ saved: 1, removed: 2 });
     });
@@ -311,15 +327,20 @@ describe('RecordEvidenceCollectionUseCase', () => {
         result: { status: 'UNAVAILABLE' },
       });
 
-      expect(evidenceRepository.deleteOthers).toHaveBeenCalledWith(
+      expect(evidenceRepository.replaceSnapshot).toHaveBeenCalledWith(
         cnpj,
         source.id,
-        [`IBAMA:${cnpj}#UNKNOWN`],
+        expect.any(Date),
+        [expect.objectContaining({ key: `IBAMA:${cnpj}#UNKNOWN` })],
+        true,
       );
     });
 
     it('com coleta anterior que respondeu, não apaga nem grava nada', async () => {
-      evidenceRepository.hasAnsweredCollection.mockResolvedValue(true);
+      evidenceRepository.replaceSnapshot.mockResolvedValue({
+        saved: 0,
+        removed: 0,
+      });
 
       const output = await useCase.execute({
         cnpj,
@@ -327,12 +348,13 @@ describe('RecordEvidenceCollectionUseCase', () => {
         result: { status: 'UNAVAILABLE' },
       });
 
-      expect(evidenceRepository.hasAnsweredCollection).toHaveBeenCalledWith(
+      expect(evidenceRepository.replaceSnapshot).toHaveBeenCalledWith(
         cnpj,
         source.id,
+        expect.any(Date),
+        [expect.objectContaining({ state: EvidenceState.UNKNOWN })],
+        true,
       );
-      expect(evidenceRepository.save).not.toHaveBeenCalled();
-      expect(evidenceRepository.deleteOthers).not.toHaveBeenCalled();
       expect(output).toEqual({ saved: 0, removed: 0 });
     });
   });
@@ -349,7 +371,7 @@ describe('RecordEvidenceCollectionUseCase', () => {
         }),
       ).rejects.toBeInstanceOf(EvidenceSourceNotFoundError);
 
-      expect(evidenceRepository.save).not.toHaveBeenCalled();
+      expect(evidenceRepository.replaceSnapshot).not.toHaveBeenCalled();
     });
 
     it.each(['11.222.333/0001-81', '11222333000182', '123', ''])(
@@ -364,14 +386,16 @@ describe('RecordEvidenceCollectionUseCase', () => {
         ).rejects.toBeInstanceOf(InvalidEvidenceError);
 
         expect(resolveEvidenceSource.execute).not.toHaveBeenCalled();
-        expect(evidenceRepository.save).not.toHaveBeenCalled();
+        expect(evidenceRepository.replaceSnapshot).not.toHaveBeenCalled();
       },
     );
   });
 
   describe('falhas', () => {
     it('propaga a falha ao gravar, sem remover nada (a fila repete)', async () => {
-      evidenceRepository.save.mockRejectedValue(new Error('banco fora'));
+      evidenceRepository.replaceSnapshot.mockRejectedValue(
+        new Error('banco fora'),
+      );
 
       await expect(
         useCase.execute({
@@ -381,7 +405,7 @@ describe('RecordEvidenceCollectionUseCase', () => {
         }),
       ).rejects.toThrow('banco fora');
 
-      expect(evidenceRepository.deleteOthers).not.toHaveBeenCalled();
+      expect(evidenceRepository.replaceSnapshot).toHaveBeenCalledTimes(1);
     });
   });
 });

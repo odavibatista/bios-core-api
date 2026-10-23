@@ -1,0 +1,9 @@
+/// Última coleta aceita por fonte e CNPJ, inclusive quando o retrato está vazio.
+/// O CNPJ `*` representa a reconfirmação de um dump completo da fonte.
+model EvidenceCollectionClock {
+  id_evidence_collection_clock String   @id @default(auto()) @map("_id") @db.ObjectId
+  scope_key                    String   @unique(map: "idx_evidence_collection_clocks_scope_key")
+  collected_at                 DateTime
+
+  @@map("evidence_collection_clocks")
+}
