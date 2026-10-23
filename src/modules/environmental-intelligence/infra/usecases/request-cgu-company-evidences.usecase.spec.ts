@@ -10,8 +10,8 @@ import { storedEvidenceFactory } from '@test/factories/evidences/evidence.factor
 import { buildCnpj } from '@test/factories/companies/company-profile.factory.js';
 import { FETCH_CGU_EVIDENCES_JOB } from '../../domain/cgu-job.dto.js';
 import { RequestCguCompanyEvidencesUseCase } from './request-cgu-company-evidences.usecase.js';
-import { ListCompanyEvidencesUseCase } from './list-company-evidences.usecase.js';
-import { RecordEvidenceCollectionUseCase } from './record-evidence-collection.usecase.js';
+import { ListCompanyEvidencesUseCase } from '@modules/evidences/infra/usecases/list-company-evidences.usecase.js';
+import { RecordEvidenceCollectionUseCase } from '@modules/evidences/infra/usecases/record-evidence-collection.usecase.js';
 describe('produtor CGU', () => {
   const list = { execute: vi.fn() },
     collection = { execute: vi.fn() },

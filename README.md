@@ -114,7 +114,8 @@ src/
 | | `security` | `AccessBlock`, `HoneypotHit`, `BlockedEmailDomain` |
 | | `mailing` | `EmailDispatchLog` |
 | Inteligência socioambiental | `data-sources` | `DataSource`, `IngestionRun`, `DataSourceRequestLog` |
-| | `evidences` | `EvidenceRaw`, `EvidenceNormalized` |
+| | `evidences` | `EvidenceRaw`, `EvidenceNormalized`, `EvidenceCollectionClock` |
+| | `environmental-intelligence` | — (orquestra as fontes de evidência; sem entidades próprias) |
 | | `companies` | `CompanyProfile` |
 | | `scoring` | `Ods`, `CompanyOdsScore`, `SectorScoreSnapshot` |
 
@@ -706,10 +707,22 @@ diário do IBAMA, definem o próprio fluxo de ingestão (próxima seção).
 
 ### Consolidação das evidências por CNPJ (RF07)
 
-`EnvironmentalEvidencesModule` exporta `GetCompanyEnvironmentalEvidencesUseCase`.
-Recebe um CNPJ (pontuado ou canônico), valida antes de qualquer efeito e inicia em
-paralelo a leitura local IBAMA, o produtor CGU e o produtor GHG. O armazenamento
-continua em `EvidencesModule`, sem depender dos adapters e sem ciclo de módulos.
+`EnvironmentalIntelligenceModule` (módulo `environmental-intelligence`) exporta
+`GetCompanyEnvironmentalEvidencesUseCase`, além do consumidor `EnvironmentalEvidencesProcessor`, do
+produtor `RequestCguCompanyEvidencesUseCase`, do contrato do job da CGU e do controller de
+`GET /companies/:cnpj/evidences`. Recebe um CNPJ (pontuado ou canônico), valida antes de qualquer
+efeito e inicia em paralelo a leitura local IBAMA, o produtor CGU e o produtor GHG.
+
+**Sentido das dependências (#254).** O armazenamento (`evidences`: gravação, leitura, relógio de
+coleta, modelo e consolidação por categoria) não conhece as fontes que o alimentam nem quem as reúne:
+`ibama`, `cgu` e `ghg` dependem de `evidences` (gravam e leem retratos), e
+`environmental-intelligence` depende de todos eles, **nunca o contrário**. Isso desfaz o ciclo que
+existia quando o orquestrador morava dentro de `evidences`. A regra é imposta pelo ESLint
+(`no-restricted-imports` em `eslint.config.mjs` para `src/modules/evidences/**`, que recusa imports
+de `ibama`, `cgu`, `ghg` e `environmental-intelligence`, por alias ou por caminho relativo). O que é
+específico de uma fonte (ex.: `CGU_SLUGS`) fica com ela; o que é só da orquestração fica em
+`environmental-intelligence`. Um módulo de fonte novo entra como dependência dele, e não de
+`evidences`.
 
 - O IBAMA mantém a consulta ao índice/lote válido e o job avulso sem espera.
 - A CGU reutiliza cada cadastro válido na persistência. Quando precisa coletar,

@@ -3,8 +3,8 @@ import { GetGhgCompanyEvidencesUseCase } from '@modules/ghg/infra/usecases/get-g
 import { storedEvidenceFactory } from '@test/factories/evidences/evidence.factory.js';
 import { buildCnpj } from '@test/factories/companies/company-profile.factory.js';
 import { RequestCguCompanyEvidencesUseCase } from './request-cgu-company-evidences.usecase.js';
-import { ListCompanyEvidencesUseCase } from './list-company-evidences.usecase.js';
-import { RecordEvidenceCollectionUseCase } from './record-evidence-collection.usecase.js';
+import { ListCompanyEvidencesUseCase } from '@modules/evidences/infra/usecases/list-company-evidences.usecase.js';
+import { RecordEvidenceCollectionUseCase } from '@modules/evidences/infra/usecases/record-evidence-collection.usecase.js';
 import { GetCompanyEnvironmentalEvidencesUseCase } from './get-company-environmental-evidences.usecase.js';
 import { Test } from '@nestjs/testing';
 import { CompanyProfileRepository } from '@modules/companies/domain/dtos/repositories/company-profile.repository.js';

@@ -2,22 +2,22 @@ import { Test } from '@nestjs/testing';
 import { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_ROUTE } from '@shared/http/decorators/public.decorator.js';
 import { buildCnpj } from '@test/factories/companies/company-profile.factory.js';
-import { groupCompanyEvidences } from '../../domain/company-environmental-evidences.dto.js';
+import { groupCompanyEvidences } from '@modules/evidences/domain/company-environmental-evidences.dto.js';
 import { GetCompanyEnvironmentalEvidencesUseCase } from '../../infra/usecases/get-company-environmental-evidences.usecase.js';
-import { EvidencesController } from './evidences.controller.js';
-describe('EvidencesController', () => {
+import { EnvironmentalEvidencesController } from './environmental-evidences.controller.js';
+describe('EnvironmentalEvidencesController', () => {
   const get = {
     execute: vi.fn<GetCompanyEnvironmentalEvidencesUseCase['execute']>(),
   };
-  let controller: EvidencesController;
+  let controller: EnvironmentalEvidencesController;
   beforeEach(async () => {
     const module = await Test.createTestingModule({
-      controllers: [EvidencesController],
+      controllers: [EnvironmentalEvidencesController],
       providers: [
         { provide: GetCompanyEnvironmentalEvidencesUseCase, useValue: get },
       ],
     }).compile();
-    controller = module.get(EvidencesController);
+    controller = module.get(EnvironmentalEvidencesController);
   });
   it('encaminha CNPJ validado e devolve grupos sem remodelar proveniência', async () => {
     const cnpj = buildCnpj(),
@@ -37,8 +37,8 @@ describe('EvidencesController', () => {
   it('exige sessão válida, sem marcar classe ou método como públicos', () => {
     const reflector = new Reflector();
     for (const target of [
-      EvidencesController,
-      EvidencesController.prototype.getCompanyEvidences,
+      EnvironmentalEvidencesController,
+      EnvironmentalEvidencesController.prototype.getCompanyEvidences,
     ])
       expect(reflector.get(IS_PUBLIC_ROUTE, target)).toBeUndefined();
   });

@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
-import { EvidencesController } from '../../http/controllers/evidences.controller.js';
+import { EnvironmentalEvidencesController } from '../../http/controllers/environmental-evidences.controller.js';
 import { CompaniesModule } from '@modules/companies/infra/modules/companies.module.js';
 import { DataSourcesModule } from '@modules/data-sources/infra/modules/data-sources.module.js';
 import { IbamaModule } from '@modules/ibama/infra/modules/ibama.module.js';
 import { CguModule } from '@modules/cgu/infra/modules/cgu.module.js';
 import { GhgModule } from '@modules/ghg/infra/modules/ghg.module.js';
-import { EvidencesModule } from './evidences.module.js';
+import { EvidencesModule } from '@modules/evidences/infra/modules/evidences.module.js';
 import { EnvironmentalEvidencesProcessor } from '../queue/environmental-evidences.processor.js';
 import { RequestCguCompanyEvidencesUseCase } from '../usecases/request-cgu-company-evidences.usecase.js';
 import { GetCompanyEnvironmentalEvidencesUseCase } from '../usecases/get-company-environmental-evidences.usecase.js';
@@ -19,7 +19,7 @@ import { GetCompanyEnvironmentalEvidencesUseCase } from '../usecases/get-company
     CguModule,
     GhgModule,
   ],
-  controllers: [EvidencesController],
+  controllers: [EnvironmentalEvidencesController],
   providers: [
     EnvironmentalEvidencesProcessor,
     RequestCguCompanyEvidencesUseCase,
@@ -27,4 +27,4 @@ import { GetCompanyEnvironmentalEvidencesUseCase } from '../usecases/get-company
   ],
   exports: [GetCompanyEnvironmentalEvidencesUseCase],
 })
-export class EnvironmentalEvidencesModule {}
+export class EnvironmentalIntelligenceModule {}
