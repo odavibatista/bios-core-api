@@ -105,7 +105,7 @@ describe('CalculateCompanyOdsScoresUseCase', () => {
     expect(
       result.every(
         (score) =>
-          score.rulesVersion === 'rf10-rf11-v2' &&
+          score.rulesVersion === 'rf10-rf11-v3' &&
           score.calculatedAt instanceof Date,
       ),
     ).toBe(true);

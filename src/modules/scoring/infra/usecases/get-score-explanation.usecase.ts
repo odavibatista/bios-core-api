@@ -90,6 +90,7 @@ export class GetScoreExplanationUseCase extends UseCase<
           valid_until: evidence.validUntil.toISOString(),
         },
         weight: contribution.weight,
+        weight_reason: contribution.weightReason,
         signal: contribution.signal,
         points: contribution.points,
       };

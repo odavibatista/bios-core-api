@@ -54,7 +54,7 @@ describe('PrismaOdsScoreRepository', () => {
           points: -5,
         },
       ],
-      rules_version: 'rf10-rf11-v2',
+      rules_version: 'rf10-rf11-v3',
       calculated_at: calculatedAt,
     });
     await expect(
@@ -74,7 +74,7 @@ describe('PrismaOdsScoreRepository', () => {
           points: -5,
         },
       ],
-      rulesVersion: 'rf10-rf11-v2',
+      rulesVersion: 'rf10-rf11-v3',
       calculatedAt,
     });
     expect(prisma.companyOdsScore.findFirst).toHaveBeenCalledWith({
@@ -124,6 +124,7 @@ describe('PrismaOdsScoreRepository', () => {
           category: 'INFRACAO_AMBIENTAL',
           signal: 'NEGATIVE',
           weight: 40,
+          weightReason: null,
           points: -40,
         },
       ],
@@ -144,6 +145,7 @@ describe('PrismaOdsScoreRepository', () => {
           category: 'INFRACAO_AMBIENTAL',
           signal: 'NEGATIVE',
           weight: 40,
+          weight_reason: null,
           points: -40,
         },
       ],

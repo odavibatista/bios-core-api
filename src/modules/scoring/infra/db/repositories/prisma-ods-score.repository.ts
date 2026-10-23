@@ -46,6 +46,8 @@ export class PrismaOdsScoreRepository
         category: item.category,
         signal: item.signal,
         weight: item.weight,
+        weightReason: item.weight_reason as
+          'CGU_SANCTION_EXPIRED' | 'IBAMA_EMBARGO_LIFTED' | null,
         points: item.points,
       })),
       rulesVersion: row.rules_version,
@@ -89,6 +91,7 @@ export class PrismaOdsScoreRepository
             category: item.category,
             signal: item.signal,
             weight: item.weight,
+            weight_reason: item.weightReason,
             points: item.points,
           })),
           rules_version: score.rulesVersion,
