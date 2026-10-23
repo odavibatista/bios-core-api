@@ -39,10 +39,11 @@ describe('GetScoreExplanationUseCase', () => {
         category: EvidenceCategory.CONDUTA_ADMINISTRATIVA,
         signal: EvidenceSignal.NEGATIVE,
         weight: 5,
+        weightReason: null,
         points: -5,
       },
     ],
-    rulesVersion: 'rf10-rf11-v2',
+    rulesVersion: 'rf10-rf11-v3',
     calculatedAt: new Date('2026-10-22T12:00:00.000Z'),
   };
   const scores = {
@@ -74,7 +75,7 @@ describe('GetScoreExplanationUseCase', () => {
       score_value: -5,
       confidence_value: 0.2,
       evidence_count: 1,
-      rules_version: 'rf10-rf11-v2',
+      rules_version: 'rf10-rf11-v3',
       contributions: [
         {
           evidence: {
@@ -87,6 +88,7 @@ describe('GetScoreExplanationUseCase', () => {
             source_reference: '370679',
           },
           weight: 5,
+          weight_reason: null,
           signal: 'NEGATIVE',
           points: -5,
         },

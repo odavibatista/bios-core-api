@@ -118,7 +118,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
           (item) =>
             item.evidence_count === 0 &&
             item.contributions.length === 0 &&
-            item.rules_version === 'rf10-rf11-v2',
+            item.rules_version === 'rf10-rf11-v3',
         ),
       ).toBe(true);
     });
@@ -156,7 +156,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
             evidenceIds.has(contribution.evidence_id),
           ),
         ).toBe(true);
-        expect(item.rules_version).toBe('rf10-rf11-v2');
+        expect(item.rules_version).toBe('rf10-rf11-v3');
         expect(item.calculated_at).toBeInstanceOf(Date);
         expect(item.uf).toBeNull();
         expect(item.city).toBeNull();

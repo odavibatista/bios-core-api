@@ -77,8 +77,11 @@ type ScoreContribution {
   /// Sinal da evidência.
   signal EvidenceSignal
 
-  /// Peso aplicado à evidência (fixo no código na v1).
+  /// Peso efetivo aplicado à evidência, após eventual redutor histórico.
   weight Float
+
+  /// Motivo do redutor historico; nulo para peso integral e scores anteriores.
+  weight_reason String?
 
   /// Contribuição efetiva ao índice, já com o sinal aplicado.
   points Float
