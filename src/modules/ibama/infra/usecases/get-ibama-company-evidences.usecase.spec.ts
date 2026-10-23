@@ -85,7 +85,7 @@ describe('GetIbamaCompanyEvidencesUseCase', () => {
       result: { status: 'UNAVAILABLE' },
     });
     expect(queue.enqueue).toHaveBeenCalledWith(
-      QueueName.ENVIRONMENTAL_EVIDENCES,
+      QueueName.IBAMA_INGESTION,
       INGEST_IBAMA_COMPANY_JOB,
       { cnpj: IBAMA_CNPJ },
       { jobId: ibamaCompanyJobId(IBAMA_CNPJ, now) },
