@@ -10,6 +10,11 @@ import {
   SourceOutcome,
   type SourceCallContext,
 } from '@modules/data-sources/domain/dtos/providers/data-source-request.dto.js';
+import {
+  UnknownReason,
+  unknownReasonOf,
+} from '@modules/data-sources/domain/unknown-reason.js';
+import { logSourceUnknown } from '@modules/data-sources/infra/usecases/request/log-source-unknown.js';
 import { RequestDataSourceUseCase } from '@modules/data-sources/infra/usecases/request/request-data-source.usecase.js';
 import { ResolveSourceRequestConfigUseCase } from '@modules/data-sources/infra/usecases/request/resolve-source-request-config.usecase.js';
 import { ResolveSourceCacheTtlUseCase } from '@modules/data-sources/infra/usecases/cache/resolve-source-cache-ttl.usecase.js';
@@ -50,17 +55,25 @@ export class CguSanctionsProvider {
   ): Promise<CguLookupResult> {
     try {
       const cnpj = parseCnpj(query);
-      if (!cnpj) return this.unavailable();
+      if (!cnpj) return this.unavailable(slug, UnknownReason.INVALID_INPUT);
       const credential = this.config.get('CGU_API_KEY', { infer: true });
       if (!credential) {
-        this.logger.warn(
-          `${slug} indisponível: credencial ausente (CGU_API_KEY).`,
+        return this.unavailable(
+          slug,
+          UnknownReason.CREDENTIAL_MISSING,
+          SourceOutcome.FAILURE,
+          'credencial ausente',
         );
-        return this.unavailable(SourceOutcome.FAILURE, 'credencial ausente');
       }
       const source = await this.sourceConfig.execute(slug);
-      if (!source) return this.unavailable();
-      if (!source.isEnabled) return this.unavailable(SourceOutcome.DISABLED);
+      if (!source)
+        return this.unavailable(slug, UnknownReason.SOURCE_NOT_CONFIGURED);
+      if (!source.isEnabled)
+        return this.unavailable(
+          slug,
+          UnknownReason.SOURCE_DISABLED,
+          SourceOutcome.DISABLED,
+        );
       const key = { namespace: CacheNamespace[slug], identifier: cnpj };
       const ttl = await this.ttl.execute(slug);
       const cached = CacheSchema.safeParse(await this.cache.get(key));
@@ -93,13 +106,22 @@ export class CguSanctionsProvider {
         if (response.outcome !== SourceOutcome.SUCCESS) {
           // 404 aqui significa endpoint/página inválida; só [] em HTTP 200 prova ausência.
           return this.unavailable(
+            slug,
+            unknownReasonOf(response),
             response.outcome === SourceOutcome.NOT_FOUND
               ? SourceOutcome.FAILURE
               : response.outcome,
           );
         }
-        if (response.status !== 200) return this.unavailable();
-        const parsed = readCguPage(response.body, cnpj);
+        if (response.status !== 200)
+          return this.unavailable(slug, UnknownReason.UNEXPECTED_STATUS);
+        let parsed: ReturnType<typeof readCguPage>;
+        try {
+          parsed = readCguPage(response.body, cnpj);
+        } catch {
+          // Só o leitor da página lança por formato: aqui a fonte mudou de contrato.
+          return this.unavailable(slug, UnknownReason.CONTRACT_MISMATCH);
+        }
         if (parsed.ids.length === 0) {
           const result = [...sanctions.values()];
           await this.cache.set(
@@ -110,15 +132,23 @@ export class CguSanctionsProvider {
           return this.answered(result, collectedAt);
         }
         const fingerprint = [...parsed.ids].sort().join(',');
-        if (seen.has(fingerprint)) return this.unavailable();
+        if (seen.has(fingerprint))
+          return this.unavailable(slug, UnknownReason.PAGINATION_LIMIT);
         seen.add(fingerprint);
         for (const sanction of parsed.sanctions)
           sanctions.set(sanction.id, sanction);
       }
-      return this.unavailable();
-    } catch {
-      // Não propaga erros do transporte com headers, chave ou corpo da resposta.
-      return this.unavailable();
+      return this.unavailable(slug, UnknownReason.PAGINATION_LIMIT);
+    } catch (error) {
+      // Não propaga erros do transporte com headers, chave ou corpo da resposta:
+      // o log leva só o nome da exceção e a pilha (logSourceUnknown).
+      return this.unavailable(
+        slug,
+        UnknownReason.UNEXPECTED_ERROR,
+        SourceOutcome.FAILURE,
+        undefined,
+        error,
+      );
     }
   }
 
@@ -132,9 +162,14 @@ export class CguSanctionsProvider {
   }
 
   private unavailable(
+    slug: CguSlug,
+    unknown: UnknownReason,
     reason: SourceUnavailableReason = SourceOutcome.FAILURE,
     message = 'Consulta CGU indisponível ou fora do contrato esperado.',
+    error?: unknown,
   ): CguLookupResult {
+    logSourceUnknown(this.logger, slug, unknown, error);
+
     return {
       status: 'UNAVAILABLE',
       reason,
