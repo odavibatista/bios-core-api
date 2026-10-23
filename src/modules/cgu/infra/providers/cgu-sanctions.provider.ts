@@ -19,6 +19,7 @@ import { RequestDataSourceUseCase } from '@modules/data-sources/infra/usecases/r
 import { ResolveSourceRequestConfigUseCase } from '@modules/data-sources/infra/usecases/request/resolve-source-request-config.usecase.js';
 import { ResolveSourceCacheTtlUseCase } from '@modules/data-sources/infra/usecases/cache/resolve-source-cache-ttl.usecase.js';
 import {
+  CGU_RATE_LIMIT_GROUP,
   CguSanctionSchema,
   readCguPage,
   type CguSanction,
@@ -99,6 +100,7 @@ export class CguSanctionsProvider {
           cnpj,
           context,
           query: { codigoSancionado: cnpj, pagina: String(page) },
+          rateLimitGroup: CGU_RATE_LIMIT_GROUP,
           headers: {
             'chave-api-dados': credential,
           },

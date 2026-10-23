@@ -32,6 +32,15 @@ export interface DataSourceRequest {
    */
   headers?: Readonly<Record<string, string>>;
 
+  /**
+   * Contador do limite por minuto compartilhado por mais de uma fonte. Sem ele,
+   * cada fonte conta à parte (pelo `slug`). Serve a fontes que dividem a mesma
+   * credencial e, portanto, o mesmo teto oficial (CGU: CEIS e CNEP, uma chave).
+   * O teto aplicado é o `rate_limit_per_minute` da fonte chamada: com o mesmo
+   * valor nas fontes do grupo (como no seed), a soma nunca passa dele.
+   */
+  rateLimitGroup?: string;
+
   /** CNPJ consultado, para o log (auditoria e cobertura por fonte). */
   cnpj?: string;
 

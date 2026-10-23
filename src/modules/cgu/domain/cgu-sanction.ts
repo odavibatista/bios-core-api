@@ -5,6 +5,12 @@ import type { EvidenceBatchEntry } from '@modules/evidences/domain/dtos/provider
 export const CGU_SLUGS = ['CGU_CEIS', 'CGU_CNEP'] as const;
 export type CguSlug = (typeof CGU_SLUGS)[number];
 
+/**
+ * CEIS e CNEP usam a mesma chave, e o teto oficial é por token: os dois cadastros
+ * dividem um único contador de requisições por minuto (NFPD01).
+ */
+export const CGU_RATE_LIMIT_GROUP = 'CGU';
+
 const text = z.string().trim().max(1000);
 // Whitelist: nunca guardar PessoaDTO, nomes do sancionado, contato ou texto livre.
 export const CguSanctionSchema = z.object({
