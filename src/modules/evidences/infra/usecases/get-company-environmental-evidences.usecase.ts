@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { CompanyProfileRepository } from '@modules/companies/domain/dtos/repositories/company-profile.repository.js';
+import { CompanyNotFoundException } from '@modules/companies/domain/dtos/errors/company-not-found.exception.js';
 import { GetIbamaCompanyEvidencesUseCase } from '@modules/ibama/infra/usecases/get-ibama-company-evidences.usecase.js';
 import { GetGhgCompanyEvidencesUseCase } from '@modules/ghg/infra/usecases/get-ghg-company-evidences.usecase.js';
 import { UseCase } from '@shared/domain/protocols/use-case.protocol.js';
@@ -18,6 +20,7 @@ export class GetCompanyEnvironmentalEvidencesUseCase extends UseCase<
   CompanyEnvironmentalEvidencesResponse
 > {
   constructor(
+    private readonly profiles: CompanyProfileRepository,
     private readonly ibama: GetIbamaCompanyEvidencesUseCase,
     private readonly cgu: RequestCguCompanyEvidencesUseCase,
     private readonly ghg: GetGhgCompanyEvidencesUseCase,
@@ -37,6 +40,8 @@ export class GetCompanyEnvironmentalEvidencesUseCase extends UseCase<
         'CNPJ invalido para consultar evidencias.',
       );
     const { cnpj } = parsed.data;
+    if (!(await this.profiles.findByCnpj(cnpj)))
+      throw new CompanyNotFoundException();
     const requests = [
       { slugs: ['IBAMA'], run: () => this.ibama.execute(cnpj) },
       { slugs: ['CGU_CEIS', 'CGU_CNEP'], run: () => this.cgu.execute(cnpj) },
