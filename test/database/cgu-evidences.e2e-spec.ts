@@ -19,6 +19,7 @@ import {
   otherCguCnpj,
 } from '../factories/cgu/cgu-sanction.factory.js';
 import { buildCnpj } from '../factories/companies/company-profile.factory.js';
+import { buildDistinctCnpjs } from '../support/cnpj.js';
 import { faker } from '../support/faker.js';
 import { createDatabaseTestingApp } from '../support/database-testing-app.js';
 import { resetCache } from '../support/cache.js';
@@ -321,6 +322,12 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         where: { slug: 'CGU_CEIS' },
         data: { rate_limit_per_minute: 1 },
       });
+      // O contador é comum aos dois cadastros: sem o CNEP na disputa, o CEIS
+      // fica com a única chamada e a página 2 é a que o limite recusa.
+      await prisma.dataSource.update({
+        where: { slug: 'CGU_CNEP' },
+        data: { is_enabled: false },
+      });
       responses['/ceis'].pages = [[row()], []];
       const result = await run();
       expect(result.find((e) => e.sourceSlug === 'CGU_CEIS')?.state).toBe(
@@ -328,6 +335,37 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       );
       expect(calls.filter((call) => call.path === '/ceis')).toHaveLength(1);
       expect(await prisma.evidenceRaw.count()).toBe(0);
+    });
+
+    it('CEIS e CNEP dividem o limite: a soma das chamadas à CGU nunca passa dele', async () => {
+      const limit = 5;
+      for (const slug of ['CGU_CEIS', 'CGU_CNEP'])
+        await prisma.dataSource.update({
+          where: { slug },
+          data: { rate_limit_per_minute: limit },
+        });
+      // Dez empresas ao mesmo tempo, cada uma com uma chamada por cadastro:
+      // 20 tentativas disputando 5 vagas num único contador.
+      const companies = buildDistinctCnpjs(10);
+
+      const results = await Promise.all(
+        companies.map((company) => collect.execute({ cnpj: company, context })),
+      );
+
+      expect(calls).toHaveLength(limit);
+      // Só as chamadas que passaram confirmam ausência; cada recusa fica UNKNOWN,
+      // nunca ausência confirmada, e não é repetida (o servidor viu só ${limit}).
+      const states = results.flat().map((evidence) => evidence.state);
+      expect(
+        states.filter((state) => state === EvidenceState.NOT_FOUND),
+      ).toHaveLength(limit);
+      expect(
+        states.every(
+          (state) =>
+            state === EvidenceState.NOT_FOUND ||
+            state === EvidenceState.UNKNOWN,
+        ),
+      ).toBe(true);
     });
   },
 );

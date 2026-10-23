@@ -465,6 +465,13 @@ describe('RequestDataSourceUseCase', () => {
       expect(httpClient.get).toHaveBeenCalledOnce();
     });
 
+    it('com grupo, conta no contador do grupo e não no da fonte, com o limite da fonte', async () => {
+      await useCase.execute({ ...request, rateLimitGroup: 'CGU' });
+
+      expect(rateLimiter.tryAcquire).toHaveBeenCalledWith('CGU', 90);
+      expect(rateLimiter.tryAcquire).not.toHaveBeenCalledWith('BRASIL_API', 90);
+    });
+
     it('com o limite atingido, não chama a fonte: RATE_LIMITED', async () => {
       rateLimiter.tryAcquire.mockResolvedValue(false);
 

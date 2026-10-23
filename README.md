@@ -878,6 +878,18 @@ A composição do perfil fica na #81; esta entrega não acrescenta endpoint ou c
   mantém a data de coleta original: sua leitura não renova a validade.
   A habilitação no catálogo é verificada antes do cache. Limite por minuto,
   timeout e log de cada página usam a infraestrutura comum (seed: 90/min e 5 s).
+- **O limite por minuto é um só para CEIS e CNEP.** As duas fontes usam a mesma chave e o teto
+  da CGU é por token, então os dois cadastros dividem um único contador (`CGU_RATE_LIMIT_GROUP`,
+  passado como `rateLimitGroup` à infraestrutura comum): a soma das chamadas aos dois nunca passa
+  do `rate_limit_per_minute` do catálogo (seed: 90 no total, e não 90 para cada). O teto aplicado
+  é o da fonte que está chamando; mantenha o mesmo valor nos dois registros de `data_sources`
+  (com valores diferentes, a soma fica limitada pelo maior). Limite atingido, nosso ou HTTP 429,
+  vira `UNKNOWN` com motivo `RATE_LIMITED` sem repetir a requisição nem gravar cache.
+  **Valor oficial a confirmar:** a página da CGU não pôde ser lida automaticamente; uma cópia da
+  documentação (de terceiros) fala em 400/min no horário comercial e 700/min entre 0h e 6h, com
+  180/min em oito endpoints restritos, entre os quais não estão o CEIS nem o CNEP, e suspensão do
+  token por 8 horas ao exceder. O 90 do seed é conservador diante disso e pode ser ajustado no
+  banco, sem deploy, depois de conferido na documentação oficial.
 - Cada sanção vira uma evidência `CONFIRMED`, categoria `CONDUTA_ADMINISTRATIVA`,
   ODS 15 e sinal negativo. ID, órgão, tipo e datas são preservados; o link aponta
   ao recurso por ID na API oficial, cujo acesso também exige chave. Ausência
