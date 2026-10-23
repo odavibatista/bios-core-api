@@ -1,5 +1,6 @@
 import type { INestApplication } from '@nestjs/common';
 import { CATALOG_SEEDERS } from '@app/database/catalog.seeders.js';
+import { toGhgEvidence } from '@modules/ghg/domain/ghg-inventory.js';
 import { EvidenceSourceNotFoundError } from '@modules/evidences/domain/dtos/errors/evidence.errors.js';
 import { ListCompanyEvidencesUseCase } from '@modules/evidences/infra/usecases/list-company-evidences.usecase.js';
 import { RecordEvidenceCollectionUseCase } from '@modules/evidences/infra/usecases/record-evidence-collection.usecase.js';
@@ -344,6 +345,56 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         expect(stored.source_url ?? null).toBeNull();
         expect(stored.details ?? null).toBeNull();
         expect(stored.published_at ?? null).toBeNull();
+      });
+
+      it('trocar só o texto do resumo (acentuação, #258) atualiza a evidência sem duplicar evidência nem bruto', async () => {
+        const inventory = {
+          cnpj: CNPJ,
+          organizationId: 77,
+          cycleId: 5,
+          year: 2025,
+        };
+        const current = toGhgEvidence(inventory);
+        // Como o texto saía antes da correção da acentuação.
+        const legacy = {
+          ...current,
+          finding: {
+            ...current.finding,
+            summary: 'Inventario de emissoes de GEE publicado: ano 2025.',
+          },
+        };
+
+        await entries.execute({
+          cnpj: CNPJ,
+          sourceSlug: 'GHG_PROTOCOL',
+          collectedAt: new Date('2026-10-20T10:00:00.000Z'),
+          entries: [legacy],
+        });
+        const before = await rows();
+        const rawBefore = await prisma.evidenceRaw.findMany();
+
+        await entries.execute({
+          cnpj: CNPJ,
+          sourceSlug: 'GHG_PROTOCOL',
+          collectedAt: new Date('2026-10-21T10:00:00.000Z'),
+          entries: [current],
+        });
+        const after = await rows();
+        const rawAfter = await prisma.evidenceRaw.findMany();
+
+        // Mesma chave: a evidência é atualizada, não duplicada.
+        expect(after).toHaveLength(1);
+        expect(after[0].evidence_key).toBe(before[0].evidence_key);
+        expect(after[0].id_evidence).toBe(before[0].id_evidence);
+        expect(before[0].summary).toBe(
+          'Inventario de emissoes de GEE publicado: ano 2025.',
+        );
+        expect(after[0].summary).toBe(
+          'Inventário de emissões de GEE publicado: ano 2025.',
+        );
+        // O hash do bruto não depende do resumo: o mesmo registro, uma linha só.
+        expect(rawAfter).toHaveLength(1);
+        expect(rawAfter[0].payload_hash).toBe(rawBefore[0].payload_hash);
       });
 
       it('gravações simultâneas da mesma coleta resultam em uma evidência só', async () => {

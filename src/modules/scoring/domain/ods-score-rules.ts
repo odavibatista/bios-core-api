@@ -98,7 +98,7 @@ export function scoreOdsEvidences(
   | 'sourcesWithoutRecords'
 > {
   const rules = ODS_SCORE_RULES[odsNumber];
-  if (!rules) throw new Error(`ODS ${odsNumber} sem regras de pontuacao.`);
+  if (!rules) throw new Error(`ODS ${odsNumber} sem regras de pontuação.`);
 
   const contributions: CalculatedOdsScore['contributions'] = [];
   const usedByCategory = new Map<EvidenceCategory, number>();

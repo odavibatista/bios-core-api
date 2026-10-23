@@ -37,7 +37,7 @@ export class GetCompanyEnvironmentalEvidencesUseCase extends UseCase<
     });
     if (!parsed.success)
       throw new InvalidEvidenceError(
-        'CNPJ invalido para consultar evidencias.',
+        'CNPJ inválido para consultar evidências.',
       );
     const { cnpj } = parsed.data;
     if (!(await this.profiles.findByCnpj(cnpj)))

@@ -17,7 +17,7 @@ export const CompanyEnvironmentalEvidencesRequestSchema = z
       if (cnpj) return cnpj;
       ctx.addIssue({
         code: 'custom',
-        message: 'CNPJ invalido para consultar evidencias.',
+        message: 'CNPJ inválido para consultar evidências.',
       });
       return z.NEVER;
     }),

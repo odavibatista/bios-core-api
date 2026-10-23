@@ -13,12 +13,12 @@ export const ScoreExplanationRequestSchema = z
     cnpj: z.string().transform((value, ctx) => {
       const cnpj = parseCnpj(value);
       if (cnpj) return cnpj;
-      ctx.addIssue({ code: 'custom', message: 'CNPJ invalido.' });
+      ctx.addIssue({ code: 'custom', message: 'CNPJ inválido.' });
       return z.NEVER;
     }),
     odsNumber: z
       .union([
-        z.string().regex(/^\d+$/, 'Numero do ODS invalido.').transform(Number),
+        z.string().regex(/^\d+$/, 'Número do ODS inválido.').transform(Number),
         z.number(),
       ])
       .pipe(z.number().int().positive()),
