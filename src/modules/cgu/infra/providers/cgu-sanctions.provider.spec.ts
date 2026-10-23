@@ -113,6 +113,20 @@ describe('adapters CGU', () => {
       row.sancionado.nome,
     );
   });
+  it.each(['CGU_CEIS', 'CGU_CNEP'] as const)(
+    '%s sem chave nao consulta a fonte nem grava cache',
+    async (slug) => {
+      config.get.mockReturnValue(undefined);
+      const result = await provider.fetch(slug, cnpj, context);
+      expect(result).toMatchObject({
+        status: 'UNAVAILABLE',
+        message: 'credencial ausente',
+      });
+      expect(request.execute).not.toHaveBeenCalled();
+      expect(cache.get).not.toHaveBeenCalled();
+      expect(cache.set).not.toHaveBeenCalled();
+    },
+  );
 
   it('CNEP usa namespace próprio e cache de ausência com TTL do catálogo', async () => {
     await expect(cnep.fetch(cnpj, context)).resolves.toMatchObject({

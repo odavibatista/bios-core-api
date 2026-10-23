@@ -15,6 +15,9 @@ export const HealthCheckResponseSchema = z
       .object({
         database: z.literal('up').describe('Situação do banco de dados'),
         redis: z.literal('up').describe('Situação do Redis (filas e cache)'),
+        cgu_credentials: z
+          .enum(['configured', 'missing'])
+          .describe('Credencial CGU opcional: ausência não bloqueia a API'),
       })
       .describe('Situação de cada dependência'),
     timestamp: z.iso.datetime().describe('Momento da verificação (ISO 8601)'),

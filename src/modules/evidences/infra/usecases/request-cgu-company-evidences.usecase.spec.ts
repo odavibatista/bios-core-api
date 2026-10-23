@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { EvidenceState } from '@prisma/client';
 import { QueueName } from '@shared/domain/dtos/providers/queue-job.dto.js';
 import { QueueProvider } from '@shared/domain/providers/queue.provider.js';
@@ -15,6 +16,7 @@ describe('produtor CGU', () => {
   const list = { execute: vi.fn() },
     collection = { execute: vi.fn() },
     queue = { enqueueAndWait: vi.fn() };
+  const config = { get: vi.fn() };
   const cnpj = buildCnpj();
   let useCase: RequestCguCompanyEvidencesUseCase;
   const row = (
@@ -23,10 +25,12 @@ describe('produtor CGU', () => {
   ) => storedEvidenceFactory.build({ cnpj, sourceSlug, state });
   beforeEach(async () => {
     vi.resetAllMocks();
+    config.get.mockReturnValue('token-de-teste');
     list.execute.mockResolvedValue([]);
     const module = await Test.createTestingModule({
       providers: [
         RequestCguCompanyEvidencesUseCase,
+        { provide: ConfigService, useValue: config },
         { provide: ListCompanyEvidencesUseCase, useValue: list },
         { provide: RecordEvidenceCollectionUseCase, useValue: collection },
         { provide: QueueProvider, useValue: queue },
@@ -67,6 +71,25 @@ describe('produtor CGU', () => {
       { cnpj },
       { jobId: expect.stringMatching(new RegExp(`^cgu-${cnpj}-[0-9]+$`)) },
     );
+  });
+  it('sem chave marca CEIS/CNEP UNKNOWN e nao publica job', async () => {
+    config.get.mockReturnValue(undefined);
+    const placeholders = [
+      row('CGU_CEIS', EvidenceState.UNKNOWN),
+      row('CGU_CNEP', EvidenceState.UNKNOWN),
+    ];
+    list.execute.mockResolvedValueOnce([]).mockResolvedValue(placeholders);
+    expect(await useCase.execute(cnpj)).toEqual(placeholders);
+    expect(collection.execute).toHaveBeenCalledTimes(2);
+    expect(queue.enqueueAndWait).not.toHaveBeenCalled();
+  });
+  it('sem chave preserva respostas validas anteriores sem nova escrita', async () => {
+    config.get.mockReturnValue(undefined);
+    const rows = [row('CGU_CEIS'), row('CGU_CNEP')];
+    list.execute.mockResolvedValue(rows);
+    expect(await useCase.execute(cnpj)).toEqual(rows);
+    expect(collection.execute).not.toHaveBeenCalled();
+    expect(queue.enqueueAndWait).not.toHaveBeenCalled();
   });
   it.each([
     new QueueTimeoutException(

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { z } from 'zod';
 import type { Environment } from '@shared/config/environment.config.js';
@@ -34,6 +34,7 @@ export const CGU_MAX_PAGES = 100;
 /** Paginação e cache compartilhados pelos dois cadastros, com falhas isoladas. */
 @Injectable()
 export class CguSanctionsProvider {
+  private readonly logger = new Logger(CguSanctionsProvider.name);
   constructor(
     private readonly request: RequestDataSourceUseCase,
     private readonly sourceConfig: ResolveSourceRequestConfigUseCase,
@@ -50,6 +51,13 @@ export class CguSanctionsProvider {
     try {
       const cnpj = parseCnpj(query);
       if (!cnpj) return this.unavailable();
+      const credential = this.config.get('CGU_API_KEY', { infer: true });
+      if (!credential) {
+        this.logger.warn(
+          `${slug} indisponível: credencial ausente (CGU_API_KEY).`,
+        );
+        return this.unavailable(SourceOutcome.FAILURE, 'credencial ausente');
+      }
       const source = await this.sourceConfig.execute(slug);
       if (!source) return this.unavailable();
       if (!source.isEnabled) return this.unavailable(SourceOutcome.DISABLED);
@@ -79,7 +87,7 @@ export class CguSanctionsProvider {
           context,
           query: { codigoSancionado: cnpj, pagina: String(page) },
           headers: {
-            'chave-api-dados': this.config.get('CGU_API_KEY', { infer: true }),
+            'chave-api-dados': credential,
           },
         });
         if (response.outcome !== SourceOutcome.SUCCESS) {
@@ -125,11 +133,12 @@ export class CguSanctionsProvider {
 
   private unavailable(
     reason: SourceUnavailableReason = SourceOutcome.FAILURE,
+    message = 'Consulta CGU indisponível ou fora do contrato esperado.',
   ): CguLookupResult {
     return {
       status: 'UNAVAILABLE',
       reason,
-      message: 'Consulta CGU indisponível ou fora do contrato esperado.',
+      message,
     };
   }
 }
