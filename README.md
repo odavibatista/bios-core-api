@@ -56,6 +56,7 @@ npm run start:dev           # API em http://localhost:3000
 | `prisma:generate` / `prisma:validate` / `prisma:format` | Operações sobre o schema Prisma |
 | `keys:generate` | Gera as chaves de criptografia do `.env` (`-- --version N` para rotacionar) |
 | `db:push` | Sincroniza coleções e índices do MongoDB com o schema |
+| `catalog:sync` | Compara o catálogo de fontes do banco com o seed (dry-run); `-- --apply` grava. Seção "Catálogo de fontes: carga e sincronização" |
 | `docker:up` / `docker:down` | Sobe/derruba a infraestrutura local |
 
 ## Arquitetura
@@ -1088,7 +1089,7 @@ O fluxo de uma execução, nesta ordem:
   da execução tem `collected_at` igual ao `started_at` dela, e o bruto aponta a execução.
 - **Disparo manual.** Não há endpoint. Em desenvolvimento, publique o job na fila
   (`queue.add('ingest-ibama-dumps', {})`) ou use a política de teste dos e2e.
-- **Bancos criados antes da #69.** O seed não altera fontes existentes: confira `base_url`,
+- **Bancos criados antes da #69.** O seed não altera fontes existentes (use `npm run catalog:sync` para ver e aplicar a diferença): confira `base_url`,
   `request_timeout_ms` (600 000) e `cache_ttl_seconds` (172 800) da fonte `IBAMA`; sem isso o download
   recebe 404.
 
@@ -1292,7 +1293,7 @@ quem lê é o perfil ambiental (UC07). O módulo exporta dois casos de uso.
 - **Validade.** `valid_until = coletada em + data_sources.cache_ttl_seconds` da fonte; sem janela
   no catálogo vale `CACHE_DEFAULT_TTL`. O seed do IBAMA ganhou 2 dias (o job diário renova; uma
   execução perdida não vence a base). O seed não altera fontes que já existem: um banco antigo
-  mantém a janela dele até ser ajustada em `data_sources`.
+  mantém a janela dele até ser ajustada em `data_sources` (ou por `npm run catalog:sync`).
 - **Categoria e ODS vêm do catálogo** (`data_sources.evidence_category` e `ods_id`, via
   `ResolveEvidenceSourceUseCase`), e o **sinal vem da categoria** (`signalForCategory`: emissão de
   GEE positivo; infração e sanção negativos). Quem normaliza um registro só diz a fonte e o que
@@ -1466,8 +1467,20 @@ aplica a guarda temporal por fonte/CNPJ; a falha do portal não apaga uma respos
 
 A seed nova aponta para o host JSON. Catálogos existentes que ainda usam
 `https://registropublicodeemissoes.fgv.br` continuam compatíveis: o adapter resolve
-os dois hosts oficiais, conforme o portal. O seed não sobrescreve configurações.
-Nenhuma variável de ambiente ou migração de schema foi adicionada.
+os dois hosts oficiais, conforme o portal. O seed não sobrescreve configurações; para
+alinhar um banco antigo ao seed, use `npm run catalog:sync` (seção "Catálogo de fontes:
+carga e sincronização"). Nenhuma variável de ambiente ou migração de schema foi adicionada.
+
+**Hosts fixos em código (exceção documentada, #256).** O portal usa dois hosts para o
+mesmo serviço: um para a API (`registropublicodeemissoesapi.fgv.br`) e outro para o download
+do relatório (`sistema-registropublicodeemissoesapi.fgv.br`), e o catálogo tem uma única
+`base_url`. Por isso `ghgBaseUrl` traduz os dois hosts oficiais conhecidos para o host certo de
+cada chamada, e o link público do relatório (`toGhgEvidence`) também é fixo. **Na prática, o
+catálogo só decide o endereço quando ele não é um dos hosts oficiais** (é assim que os testes
+apontam para um servidor local). Mover o host do relatório para o catálogo pediria uma
+coluna nova em `data_sources` (schema e DBML) só para um valor que o portal fixa; se um dia
+o portal mudar de host, a alteração é uma linha em `ghgBaseUrl` e em `toGhgEvidence`, coberta
+pelo teste de contrato (`npm run test:contract`), que acusa o host que deixou de responder.
 
 ## Testes
 
@@ -1527,6 +1540,43 @@ localmente, suba a infraestrutura antes: `npm run docker:up`.
 Os catálogos de referência (ODS, fontes de dados e blacklist de domínios) têm seeders
 idempotentes nos próprios módulos (`infra/db/seeders/`), reunidos em
 `src/app/database/catalog.seeders.ts` na ordem de dependência.
+
+### Catálogo de fontes: carga e sincronização
+
+O seeder de fontes só **cria** o que falta: `update` vazio, de propósito, para que um novo
+seed nunca desfaça ajustes feitos em produção. O preço é que um banco criado antes de um
+ajuste do seed (`base_url` e timeout do IBAMA, host do GHG) nunca o recebe. O comando
+`catalog:sync` (#256) fecha essa lacuna **sob demanda e sem surpresa**:
+
+```bash
+npm run catalog:sync              # dry-run: mostra o que mudaria; não grava nada
+npm run catalog:sync -- --apply   # grava o que o dry-run mostrou
+```
+
+- **Nunca roda sozinho.** Não faz parte do boot da API, dos testes nem de nenhum hook. O banco
+  alvo é o de `DATABASE_URL`; o comando imprime só o **nome** do banco (nunca a connection
+  string) e, sem `--apply`, não escreve nada.
+- **Diff antes de aplicar.** Para cada fonte: `CRIAR`, `ATUALIZAR` (campo a campo, `de -> para`)
+  ou `igual`; fontes que estão no banco e o código não conhece são só listadas.
+- **O que ele sincroniza:** o contrato da fonte (`name`, `base_url`, `role`, `ingestion_mode`,
+  `evidence_category`, `request_timeout_ms`, `cache_ttl_seconds`) e a criação de fontes ausentes.
+  **O que ele nunca altera:** o que a operação ajusta (`is_enabled`, `rate_limit_per_minute`,
+  `fallback_priority`); quando o banco diverge do seed nesses campos, o dry-run avisa com
+  `(mantido)`, e a divergência continua sendo uma decisão consciente.
+- **Pré-requisito para criar fontes:** os ODS precisam existir (o comando recusa, sem gravar
+  nada, se faltarem). Hoje **não há comando de produção que carregue ODS, fontes e blacklist de
+  domínios em um banco novo**: os seeders só rodam nos testes (`PrismaService.seed`, que se
+  recusa fora de `NODE_ENV=test` e de banco `*_test`).
+- **Idempotente:** rodar de novo converge para o mesmo estado e, em sincronia, informa
+  "O catálogo já está em sincronia com o código".
+
+**Runbook (banco existente após atualizar a API):**
+
+1. `npm run catalog:sync` e leia o diff, em especial as linhas `(mantido)`;
+2. se estiver de acordo, `npm run catalog:sync -- --apply`;
+3. rode `npm run catalog:sync` de novo: deve dizer que já está em sincronia;
+4. para um valor que você quer diferente do seed, ajuste no banco e mantenha o seed como
+   está; campos de contrato divergentes voltam a aparecer no diff a cada execução, de propósito.
 
 ### Dados de teste
 
