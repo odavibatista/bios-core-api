@@ -204,6 +204,69 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       });
     });
 
+    it('explica o peso reduzido de sanção vencida e embargo levantado, mantendo o ativo integral', async () => {
+      await record.execute({
+        cnpj: CNPJ,
+        sourceSlug: 'IBAMA',
+        result: {
+          status: 'COLLECTED',
+          findings: [
+            {
+              reference: 'TE-levantado',
+              url: IBAMA_DATASET_URLS.TERMO_EMBARGO,
+              details: { resource: 'TERMO_EMBARGO', lifted: true },
+            },
+            {
+              reference: 'TE-ativo',
+              url: IBAMA_DATASET_URLS.TERMO_EMBARGO,
+              details: { resource: 'TERMO_EMBARGO', lifted: false },
+            },
+          ],
+        },
+      });
+      await record.execute({
+        cnpj: CNPJ,
+        sourceSlug: 'CGU_CEIS',
+        result: {
+          status: 'COLLECTED',
+          findings: [
+            {
+              reference: '370679',
+              url: 'https://api.portaldatransparencia.gov.br/api-de-dados/ceis/370679',
+              details: { endDate: '2020-01-01' },
+            },
+            {
+              reference: '385501',
+              url: 'https://api.portaldatransparencia.gov.br/api-de-dados/ceis/385501',
+              details: { endDate: null },
+            },
+          ],
+        },
+      });
+      await calculate.execute(CNPJ);
+      const result = ScoreExplanationResponseSchema.parse(
+        (await get().expect(200)).body,
+      );
+      expect(result.rules_version).toBe('rf10-rf11-v3');
+      expect(result.score_value).toBe(-56.25);
+      expect(
+        result.contributions.map((item) => [
+          item.weight,
+          item.weight_reason,
+          item.points,
+        ]),
+      ).toEqual([
+        [1.25, 'CGU_SANCTION_EXPIRED', -1.25],
+        [5, null, -5],
+        [40, null, -40],
+        [10, 'IBAMA_EMBARGO_LIFTED', -10],
+      ]);
+      expect(
+        result.contributions.reduce((sum, item) => sum + item.points, 0),
+      ).toBe(result.score_value);
+      expect(await prisma.dataSourceRequestLog.count()).toBe(0);
+    });
+
     it('evidência apagada gera 409 em vez de explicação incompleta', async () => {
       await record.execute({
         cnpj: CNPJ,
@@ -245,6 +308,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         'source_reference',
         'current_state',
         'weight',
+        'weight_reason',
         'signal',
         'points',
       ])

@@ -763,7 +763,7 @@ alteração de schema Prisma, variáveis de ambiente ou configuração de filas.
 `CalculateCompanyOdsScoresUseCase` recalcula, por CNPJ, todos os ODS ativos
 carregados do catálogo e substitui atomicamente os documentos da empresa em
 `company_ods_scores`. Cada documento guarda `score_value`, `confidence_value`,
-`evidence_count`, contribuições por ID de evidência, `rules_version = rf10-rf11-v2`,
+`evidence_count`, contribuições por ID de evidência, `rules_version = rf10-rf11-v3`,
 data de cálculo e, quando há perfil cadastral, UF, cidade e CNAEs. O recálculo
 preserva o ID e a criação dos documentos existentes e remove o score de um ODS
 desativado. Um ODS ativo sem regra explícita interrompe o cálculo antes da escrita.
@@ -772,8 +772,12 @@ A escala é assinada, de −100 a 100, sem índice geral: o ODS 13 recebe +60 po
 inventário GHG confirmado e rastreável, com teto +100; o ODS 15 recebe −40 por
 infração IBAMA (teto −80) e −5 por sanção CEIS/CNEP (teto −20). A soma de
 `points` das contribuições reproduz exatamente `score_value`; os tetos impedem
-que muitas sanções administrativas superem o sinal ambiental direto. Os dois
-índices não são comparáveis entre si nem vereditos de sustentabilidade.
+que muitas sanções administrativas superem o sinal ambiental direto.
+Sanção CEIS/CNEP com `endDate` anterior ao dia civil em São Paulo pesa −1,25;
+termo de embargo com `details.lifted = true` pesa −10. O peso reduzido e o motivo
+ficam no retrato e na explicação; autos de infração e registros vigentes conservam
+o peso integral. A validade da coleta continua independente do fim da sanção.
+Os dois índices não são comparáveis entre si nem vereditos de sustentabilidade.
 
 Somente `CONFIRMED` vigente, com identificador não vazio ou URL HTTPS válida,
 gera contribuição. `NOT_FOUND` não dá bônus; `UNKNOWN`, `OUTDATED`, sinal
