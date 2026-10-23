@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# Mesmas imagens oficiais e tags do Compose, com registros alternativos.
+# Mesmas imagens oficiais do Compose, fixadas por digest (.github/ci-images.lock),
+# obtidas de registros alternativos. O digest, e nao a tag, decide o conteudo.
 set -euo pipefail
+
+lock="${CI_IMAGES_LOCK:-$(cd "$(dirname "$0")/.." && pwd)/ci-images.lock}"
 
 images=$(docker compose -f docker-compose.yml -f docker-compose.ci.yml config --images mongodb redis)
 if [[ -z "$images" ]]; then
@@ -15,15 +18,21 @@ while IFS= read -r target; do
   fi
 
   image="${target#public.ecr.aws/docker/library/}"
+  digest=$(awk -v image="$image" '$1 == image { print $2 }' "$lock")
+  if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+    echo "::error::$image sem digest valido em ci-images.lock. Rode .github/scripts/update-ci-images.sh." >&2
+    exit 1
+  fi
+
+  name="${image%%:*}"
   downloaded=false
   for registry in mirror.gcr.io/library public.ecr.aws/docker/library docker.io/library; do
-    candidate="$registry/$image"
+    candidate="$registry/$name@$digest"
     echo "Obtendo $candidate"
     # Limita cada tentativa para liberar o proximo registro se houver travamento.
     if timeout 120s docker pull "$candidate"; then
-      if [[ "$candidate" != "$target" ]]; then
-        docker tag "$candidate" "$target"
-      fi
+      # Compose e o --pull never procuram a tag local; o conteudo veio do digest.
+      docker tag "$candidate" "$target"
       downloaded=true
       break
     fi
