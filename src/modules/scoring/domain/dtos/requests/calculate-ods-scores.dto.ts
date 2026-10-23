@@ -22,6 +22,9 @@ export const OdsScoreContributionSchema = z
     category: z.enum(EvidenceCategory),
     signal: z.enum(EvidenceSignal),
     weight: z.number().positive(),
+    weightReason: z
+      .enum(['CGU_SANCTION_EXPIRED', 'IBAMA_EMBARGO_LIFTED'])
+      .nullable(),
     points: z.number().min(-100).max(100),
   })
   .strict();
