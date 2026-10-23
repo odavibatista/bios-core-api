@@ -36,7 +36,11 @@ export default defineConfig({
     include: ['test/**/*.e2e-spec.ts'],
     globalSetup: ['test/setup/infrastructure.global-setup.ts'],
     // Semente do Faker por arquivo, exibida quando um teste falha.
-    setupFiles: ['test/setup/faker.setup.ts'],
+    setupFiles: [
+      'test/setup/faker.setup.ts',
+      // Reprova o arquivo que emitir MaxListenersExceededWarning (#259).
+      'test/setup/listener-leak.setup.ts',
+    ],
     // As suítes compartilham o mesmo banco: execução em série.
     fileParallelism: false,
     testTimeout: 15_000,

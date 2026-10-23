@@ -1533,6 +1533,15 @@ fora dos prefixos do projeto (`bios:`, `bull:`) — o que protege de outro Redis
 porta 6379 na mesma máquina. As suítes de `test/database/` rodam em série, pois compartilham
 o banco.
 
+**Aviso de vazamento de ouvintes (#259).** O Node emite `MaxListenersExceededWarning` quando mais de 10
+ouvintes se acumulam num emissor. Nos e2e vinha de requisições simultâneas via supertest (`Promise.all`
+de 10 ou mais chamadas) contra o servidor HTTP do app ainda sem `listen`: o supertest sobe o servidor a
+cada requisição e enfileira as demais em `once('listening' | 'error' | 'close')`. A correção está na raiz,
+sem `setMaxListeners`: `createDatabaseTestingApp` faz `app.listen(0)` (porta livre) uma vez, e as
+requisições vão direto. Para o aviso não voltar, `test/setup/listener-leak.setup.ts` (registrado em
+`vitest.config.e2e.ts`) **reprova o arquivo e2e** que emitir esse aviso. Para achar a origem de um aviso
+novo, rode com `NODE_OPTIONS=--trace-warnings` (mostra a pilha de quem adicionou o ouvinte).
+
 Sem MongoDB ou sem Redis acessível, as suítes correspondentes são ignoradas localmente (com
 aviso) e as demais seguem normalmente; no CI a ausência reprova a execução. Para rodá-las
 localmente, suba a infraestrutura antes: `npm run docker:up`.
