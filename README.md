@@ -182,7 +182,7 @@ módulo dono do fluxo. Um consumidor por fila: dois na mesma fila competiriam pe
 | `environmental-evidences` | Evidências de conduta da CGU (CEIS/CNEP) | `EnvironmentalEvidencesProcessor` (`evidences/`), concorrência 3: consulta CGU por CNPJ, jobs curtos de quem espera a resposta |
 | `ibama-ingestion` | Dumps do IBAMA (lote diário e coleta avulsa por CNPJ) | `IbamaIngestionProcessor` (`ibama/`), exclusivo, concorrência 1: um download de dumps por vez |
 | `ghg-inventory` | Inventário de emissões (fallback do GHG Protocol) | `GhgInventoryProcessor` (`ghg/`), exclusivo, concorrência 1: coleta por CNPJ e sincronização diária do cadastro de organizações |
-| `ods-scoring` | Recálculo de índice e confiança por ODS | ainda não implementado |
+| `ods-scoring` | Recálculo de índice e confiança por ODS (UC15) e varredura por versão de regras | `OdsScoringProcessor` (`scoring/`), concorrência 3 (seção "Recálculo dos índices por fila") |
 | `email-dispatch` | E-mails transacionais | consumida nesta API (`mailing/`) |
 
 O contrato é `QueueProvider`, com três operações:
@@ -193,6 +193,16 @@ const profile = await queues.enqueueAndWait(QueueName.COMPANY_PROFILE, 'fetch', 
 await queues.schedule({ queue, id: 'ibama-daily-ingestion', jobName, cron: '0 4 * * *' });
 ```
 
+- **Coalescência exata (`coalesce: true` + `jobId`).** Vários pedidos do mesmo trabalho viram
+  um só **enquanto ele não começou**, sem nunca perder uma mudança. O BullMQ trata o mesmo `jobId`
+  como o mesmo job enquanto o registro existir, e jobs concluídos ficam por uma hora e os falhos
+  para sempre: sem tratamento, um pedido feito depois de o job terminar seria ignorado e devolveria
+  o resultado velho. Com `coalesce`: job **pendente** (esperando ou agendado) absorve o pedido (ele
+  ainda vai ler os dados mais novos); job **concluído ou falho** é removido e um novo é publicado;
+  job **ativo** (pode já ter lido os dados antigos) ganha **um** acompanhamento `<jobId>~next`, ao
+  qual os pedidos seguintes se fundem. Quem usa tolera dois jobs do mesmo `jobId` ao mesmo tempo:
+  o trabalho precisa ser idempotente e não regredir um resultado mais novo (ver o recálculo dos
+  índices). Usado pela fila `ods-scoring`; as demais seguem com `jobId` por janela de tempo.
 - **Espera com prazo.** `enqueueAndWait` devolve o resultado do consumidor ou lança
   `QueueTimeoutException` ao fim de `QUEUE_WAIT_TIMEOUT_MS` (ajustável por chamada). É o que
   sustenta a degradação graciosa: estourado o prazo de uma fonte não bloqueante, o chamador
@@ -815,6 +825,56 @@ O teto é 0,25 para ODS 13, por sua baixa cobertura estrutural, e 1 para ODS 15.
 Fonte sem resposta não amplia cobertura; sinal incorreto ou achado sem
 rastreabilidade não acrescenta qualidade. A composição no perfil e a API
 pública completa ficam na #81.
+
+### Recálculo dos índices por fila (UC15, #80)
+
+O motor acima roda dentro de um job da fila `ods-scoring`, `recalculate-scores(cnpj)`, consumido por
+`OdsScoringProcessor` (`scoring/`). Quem precisa de um índice novo **pede**; nada chama o motor
+direto no fluxo de ingestão ou de consulta. `RequestScoreRecalculationUseCase` publica o pedido e
+`RequestScoreRecalculationBatchUseCase`, o de várias empresas (em lotes de 25 publicações ao mesmo
+tempo; CNPJ repetido vale um pedido).
+
+**Gatilhos** (os três da issue):
+
+| Gatilho | Quando pede | Espera? |
+| --- | --- | --- |
+| Ingestão do IBAMA (UC14, passo 5) | O lote diário, depois de `batch.finish()` e **antes** de marcar a execução `SUCCEEDED`: um job por empresa **afetada** (gravada ou com evidência removida pela carga). A coleta avulsa por CNPJ também. Dump idêntico (`SKIPPED_UNCHANGED`) não pede nada. | não |
+| Consulta sob demanda (UC07, diagrama 3) | `GetCompanyEnvironmentalEvidencesUseCase`, com as fontes consolidadas e antes de reler as evidências. | **sim**, até `QUEUE_WAIT_TIMEOUT_MS`: prazo estourado ou job falho **degradam** (a consulta responde, o índice fica como estava) |
+| Atualização do perfil cadastral | `RefreshCompanyProfileUseCase`, depois de gravar o cadastro: UF, cidade e CNAEs desnormalizados dos índices são reescritos pelo recálculo. | não |
+
+Pedir **nunca falha** o fluxo de quem pediu: fila fora do ar, prazo ou job falho viram `DEGRADED` e um
+aviso (só o tipo do erro, sem CNPJ). O índice é derivado e reproduzível.
+
+**Coalescência e ordem.** O `jobId` é `scores-<cnpj>` com `coalesce` (ver "Filas"): pedidos simultâneos
+viram um job só, e um pedido feito depois de o job terminar gera outro (nunca devolve resultado
+velho). Como pode haver o job ativo e o seu acompanhamento ao mesmo tempo, **o índice nunca regride**:
+`calculatedAt` é o instante da **leitura** das evidências (tomado antes dela), e
+`replaceForCompany` não grava se já existe índice da empresa calculado depois desse instante
+(devolve `false`).
+
+**Idempotência.** Reexecutar sem mudança de evidências produz o mesmo resultado (só o instante do
+cálculo avança).
+
+**Versão de regras.** `ODS_SCORE_RULES_VERSION` fica gravada em cada índice. Alterá-la deixa os
+índices antigos na versão velha, e o job agendado `recalculate-stale-scores` (todo dia às 05:30,
+depois da ingestão do IBAMA; `ods-stale-rules-sweep`) reenfileira, por cursor de CNPJ e em páginas de
+200, as empresas com índice de outra versão. É retomável (a empresa sai da lista quando seu índice é
+regravado) e, se a fila recusar algum pedido, falha ao final para o BullMQ repetir. Para antecipar,
+publique o mesmo job na fila `ods-scoring` (`recalculate-stale-scores`, sem carga).
+
+**Cache.** Ao final de cada recálculo são apagados, para o CNPJ, `company-profile`,
+`company-evidences` e `company-scores`. Os retratos das fontes (`cgu-ceis`, `cgu-cnep`,
+`ghg-inventory`) **ficam**: não dependem do índice, e apagá-los (como faria `CacheProvider.invalidate`,
+que limpa tudo do CNPJ) forçaria novas consultas externas a cada recálculo.
+
+**Falhas.** Job malformado e ambiente sem ODS ativo (ou ODS sem regras, `ScoringNotConfiguredError`)
+são **irrecuperáveis**: falham na hora, sem as 3 tentativas da fila, e quem espera é avisado sem
+esperar o prazo. As demais falhas são repetidas (3 tentativas, backoff exponencial de 1 s).
+
+**Limites conhecidos.** Evidência que chega **depois** do prazo da consulta (GHG ou CGU que
+concluem no worker depois que a consulta já respondeu) só entra no índice na próxima consulta ou no
+próximo recálculo; esses workers não pedem recálculo por conta própria. Evidências que passam a
+`OUTDATED` só pelo passar do tempo também não disparam recálculo.
 
 ### Explicação do índice por ODS (RF12)
 
