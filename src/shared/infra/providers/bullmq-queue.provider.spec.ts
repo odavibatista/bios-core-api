@@ -320,6 +320,160 @@ describe('BullMqQueueProvider', () => {
     });
   });
 
+  describe('coalescência exata por jobId (#80)', () => {
+    /** Fila com estado por `jobId` e jobs que sabem se foram removidos. */
+    function queueWith(states: Record<string, JobState | 'unknown'>) {
+      const removed: string[] = [];
+      const queue = {
+        add: vi.fn().mockResolvedValue({ id: 'publicado' }),
+        getJobState: vi.fn((id: string) =>
+          Promise.resolve(states[id] ?? 'unknown'),
+        ),
+        getJob: vi.fn((id: string) =>
+          Promise.resolve({
+            remove: () => {
+              removed.push(id);
+              states[id] = 'unknown';
+
+              return Promise.resolve();
+            },
+          }),
+        ),
+        upsertJobScheduler: vi.fn(),
+        removeJobScheduler: vi.fn(),
+      };
+
+      return { queue, removed };
+    }
+    const publish = (
+      queue: ReturnType<typeof queueWith>['queue'],
+      jobId: string,
+    ) =>
+      createProvider({ [QueueName.ODS_SCORING]: queue }).enqueue(
+        QueueName.ODS_SCORING,
+        buildJobName(),
+        buildJobPayload(),
+        { jobId, coalesce: true },
+      );
+    const publishedId = (queue: ReturnType<typeof queueWith>['queue']) =>
+      (queue.add.mock.calls[0] as [string, unknown, { jobId: string }])[2]
+        .jobId;
+
+    it('sem job anterior, publica com o próprio jobId', async () => {
+      const { queue, removed } = queueWith({});
+
+      await publish(queue, 'scores-1');
+
+      expect(publishedId(queue)).toBe('scores-1');
+      expect(removed).toEqual([]);
+    });
+
+    it.each(['waiting', 'delayed', 'prioritized'] as const)(
+      'job %s: publica com o mesmo jobId, e o BullMQ funde o pedido a ele',
+      async (state) => {
+        const { queue, removed } = queueWith({ 'scores-1': state });
+
+        await publish(queue, 'scores-1');
+
+        expect(publishedId(queue)).toBe('scores-1');
+        expect(removed).toEqual([]);
+      },
+    );
+
+    it.each(['completed', 'failed'] as const)(
+      'job %s: remove o registro e publica um job novo (o resultado velho não vale)',
+      async (state) => {
+        const { queue, removed } = queueWith({ 'scores-1': state });
+
+        await publish(queue, 'scores-1');
+
+        expect(removed).toEqual(['scores-1']);
+        expect(publishedId(queue)).toBe('scores-1');
+      },
+    );
+
+    it('job ativo: publica um único acompanhamento, para não perder o que chegou depois da leitura', async () => {
+      const { queue, removed } = queueWith({ 'scores-1': 'active' });
+
+      await publish(queue, 'scores-1');
+
+      expect(publishedId(queue)).toBe('scores-1~next');
+      expect(removed).toEqual([]);
+    });
+
+    it('job ativo com acompanhamento já pendente: funde-se a ele', async () => {
+      const { queue, removed } = queueWith({
+        'scores-1': 'active',
+        'scores-1~next': 'waiting',
+      });
+
+      await publish(queue, 'scores-1');
+
+      expect(publishedId(queue)).toBe('scores-1~next');
+      expect(removed).toEqual([]);
+    });
+
+    it('acompanhamento anterior já concluído é removido antes de publicar outro', async () => {
+      const { queue, removed } = queueWith({
+        'scores-1': 'active',
+        'scores-1~next': 'completed',
+      });
+
+      await publish(queue, 'scores-1');
+
+      expect(removed).toEqual(['scores-1~next']);
+      expect(publishedId(queue)).toBe('scores-1~next');
+    });
+
+    it('sem coalesce, não consulta o estado nem remove nada', async () => {
+      const { queue, removed } = queueWith({ 'scores-1': 'completed' });
+
+      await createProvider({ [QueueName.ODS_SCORING]: queue }).enqueue(
+        QueueName.ODS_SCORING,
+        buildJobName(),
+        buildJobPayload(),
+        { jobId: 'scores-1' },
+      );
+
+      expect(queue.getJobState).not.toHaveBeenCalled();
+      expect(removed).toEqual([]);
+      expect(publishedId(queue)).toBe('scores-1');
+    });
+
+    it('enqueueAndWait espera o job que de fato foi publicado', async () => {
+      const { queue } = queueWith({ 'scores-1': 'active' });
+      let published = false;
+      queue.add.mockImplementation(() => {
+        published = true;
+
+        return Promise.resolve({ id: 'scores-1~next' });
+      });
+      queue.getJobState.mockImplementation((id: string) =>
+        Promise.resolve(
+          id === 'scores-1' ? 'active' : published ? 'completed' : 'unknown',
+        ),
+      );
+      queue.getJob.mockImplementation(() =>
+        Promise.resolve({ returnvalue: { ok: true } } as never),
+      );
+
+      const result = await createProvider({
+        [QueueName.ODS_SCORING]: queue,
+      }).enqueueAndWait(
+        QueueName.ODS_SCORING,
+        buildJobName(),
+        buildJobPayload(),
+        {
+          jobId: 'scores-1',
+          coalesce: true,
+        },
+      );
+
+      expect(result).toEqual({ ok: true });
+      expect(queue.getJob).toHaveBeenCalledWith('scores-1~next');
+    });
+  });
+
   describe('jobs repetíveis', () => {
     it('registra o agendamento pelo identificador, com o padrão cron', async () => {
       const queue = fakeQueue();
