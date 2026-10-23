@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { RequestTrigger } from '@prisma/client';
 import { RecordEvidenceEntriesUseCase } from '@modules/evidences/infra/usecases/record-evidence-entries.usecase.js';
@@ -127,9 +128,22 @@ describe('coleta CGU por empresa', () => {
     await useCase.execute({ cnpj, context });
     expect(ceis.fetch).toHaveBeenCalledOnce();
   });
-  it('excecao CEIS inesperada nao perde resposta CNEP', async () => {
+  it('excecao CEIS inesperada nao perde resposta CNEP e fica visivel no log', async () => {
+    const error = vi
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
     ceis.fetch.mockRejectedValue(new Error('rede fora'));
     await useCase.execute({ cnpj, context });
+    expect(error).toHaveBeenCalledWith(
+      {
+        event: 'source_unknown',
+        source: 'CGU_CEIS',
+        reason: 'UNEXPECTED_ERROR',
+        error: 'Error',
+      },
+      expect.any(String),
+    );
+    expect(JSON.stringify(error.mock.calls)).not.toContain('rede fora');
     expect(collection.execute).toHaveBeenCalledWith({
       cnpj,
       sourceSlug: 'CGU_CEIS',
