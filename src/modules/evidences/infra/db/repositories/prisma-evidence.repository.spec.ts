@@ -8,6 +8,12 @@ import { PrismaEvidenceRepository } from './prisma-evidence.repository.js';
 
 describe('PrismaEvidenceRepository', () => {
   const upsert = vi.fn();
+  const create = vi.fn();
+  const findUnique = vi.fn();
+  const clockFindUnique = vi.fn();
+  const clockUpsert = vi.fn();
+  const clockUpdateMany = vi.fn();
+  const clockCreate = vi.fn();
   const deleteMany = vi.fn();
   const updateMany = vi.fn();
   const findFirst = vi.fn();
@@ -40,31 +46,91 @@ describe('PrismaEvidenceRepository', () => {
   }
 
   beforeEach(async () => {
+    const prismaMock = {
+      evidenceNormalized: {
+        upsert,
+        create,
+        findUnique,
+        deleteMany,
+        updateMany,
+        findFirst,
+        findMany,
+      },
+      evidenceCollectionClock: {
+        findUnique: clockFindUnique,
+        upsert: clockUpsert,
+        updateMany: clockUpdateMany,
+        create: clockCreate,
+      },
+    };
     const moduleRef = await Test.createTestingModule({
       providers: [
         PrismaEvidenceRepository,
         {
           provide: PrismaService,
           useValue: {
-            evidenceNormalized: {
-              upsert,
-              deleteMany,
-              updateMany,
-              findFirst,
-              findMany,
-            },
+            ...prismaMock,
+            $transaction: (
+              callback: (tx: typeof prismaMock) => Promise<unknown>,
+            ) => callback(prismaMock),
           },
         },
       ],
     }).compile();
 
     repository = moduleRef.get(PrismaEvidenceRepository);
+    clockFindUnique.mockResolvedValue(null);
+    clockUpsert.mockResolvedValue({});
+    clockUpdateMany.mockResolvedValue({ count: 0 });
+    clockCreate.mockResolvedValue({});
+    findUnique.mockResolvedValue(null);
+    updateMany.mockResolvedValue({ count: 0 });
+    create.mockResolvedValue({});
+    upsert.mockResolvedValue({});
+    deleteMany.mockResolvedValue({ count: 0 });
+    findFirst.mockResolvedValue(null);
   });
 
   describe('save', () => {
-    it('cria ou atualiza pela chave, com todos os campos', async () => {
-      upsert.mockResolvedValue({});
+    it.each(['empresa', 'dump completo'])(
+      'ignora linha do lote anterior ao relógio da %s',
+      async (scope) => {
+        clockFindUnique.mockImplementation(
+          ({ where }: { where: { scope_key: string } }) =>
+            Promise.resolve(
+              where.scope_key.endsWith(
+                scope === 'empresa' ? evidence.cnpj : ':*',
+              )
+                ? { collected_at: new Date(evidence.collectedAt.getTime() + 1) }
+                : null,
+            ),
+        );
+        await repository.save(evidence);
+        expect(clockUpsert).not.toHaveBeenCalled();
+        expect(updateMany).not.toHaveBeenCalled();
+      },
+    );
 
+    it('atualiza chave existente somente até a data da coleta', async () => {
+      updateMany.mockResolvedValue({ count: 1 });
+      await repository.save(evidence);
+      expect(create).not.toHaveBeenCalled();
+      expect(updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            evidence_key: evidence.key,
+            collected_at: { lte: evidence.collectedAt },
+          },
+        }),
+      );
+    });
+
+    it('não recria chave existente mais nova', async () => {
+      findUnique.mockResolvedValue({ id_evidence: 'mais-nova' });
+      await repository.save(evidence);
+      expect(create).not.toHaveBeenCalled();
+    });
+    it('cria ou atualiza pela chave, com todos os campos', async () => {
       await repository.save(evidence);
 
       const expected = {
@@ -83,17 +149,19 @@ describe('PrismaEvidenceRepository', () => {
         valid_until: evidence.validUntil,
         evidence_raw_id: evidence.rawEvidenceId,
       };
-      expect(upsert).toHaveBeenCalledOnce();
-      expect(upsert).toHaveBeenCalledWith({
-        where: { evidence_key: evidence.key },
-        create: { evidence_key: evidence.key, ...expected },
-        update: expected,
+      expect(updateMany).toHaveBeenCalledWith({
+        where: {
+          evidence_key: evidence.key,
+          collected_at: { lte: evidence.collectedAt },
+        },
+        data: expected,
+      });
+      expect(create).toHaveBeenCalledWith({
+        data: { evidence_key: evidence.key, ...expected },
       });
     });
 
     it('o campo que a coleta não traz é gravado como null, e não omitido', async () => {
-      upsert.mockResolvedValue({});
-
       await repository.save({
         ...evidence,
         summary: null,
@@ -103,8 +171,8 @@ describe('PrismaEvidenceRepository', () => {
         rawEvidenceId: null,
       });
 
-      const [{ update }] = upsert.mock.calls[0] as [
-        { update: Record<string, unknown> },
+      const [{ data }] = updateMany.mock.calls[0] as [
+        { data: Record<string, unknown> },
       ];
       for (const field of [
         'summary',
@@ -113,64 +181,127 @@ describe('PrismaEvidenceRepository', () => {
         'published_at',
         'evidence_raw_id',
       ]) {
-        expect(update).toHaveProperty(field, null);
+        expect(data).toHaveProperty(field, null);
       }
     });
 
     it('nunca regrava a data de criação', async () => {
-      upsert.mockResolvedValue({});
-
       await repository.save(evidence);
 
-      const [{ update, create }] = upsert.mock.calls[0] as [
-        { update: object; create: object },
-      ];
-      expect(update).not.toHaveProperty('created_at');
-      expect(create).not.toHaveProperty('created_at');
+      const [{ data }] = updateMany.mock.calls[0] as [{ data: object }];
+      expect(data).not.toHaveProperty('created_at');
+      expect(create.mock.calls[0][0].data).not.toHaveProperty('created_at');
     });
 
     it('se a criação disputada perde para outra gravação (índice único), tenta de novo', async () => {
-      upsert.mockRejectedValueOnce(uniqueViolation()).mockResolvedValue({});
+      create.mockRejectedValueOnce(uniqueViolation());
 
       await expect(repository.save(evidence)).resolves.toBeUndefined();
 
-      expect(upsert).toHaveBeenCalledTimes(2);
+      expect(create).toHaveBeenCalledTimes(2);
     });
 
-    it('não esconde a violação que se repete', async () => {
-      upsert.mockRejectedValue(uniqueViolation());
+    it('não esconde falha na repetição após disputa de criação', async () => {
+      create.mockRejectedValue(uniqueViolation());
 
       await expect(repository.save(evidence)).rejects.toBeInstanceOf(
         Prisma.PrismaClientKnownRequestError,
       );
-      expect(upsert).toHaveBeenCalledTimes(2);
+      expect(create).toHaveBeenCalledTimes(12);
     });
 
     it('propaga qualquer outra falha, sem repetir', async () => {
-      upsert.mockRejectedValue(new Error('banco fora'));
+      create.mockRejectedValue(new Error('banco fora'));
 
       await expect(repository.save(evidence)).rejects.toThrow('banco fora');
-      expect(upsert).toHaveBeenCalledOnce();
+      expect(create).toHaveBeenCalledOnce();
     });
   });
 
-  describe('deleteOthers', () => {
-    it('remove da empresa e da fonte o que não está nas chaves a manter', async () => {
-      deleteMany.mockResolvedValue({ count: 4 });
-      const cnpj = buildCnpj();
-      const sourceId = faker.database.mongodbObjectId();
-
-      await expect(
-        repository.deleteOthers(cnpj, sourceId, ['a', 'b']),
-      ).resolves.toBe(4);
-
-      expect(deleteMany).toHaveBeenCalledWith({
-        where: {
-          cnpj,
-          data_source_id: sourceId,
-          evidence_key: { notIn: ['a', 'b'] },
-        },
+  describe('replaceSnapshot', () => {
+    it('ignora retrato anterior ao relógio sem modificar o banco', async () => {
+      clockFindUnique.mockResolvedValue({
+        collected_at: new Date(evidence.collectedAt.getTime() + 1),
       });
+      await expect(
+        repository.replaceSnapshot(
+          evidence.cnpj,
+          evidence.dataSourceId,
+          evidence.collectedAt,
+          [evidence],
+        ),
+      ).resolves.toEqual({ saved: 0, removed: 0 });
+      expect(upsert).not.toHaveBeenCalled();
+      expect(deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('grava e remove um retrato na mesma transação e avança o relógio', async () => {
+      deleteMany.mockResolvedValue({ count: 2 });
+      await expect(
+        repository.replaceSnapshot(
+          evidence.cnpj,
+          evidence.dataSourceId,
+          evidence.collectedAt,
+          [evidence],
+        ),
+      ).resolves.toEqual({ saved: 1, removed: 2 });
+      expect(clockUpsert).toHaveBeenCalledOnce();
+      expect(upsert).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { evidence_key: evidence.key } }),
+      );
+      expect(deleteMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            cnpj: evidence.cnpj,
+            data_source_id: evidence.dataSourceId,
+          }),
+        }),
+      );
+    });
+
+    it('não troca resposta confirmada por UNKNOWN', async () => {
+      findFirst.mockResolvedValue({ id_evidence: 'respondida' });
+      await expect(
+        repository.replaceSnapshot(
+          evidence.cnpj,
+          evidence.dataSourceId,
+          evidence.collectedAt,
+          [evidence],
+          true,
+        ),
+      ).resolves.toEqual({ saved: 0, removed: 0 });
+      expect(clockUpsert).not.toHaveBeenCalled();
+    });
+
+    it('UNKNOWN não avança a versão de uma resposta da fonte', async () => {
+      await repository.replaceSnapshot(
+        evidence.cnpj,
+        evidence.dataSourceId,
+        evidence.collectedAt,
+        [evidence],
+        true,
+      );
+      expect(clockUpsert).not.toHaveBeenCalled();
+      expect(deleteMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            OR: [{ collected_at: { lte: evidence.collectedAt } }],
+          }),
+        }),
+      );
+    });
+
+    it('repete disputa de criação do relógio e reavalia o retrato', async () => {
+      clockUpsert.mockRejectedValueOnce(uniqueViolation());
+      await expect(
+        repository.replaceSnapshot(
+          evidence.cnpj,
+          evidence.dataSourceId,
+          evidence.collectedAt,
+          [evidence],
+        ),
+      ).resolves.toEqual({ saved: 1, removed: 0 });
+      expect(clockUpsert).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -217,6 +348,7 @@ describe('PrismaEvidenceRepository', () => {
         where: {
           data_source_id: sourceId,
           state: { in: [EvidenceState.CONFIRMED, EvidenceState.NOT_FOUND] },
+          collected_at: { lte: collectedAt },
         },
         data: { collected_at: collectedAt, valid_until: validUntil },
       });
