@@ -471,8 +471,14 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         await recordCollection.execute({
           cnpj: IBAMA_OTHER_CNPJ,
           sourceSlug: 'IBAMA',
-          collectedAt: old,
           result: { status: 'UNAVAILABLE' },
+        });
+        await prisma.evidenceNormalized.updateMany({
+          where: { cnpj: IBAMA_OTHER_CNPJ },
+          data: {
+            collected_at: old,
+            valid_until: new Date(old.getTime() + 15 * 60_000),
+          },
         });
         const otherSourceBefore = (await evidences()).find((e) =>
           e.evidence_key.startsWith('CGU_CEIS:'),
