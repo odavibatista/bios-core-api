@@ -1,8 +1,10 @@
 import { EvidenceState } from '@prisma/client';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { UseCase } from '@shared/domain/protocols/use-case.protocol.js';
 import { parseCnpj } from '@shared/domain/value-objects/cnpj.js';
 import type { SourceCallContext } from '@modules/data-sources/domain/dtos/providers/data-source-request.dto.js';
+import { UnknownReason } from '@modules/data-sources/domain/unknown-reason.js';
+import { logSourceUnknown } from '@modules/data-sources/infra/usecases/request/log-source-unknown.js';
 import { InvalidEvidenceError } from '@modules/evidences/domain/dtos/errors/evidence.errors.js';
 import type { StoredEvidence } from '@modules/evidences/domain/dtos/repositories/evidence.repository.js';
 import { RecordEvidenceEntriesUseCase } from '@modules/evidences/infra/usecases/record-evidence-entries.usecase.js';
@@ -18,6 +20,8 @@ export class GetCguCompanyEvidencesUseCase extends UseCase<
   { cnpj: string; context: SourceCallContext },
   StoredEvidence[]
 > {
+  private readonly logger = new Logger(GetCguCompanyEvidencesUseCase.name);
+
   constructor(
     private readonly ceis: CeisDataSource,
     private readonly cnep: CnepDataSource,
@@ -49,9 +53,20 @@ export class GetCguCompanyEvidencesUseCase extends UseCase<
           )
         )
           return;
-        const result = await adapter.fetch(cnpj, input.context).catch(() => ({
-          status: 'UNAVAILABLE' as const,
-        }));
+        // O adapter já devolve UNAVAILABLE para as falhas que classifica; se
+        // chegar uma exceção, é defeito do programa e precisa ficar visível.
+        const result = await adapter
+          .fetch(cnpj, input.context)
+          .catch((error: unknown) => {
+            logSourceUnknown(
+              this.logger,
+              adapter.slug,
+              UnknownReason.UNEXPECTED_ERROR,
+              error,
+            );
+
+            return { status: 'UNAVAILABLE' as const };
+          });
         if (result.status === 'UNAVAILABLE') {
           await this.collection.execute({
             cnpj,
