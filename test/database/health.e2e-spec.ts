@@ -21,7 +21,11 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         .get('/health')
         .expect(200);
 
-      expect(response.body.checks).toEqual({ database: 'up', redis: 'up' });
+      expect(response.body.checks).toEqual({
+        database: 'up',
+        redis: 'up',
+        cgu_credentials: 'configured',
+      });
     });
   },
 );
