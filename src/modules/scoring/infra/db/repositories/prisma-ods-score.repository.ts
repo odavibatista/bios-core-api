@@ -50,6 +50,8 @@ export class PrismaOdsScoreRepository
           'CGU_SANCTION_EXPIRED' | 'IBAMA_EMBARGO_LIFTED' | null,
         points: item.points,
       })),
+      coverageStatus: row.coverage_status as OdsScoreSnapshot['coverageStatus'],
+      sourcesWithoutRecords: row.sources_without_records,
       rulesVersion: row.rules_version,
       calculatedAt: row.calculated_at,
     };
@@ -94,6 +96,8 @@ export class PrismaOdsScoreRepository
             weight_reason: item.weightReason,
             points: item.points,
           })),
+          coverage_status: score.coverageStatus,
+          sources_without_records: score.sourcesWithoutRecords,
           rules_version: score.rulesVersion,
           uf: score.location?.uf ?? null,
           city: score.location?.city ?? null,

@@ -25,7 +25,11 @@ export type OdsScoreSnapshot = Pick<
   | 'contributions'
   | 'rulesVersion'
   | 'calculatedAt'
->;
+> & {
+  /** Nulo em retratos gravados antes da cobertura; passam a ter valor no recálculo (#80). */
+  coverageStatus: CalculatedOdsScore['coverageStatus'] | null;
+  sourcesWithoutRecords: CalculatedOdsScore['sourcesWithoutRecords'];
+};
 
 /** Contrato da leitura dos ODS e da substituição atômica dos índices de uma empresa. */
 export abstract class OdsScoreRepository {
