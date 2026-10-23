@@ -15,6 +15,8 @@ describe('OpenEvidenceBatchUseCase', () => {
     save: vi.fn<EvidenceRepository['save']>(),
     deleteNotCollectedSince:
       vi.fn<EvidenceRepository['deleteNotCollectedSince']>(),
+    findCnpjsNotCollectedSince:
+      vi.fn<EvidenceRepository['findCnpjsNotCollectedSince']>(),
   };
   const rawEvidenceRepository = {
     save: vi.fn<RawEvidenceRepository['save']>(),
@@ -37,6 +39,7 @@ describe('OpenEvidenceBatchUseCase', () => {
   beforeEach(async () => {
     evidenceRepository.save.mockResolvedValue(undefined);
     evidenceRepository.deleteNotCollectedSince.mockResolvedValue(0);
+    evidenceRepository.findCnpjsNotCollectedSince.mockResolvedValue([]);
     rawEvidenceRepository.save.mockResolvedValue('raw-1');
     resolveEvidenceSource.execute.mockResolvedValue(source);
     resolveSourceCacheTtl.execute.mockResolvedValue(TTL_SECONDS);

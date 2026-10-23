@@ -89,6 +89,16 @@ export abstract class EvidenceRepository {
   ): Promise<number>;
 
   /**
+   * CNPJs distintos que têm evidência da fonte coletada antes de `before`: os donos do que
+   * `deleteNotCollectedSince` removeria. Consulte **antes** de remover (#80: essas empresas
+   * mudaram de situação e precisam de novo índice).
+   */
+  abstract findCnpjsNotCollectedSince(
+    dataSourceId: string,
+    before: Date,
+  ): Promise<string[]>;
+
+  /**
    * Renova a validade das evidências da fonte, de **qualquer empresa**, que
    * ainda respondem (`CONFIRMED` ou `NOT_FOUND`): a data de coleta passa a
    * `collectedAt` e a validade, a `validUntil`. As `UNKNOWN` ficam como estão:

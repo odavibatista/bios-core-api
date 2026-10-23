@@ -305,6 +305,45 @@ describe('PrismaEvidenceRepository', () => {
     });
   });
 
+  describe('findCnpjsNotCollectedSince (#80)', () => {
+    it('devolve os CNPJs distintos da fonte com evidência coletada antes do corte', async () => {
+      findMany.mockResolvedValue([
+        { cnpj: '00000000000191' },
+        { cnpj: '11222333000181' },
+      ]);
+      const sourceId = faker.database.mongodbObjectId();
+      const before = faker.date.recent();
+
+      await expect(
+        repository.findCnpjsNotCollectedSince(sourceId, before),
+      ).resolves.toEqual(['00000000000191', '11222333000181']);
+
+      expect(findMany).toHaveBeenCalledWith({
+        where: { data_source_id: sourceId, collected_at: { lt: before } },
+        select: { cnpj: true },
+        distinct: ['cnpj'],
+      });
+    });
+
+    it('usa o mesmo filtro de deleteNotCollectedSince: lê o que ele removeria', async () => {
+      findMany.mockResolvedValue([]);
+      deleteMany.mockResolvedValue({ count: 0 });
+      const sourceId = faker.database.mongodbObjectId();
+      const before = faker.date.recent();
+
+      await repository.findCnpjsNotCollectedSince(sourceId, before);
+      await repository.deleteNotCollectedSince(sourceId, before);
+
+      const [{ where: found }] = findMany.mock.calls.at(-1) as [
+        { where: object },
+      ];
+      const [{ where: removed }] = deleteMany.mock.calls.at(-1) as [
+        { where: object },
+      ];
+      expect(found).toEqual(removed);
+    });
+  });
+
   describe('deleteNotCollectedSince', () => {
     it('remove da fonte, de qualquer empresa, o que foi coletado antes do corte', async () => {
       deleteMany.mockResolvedValue({ count: 7 });
