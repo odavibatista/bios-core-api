@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import type { INestApplication } from '@nestjs/common';
 import { CATALOG_SEEDERS } from '@app/database/catalog.seeders.js';
 import { faker } from '../support/faker.js';
+import { IbamaDumpLease } from '@modules/ibama/infra/providers/ibama-dump-lease.js';
 import { GetIbamaCompanyEvidencesUseCase } from '@modules/ibama/infra/usecases/get-ibama-company-evidences.usecase.js';
 import { INGEST_IBAMA_COMPANY_JOB } from '@modules/ibama/domain/dtos/providers/ibama-company-job.dto.js';
 import { IBAMA_RESOURCES } from '@modules/ibama/domain/ibama-resource.js';
@@ -44,7 +45,7 @@ const TEMP_PREFIX = 'bios-ibama-';
 
 /**
  * Job avulso IBAMA ponta a ponta (UC14): o job publicado na fila
- * `environmental-evidences` é consumido pelo `EnvironmentalEvidencesProcessor` do
+ * `ibama-ingestion` é consumido pelo `IbamaIngestionProcessor` do
  * próprio AppModule, baixa os dois dumps de um servidor local, grava as
  * evidências no MongoDB real e registra a execução em `ingestion_runs`.
  */
@@ -54,6 +55,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
     let app: INestApplication;
     let prisma: PrismaService;
     let queue: Queue;
+    let lease: IbamaDumpLease;
     let listEvidences: ListCompanyEvidencesUseCase;
     let recordCollection: RecordEvidenceCollectionUseCase;
     let server: Server;
@@ -88,7 +90,8 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       ({ app, prisma } = await createDatabaseTestingApp());
       queue = app
         .get<QueueRegistry>(QUEUE_REGISTRY, { strict: false })
-        .get(QueueName.ENVIRONMENTAL_EVIDENCES) as Queue;
+        .get(QueueName.IBAMA_INGESTION) as Queue;
+      lease = app.get(IbamaDumpLease, { strict: false });
       listEvidences = app.get(ListCompanyEvidencesUseCase, { strict: false });
       recordCollection = app.get(RecordEvidenceCollectionUseCase, {
         strict: false,
@@ -139,6 +142,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       autoStatus = 200;
       embargoFailures = 0;
       requests = [];
+      await lease.clear();
       tempBefore = tempDirectories();
       await queue.obliterate({ force: true });
       await queue.resume();
@@ -161,7 +165,9 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
     });
 
     afterEach(async () => {
-      // Nenhuma pasta temporária de dump sobra, com sucesso, skip ou falha.
+      // Os dumps ficam com a lease por alguns minutos; liberados, nenhuma pasta
+      // temporária sobra, com sucesso, skip ou falha.
+      await lease.clear();
       expect(tempDirectories()).toEqual(tempBefore);
       await queue.obliterate({ force: true });
       await queue.resume();
@@ -213,6 +219,8 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
     } = {}) {
       jobSequence += 1;
       const jobId = `ibama-e2e-${jobSequence}`;
+      // Cada chamada simula uma coleta com dumps novos; o reuso tem teste próprio.
+      await lease.clear();
       const job = await queue.add(name, payload, {
         jobId,
         attempts,
@@ -275,6 +283,49 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       );
       return (await queue.getJob(jobs[0].id as string)) as Job;
     }
+
+    it('tres CNPJs distintos simultaneos fazem um download so e nao ocupam a fila ambiental', async () => {
+      const cnpjs = [IBAMA_CNPJ, IBAMA_OTHER_CNPJ, '33000167000101'];
+      autoRows = [autoRow({ SEQ_AUTO_INFRACAO: '1' })];
+      embargoRows = [embargoRow({ SEQ_TAD: '1' })];
+      const jobs = await Promise.all(
+        cnpjs.map((cnpj, position) =>
+          queue.add(
+            INGEST_IBAMA_COMPANY_JOB,
+            { cnpj },
+            {
+              jobId: `ibama-e2e-burst-${position}`,
+              attempts: 1,
+              removeOnComplete: false,
+              removeOnFail: false,
+            },
+          ),
+        ),
+      );
+      await waitUntil(async () => {
+        const states = await Promise.all(jobs.map((job) => job.getState()));
+        return states.every((state) => state === 'completed') || undefined;
+      });
+      expect(requests.filter((url) => url === AUTO_PATH)).toHaveLength(1);
+      expect(requests.filter((url) => url === EMBARGO_PATH)).toHaveLength(1);
+      expect(lease.stats).toMatchObject({ downloads: 1, peakDownloads: 1 });
+      expect(lease.stats.reuses).toBeGreaterThanOrEqual(2);
+      const runs = await prisma.ingestionRun.findMany({
+        where: { job_id: { startsWith: 'ibama-e2e-burst-' } },
+      });
+      expect(runs.map((run) => run.status)).toEqual([
+        'SUCCEEDED',
+        'SUCCEEDED',
+        'SUCCEEDED',
+      ]);
+      const environmental = app
+        .get<QueueRegistry>(QUEUE_REGISTRY, { strict: false })
+        .get(QueueName.ENVIRONMENTAL_EVIDENCES) as Queue;
+      expect(await environmental.getJobCounts('wait', 'active')).toEqual({
+        wait: 0,
+        active: 0,
+      });
+    });
 
     it('consulta devolve UNKNOWN sem esperar o job, deduplica e depois vira CONFIRMED', async () => {
       autoRows = [autoRow({ SEQ_AUTO_INFRACAO: '1' })];

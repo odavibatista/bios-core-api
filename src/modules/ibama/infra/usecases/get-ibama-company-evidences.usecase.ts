@@ -95,7 +95,7 @@ export class GetIbamaCompanyEvidencesUseCase extends UseCase<
     const pending = await this.local(cnpj);
     try {
       await this.queue.enqueue(
-        QueueName.ENVIRONMENTAL_EVIDENCES,
+        QueueName.IBAMA_INGESTION,
         INGEST_IBAMA_COMPANY_JOB,
         { cnpj },
         { jobId: ibamaCompanyJobId(cnpj, now) },

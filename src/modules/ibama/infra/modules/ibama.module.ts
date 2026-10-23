@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { DataSourcesModule } from '@modules/data-sources/infra/modules/data-sources.module.js';
 import { EvidencesModule } from '@modules/evidences/infra/modules/evidences.module.js';
 import { IbamaDataSource } from '../providers/ibama.data-source.js';
+import { IbamaDumpLease } from '../providers/ibama-dump-lease.js';
+import { IbamaIngestionProcessor } from '../queue/ibama-ingestion.processor.js';
 import { IngestIbamaCompanyUseCase } from '../usecases/ingest-ibama-company.usecase.js';
 import { GetIbamaCompanyEvidencesUseCase } from '../usecases/get-ibama-company-evidences.usecase.js';
 import { IngestIbamaDumpsUseCase } from '../usecases/ingest-ibama-dumps.usecase.js';
@@ -16,14 +18,16 @@ import { NormalizeIbamaRecordsUseCase } from '../usecases/normalize-ibama-record
  * os normaliza em evidências (`NormalizeIbamaRecordsUseCase`). O descarte de
  * pessoa física acontece na leitura, antes de qualquer persistência (INL02).
  *
- * O consumidor ambiental vive no modulo de orquestracao de evidencias.
- * Exporta ingestao e consulta local; o lote e a coleta avulsa continuam
- * sendo despachados pela fila ambiental, sem espera na consulta IBAMA.
+ * Lote e coleta avulsa rodam na fila propria `ibama-ingestion`, com um unico
+ * consumidor (`IbamaIngestionProcessor`) e dumps reaproveitados por alguns
+ * minutos (`IbamaDumpLease`); a consulta IBAMA nao espera pela coleta.
  */
 @Module({
   imports: [DataSourcesModule, EvidencesModule],
   providers: [
     IbamaDataSource,
+    IbamaDumpLease,
+    IbamaIngestionProcessor,
     NormalizeIbamaRecordsUseCase,
     IngestIbamaDumpsUseCase,
     IngestIbamaCompanyUseCase,

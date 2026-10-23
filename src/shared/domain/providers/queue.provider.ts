@@ -53,4 +53,7 @@ export abstract class QueueProvider {
    * registrar o mesmo agendamento novamente o atualiza, nunca o duplica.
    */
   abstract schedule(schedule: QueueSchedule): Promise<void>;
+
+  /** Remove um agendamento (idempotente: ausente, não faz nada). */
+  abstract unschedule(queue: QueueName, id: string): Promise<void>;
 }

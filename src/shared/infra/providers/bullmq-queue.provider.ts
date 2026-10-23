@@ -111,6 +111,10 @@ export class BullMqQueueProvider extends QueueProvider {
     );
   }
 
+  override async unschedule(queue: QueueName, id: string): Promise<void> {
+    await this.queueOf(queue).removeJobScheduler(id);
+  }
+
   /**
    * Publica dentro do orçamento de publicação: com o Redis fora do ar, o
    * cliente guardaria o comando até reconectar, pendurando a requisição que o

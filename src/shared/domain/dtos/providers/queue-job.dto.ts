@@ -12,8 +12,11 @@ export const QueueName = {
   /** Dados cadastrais por CNPJ (BrasilAPI → OpenCNPJ → Minha Receita + IBGE). */
   COMPANY_PROFILE: 'company-profile',
 
-  /** Evidências ambientais e de conduta (IBAMA, CEIS/CNEP). */
+  /** Evidências de conduta da CGU (CEIS/CNEP): jobs curtos de quem espera a resposta. */
   ENVIRONMENTAL_EVIDENCES: 'environmental-evidences',
+
+  /** Dumps do IBAMA (lote diário e coleta avulsa): jobs pesados, um por vez (#262). */
+  IBAMA_INGESTION: 'ibama-ingestion',
 
   /** Inventário de emissões (fallback do GHG Protocol). */
   GHG_INVENTORY: 'ghg-inventory',

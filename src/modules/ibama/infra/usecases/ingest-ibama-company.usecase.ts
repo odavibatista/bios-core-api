@@ -18,6 +18,7 @@ import {
 import { combineDumpChecksums } from '../../domain/ibama-dump-checksum.js';
 import { toEvidenceEntry } from '../../domain/ibama-evidence.mapper.js';
 import { IbamaResource } from '../../domain/ibama-resource.js';
+import { IbamaDumpLease } from '../providers/ibama-dump-lease.js';
 import { IBAMA_SLUG, IbamaDataSource } from '../providers/ibama.data-source.js';
 
 export interface IngestIbamaCompanyInput {
@@ -29,6 +30,10 @@ export interface IngestIbamaCompanyInput {
  * Lê os dois dumps completos, guardando somente entradas do CNPJ solicitado.
  * A ausência só é confirmada após ambos terminarem: um 404, erro de formato ou
  * falha no segundo recurso nunca pode apagar o retrato anterior da empresa.
+ *
+ * Os dumps vêm da `IbamaDumpLease`: avulsos seguidos de CNPJs distintos
+ * compartilham um único download (#262), e a coleta é datada pelo instante
+ * em que os arquivos foram baixados, não pelo da leitura.
  */
 @Injectable()
 export class IngestIbamaCompanyUseCase extends UseCase<
@@ -43,6 +48,7 @@ export class IngestIbamaCompanyUseCase extends UseCase<
     private readonly finishRun: FinishIngestionRunUseCase,
     private readonly recordEntries: RecordEvidenceEntriesUseCase,
     private readonly recordCollection: RecordEvidenceCollectionUseCase,
+    private readonly dumpLease: IbamaDumpLease,
   ) {
     super();
   }
@@ -53,13 +59,87 @@ export class IngestIbamaCompanyUseCase extends UseCase<
   }: IngestIbamaCompanyInput): Promise<IbamaCompanyJobResult> {
     if (parseCnpj(cnpj) !== cnpj)
       throw new InvalidEvidenceError('CNPJ avulso deve ser canônico e válido.');
-    const collectedAt = new Date();
+    const startedAt = new Date();
     const run = await this.openRun.execute({
       sourceSlug: IBAMA_SLUG,
       jobId,
       cnpj,
-      startedAt: collectedAt,
+      startedAt,
     });
+    try {
+      return await this.dumpLease.use(
+        () => this.downloadDumps(run.id),
+        async ({ dumps, downloadedAt, reused }) => {
+          const entries: EvidenceBatchEntry[] = [];
+          let recordsRead = 0;
+          let recordsDiscarded = 0;
+          for (const dump of dumps) {
+            for await (const record of dump.records()) {
+              if (record.cnpj !== cnpj) {
+                recordsDiscarded += 1;
+                continue;
+              }
+              const entry = toEvidenceEntry(record);
+              if (entry) entries.push(entry);
+              else recordsDiscarded += 1;
+            }
+            recordsRead += dump.stats.rows;
+            recordsDiscarded += Object.values(dump.stats.discarded).reduce(
+              (sum, value) => sum + value,
+              0,
+            );
+          }
+          const { saved, removed } = await this.recordEntries.execute({
+            cnpj,
+            sourceSlug: IBAMA_SLUG,
+            entries,
+            collectedAt: downloadedAt,
+            ingestionRunId: run.id,
+          });
+          const dumpChecksum = combineDumpChecksums(dumps);
+          await this.finishRun.execute({
+            runId: run.id,
+            status: IngestionRunStatus.SUCCEEDED,
+            dumpChecksum,
+            recordsRead,
+            recordsUpserted: saved,
+            recordsDiscarded,
+          });
+          if (reused)
+            this.logger.log(
+              `Coleta avulsa do IBAMA concluída com dumps reaproveitados (execução ${run.id}).`,
+            );
+          return {
+            outcome: 'SUCCEEDED' as const,
+            cnpj,
+            ingestionRunId: run.id,
+            dumpChecksum,
+            recordsRead,
+            recordsUpserted: saved,
+            recordsDiscarded,
+            removed,
+          };
+        },
+      );
+    } catch (error) {
+      try {
+        await this.recordCollection.execute({
+          cnpj,
+          sourceSlug: IBAMA_SLUG,
+          result: { status: 'UNAVAILABLE' },
+          collectedAt: startedAt,
+        });
+      } catch {
+        this.logger.warn(
+          'Não foi possível registrar a indisponibilidade da coleta avulsa do IBAMA.',
+        );
+      }
+      throw error;
+    }
+  }
+
+  /** Baixa os dois dumps; se algo falhar, apaga o que já veio antes de propagar. */
+  private async downloadDumps(ingestionRunId: string): Promise<IbamaDump[]> {
     const dumps: IbamaDump[] = [];
     try {
       const failures = [];
@@ -69,7 +149,7 @@ export class IngestIbamaCompanyUseCase extends UseCase<
       ]) {
         const result = await this.source.download(resource, {
           trigger: RequestTrigger.ON_DEMAND_JOB,
-          ingestionRunId: run.id,
+          ingestionRunId,
         });
         if (result.status === 'FOUND') dumps.push(result.data);
         else if (
@@ -87,67 +167,10 @@ export class IngestIbamaCompanyUseCase extends UseCase<
           });
       }
       if (failures.length) throw new IbamaDumpUnavailableError(failures);
-      const entries: EvidenceBatchEntry[] = [];
-      let recordsRead = 0;
-      let recordsDiscarded = 0;
-      for (const dump of dumps) {
-        for await (const record of dump.records()) {
-          if (record.cnpj !== cnpj) {
-            recordsDiscarded += 1;
-            continue;
-          }
-          const entry = toEvidenceEntry(record);
-          if (entry) entries.push(entry);
-          else recordsDiscarded += 1;
-        }
-        recordsRead += dump.stats.rows;
-        recordsDiscarded += Object.values(dump.stats.discarded).reduce(
-          (sum, value) => sum + value,
-          0,
-        );
-      }
-      const { saved, removed } = await this.recordEntries.execute({
-        cnpj,
-        sourceSlug: IBAMA_SLUG,
-        entries,
-        collectedAt,
-        ingestionRunId: run.id,
-      });
-      const dumpChecksum = combineDumpChecksums(dumps);
-      await this.finishRun.execute({
-        runId: run.id,
-        status: IngestionRunStatus.SUCCEEDED,
-        dumpChecksum,
-        recordsRead,
-        recordsUpserted: saved,
-        recordsDiscarded,
-      });
-      return {
-        outcome: 'SUCCEEDED',
-        cnpj,
-        ingestionRunId: run.id,
-        dumpChecksum,
-        recordsRead,
-        recordsUpserted: saved,
-        recordsDiscarded,
-        removed,
-      };
+      return dumps;
     } catch (error) {
-      try {
-        await this.recordCollection.execute({
-          cnpj,
-          sourceSlug: IBAMA_SLUG,
-          result: { status: 'UNAVAILABLE' },
-          collectedAt,
-        });
-      } catch {
-        this.logger.warn(
-          'Não foi possível registrar a indisponibilidade da coleta avulsa do IBAMA.',
-        );
-      }
-      throw error;
-    } finally {
       await Promise.allSettled(dumps.map((dump) => dump.dispose()));
+      throw error;
     }
   }
 }

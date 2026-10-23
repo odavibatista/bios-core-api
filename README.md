@@ -171,7 +171,8 @@ módulo dono do fluxo. Um consumidor por fila: dois na mesma fila competiriam pe
 | Fila | Conteúdo | Consumidor |
 | --- | --- | --- |
 | `company-profile` | Dados cadastrais por CNPJ | `CompanyProfileProcessor` (`companies/`) |
-| `environmental-evidences` | Evidências ambientais e de conduta (IBAMA, CEIS/CNEP) | `EnvironmentalEvidencesProcessor` (`evidences/`): lote diário/avulso IBAMA e consulta CGU por CNPJ |
+| `environmental-evidences` | Evidências de conduta da CGU (CEIS/CNEP) | `EnvironmentalEvidencesProcessor` (`evidences/`), concorrência 3: consulta CGU por CNPJ, jobs curtos de quem espera a resposta |
+| `ibama-ingestion` | Dumps do IBAMA (lote diário e coleta avulsa por CNPJ) | `IbamaIngestionProcessor` (`ibama/`), exclusivo, concorrência 1: um download de dumps por vez |
 | `ghg-inventory` | Inventário de emissões (fallback do GHG Protocol) | `GhgInventoryProcessor` (`ghg/`), exclusivo, concorrência 1: coleta por CNPJ e sincronização diária do cadastro de organizações |
 | `ods-scoring` | Recálculo de índice e confiança por ODS | ainda não implementado |
 | `email-dispatch` | E-mails transacionais | consumida nesta API (`mailing/`) |
@@ -199,11 +200,11 @@ await queues.schedule({ queue, id: 'ibama-daily-ingestion', jobName, cron: '0 4 
   boot pelo `QueueSchedulesInitializer`. O registro é idempotente pelo `id`: reiniciar a API
   não duplica o disparo. Desligue com `QUEUE_SCHEDULES_SYNC_ON_BOOT=false`.
 - **Retry por agendamento.** Um agendamento pode trazer a própria política (`retry`), no lugar da
-  da fila. A fila `environmental-evidences` é compartilhada por jobs de naturezas opostas: o lote
-  diário do IBAMA (minutos por tentativa, fonte que costuma ficar horas fora do ar) e
-  os jobs por CNPJ (que erram rápido para quem espera). O lote declara **5 tentativas com
-  backoff exponencial de base 5 min** (5, 10, 20 e 40 min entre elas); os demais jobs da fila
-  mantêm a política curta da fila (5 tentativas, base de 5 s).
+  da fila. O lote diário do IBAMA (minutos por tentativa, fonte que costuma ficar horas fora do ar)
+  declara **5 tentativas com backoff exponencial de base 5 min** (5, 10, 20 e 40 min entre
+  elas); os jobs por CNPJ da mesma fila `ibama-ingestion` mantêm a política curta da fila
+  (5 tentativas, base de 5 s). O agendador antigo do lote, que vivia em `environmental-evidences`,
+  é removido a cada boot (`QUEUE_RETIRED_SCHEDULES`).
 - **A API sobe sem Redis.** A conexão é `lazyConnect` e o `/health` reporta
   `checks.redis`. Por esse mesmo motivo a espera consulta o estado do job em intervalos
   curtos em vez de usar `QueueEvents`: o `QueueEvents` abre uma conexão bloqueante ao ser
@@ -965,11 +966,24 @@ await batch.finish(); // remove o que o dump deixou de listar
 ### Job diário do IBAMA (consumidor, execuções, retry)
 
 O cron `0 4 * * *` (`QUEUE_SCHEDULES`, id `ibama-daily-ingestion`) publica o job `ingest-ibama-dumps`
-na fila `environmental-evidences`, e o `EnvironmentalEvidencesProcessor` (`evidences/infra/queue/`), hospedado
+na fila `ibama-ingestion`, e o `IbamaIngestionProcessor` (`ibama/infra/queue/`), hospedado
 no core, o executa por `IngestIbamaDumpsUseCase` (UC14). O consumidor despacha pelo **nome** do
 job; nome desconhecido, payload que não seja um objeto ou job sem identificador falham sem
-repetição (`UnrecoverableError`). O mesmo consumidor também atende o avulso IBAMA por CNPJ e a consulta CGU
-disparada pela consolidação, preservando o isolamento das execuções IBAMA.
+repetição (`UnrecoverableError`). O mesmo consumidor atende o avulso IBAMA por CNPJ. A consulta CGU
+disparada pela consolidação tem fila e consumidor próprios (`environmental-evidences`).
+
+**Decisão do desenho (#262): fila própria + reuso do dump.** Os dumps têm ~330 MB (829 mil linhas)
+e o avulso os lê inteiros para achar um CNPJ. Com um só consumidor de concorrência 3, três avulsos
+ocupavam todos os workers e os jobs de CGU de quem esperava estouravam o prazo (`UNKNOWN`). Agora:
+(1) lote e avulso vivem na fila `ibama-ingestion`, com concorrência 1 — no máximo um download por vez e
+nenhuma disputa com a CGU; (2) a `IbamaDumpLease` guarda os dois dumps por 10 minutos
+(`IBAMA_DUMP_REUSE_MS`), então avulsos de CNPJs distintos em sequência compartilham **um** download, e
+pedidos simultâneos esperam o mesmo download em andamento (single-flight); a leitura é serializada;
+(3) a coleta avulsa é datada pelo instante do download, não pelo da leitura; (4) um job que esperou
+mais de 1 s na fila registra em log o adiamento (`adiado N s`), e `IbamaDumpLease.stats` expõe
+`downloads`, `reuses` e `peakDownloads` para medir o limite de um download por vez. Os arquivos
+temporários são apagados quando a janela expira (e ninguém lê), quando são substituídos ou no
+encerramento da aplicação.
 
 O fluxo de uma execução, nesta ordem:
 
@@ -1043,7 +1057,7 @@ a resposta cadastral atual.
   de início desse lote e sua janela de validade. A consulta não renova essa janela.
   Uma execução `ON_DEMAND`, um lote falho ou ainda em andamento não comprovam o índice inteiro.
 - Sem essa referência, grava `UNKNOWN` antes de publicar o job
-  `ingest-ibama-company`, payload `{ cnpj }` canônico, na fila `environmental-evidences`.
+  `ingest-ibama-company`, payload `{ cnpj }` canônico, na fila `ibama-ingestion`.
   Um `UNKNOWN` válido evita outra publicação durante 15 minutos. O identificador
   `ibama-cnpj-<cnpj>-<janela de 15 min>` deduplica publicações concorrentes na mesma janela.
   Se a publicação reportar fila indisponível, a consulta preserva a resposta local.
