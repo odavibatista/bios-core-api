@@ -43,6 +43,8 @@ describe('GetScoreExplanationUseCase', () => {
         points: -5,
       },
     ],
+    coverageStatus: 'HAS_RECORDS',
+    sourcesWithoutRecords: ['IBAMA', 'CGU_CNEP'],
     rulesVersion: 'rf10-rf11-v3',
     calculatedAt: new Date('2026-10-22T12:00:00.000Z'),
   };
@@ -107,6 +109,8 @@ describe('GetScoreExplanationUseCase', () => {
       confidenceValue: 0,
       evidenceCount: 0,
       contributions: [],
+      coverageStatus: 'NO_DATA',
+      sourcesWithoutRecords: [],
     });
     await expect(
       useCase.execute({ cnpj, odsNumber: '15' }),
@@ -114,9 +118,66 @@ describe('GetScoreExplanationUseCase', () => {
       index_status: 'UNAVAILABLE',
       score_value: null,
       confidence_value: 0,
+      coverage_status: 'NO_DATA',
+      sources_without_records: [],
       contributions: [],
     });
     expect(evidences.execute).not.toHaveBeenCalled();
+  });
+
+  it('informa ausência confirmada nas fontes sem tratá-la como falta de dados', async () => {
+    scores.findByCnpjAndOdsNumber.mockResolvedValue({
+      ...snapshot,
+      scoreValue: null,
+      confidenceValue: 0,
+      evidenceCount: 0,
+      contributions: [],
+      coverageStatus: 'NO_RECORDS_IN_ALL_SOURCES',
+      sourcesWithoutRecords: ['IBAMA', 'CGU_CEIS', 'CGU_CNEP'],
+    });
+    await expect(
+      useCase.execute({ cnpj, odsNumber: '15' }),
+    ).resolves.toMatchObject({
+      index_status: 'UNAVAILABLE',
+      score_value: null,
+      confidence_value: 0,
+      coverage_status: 'NO_RECORDS_IN_ALL_SOURCES',
+      sources_without_records: ['IBAMA', 'CGU_CEIS', 'CGU_CNEP'],
+    });
+  });
+
+  it('aceita retrato anterior à cobertura com status nulo', async () => {
+    scores.findByCnpjAndOdsNumber.mockResolvedValue({
+      ...snapshot,
+      coverageStatus: null,
+      sourcesWithoutRecords: [],
+    });
+    await expect(
+      useCase.execute({ cnpj, odsNumber: '15' }),
+    ).resolves.toMatchObject({ coverage_status: null });
+  });
+
+  it('recusa cobertura sem registros apesar de haver contribuição', async () => {
+    scores.findByCnpjAndOdsNumber.mockResolvedValue({
+      ...snapshot,
+      coverageStatus: 'NO_DATA',
+    });
+    await expect(
+      useCase.execute({ cnpj, odsNumber: '15' }),
+    ).rejects.toBeInstanceOf(ScoreExplanationStaleException);
+  });
+
+  it('recusa cobertura com registros apesar de não haver contribuição', async () => {
+    scores.findByCnpjAndOdsNumber.mockResolvedValue({
+      ...snapshot,
+      scoreValue: null,
+      evidenceCount: 0,
+      contributions: [],
+      coverageStatus: 'HAS_RECORDS',
+    });
+    await expect(
+      useCase.execute({ cnpj, odsNumber: '15' }),
+    ).rejects.toBeInstanceOf(ScoreExplanationStaleException);
   });
 
   it('distingue empresa/ODS sem score de índice calculado indisponível', async () => {

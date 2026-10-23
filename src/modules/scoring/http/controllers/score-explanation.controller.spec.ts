@@ -28,6 +28,8 @@ describe('ScoreExplanationController', () => {
         score_value: null,
         confidence_value: 0,
         evidence_count: 0,
+        coverage_status: 'NO_RECORDS_IN_ALL_SOURCES',
+        sources_without_records: ['IBAMA', 'CGU_CEIS', 'CGU_CNEP'],
         rules_version: 'rf10-rf11-v2',
         calculated_at: new Date().toISOString(),
         contributions: [],
