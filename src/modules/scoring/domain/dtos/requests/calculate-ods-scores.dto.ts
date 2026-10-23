@@ -1,6 +1,7 @@
 import { EvidenceCategory, EvidenceSignal } from '@prisma/client';
 import { parseCnpj } from '@shared/domain/value-objects/cnpj.js';
 import { z } from 'zod';
+import { ODS_COVERAGE_STATUSES } from '../../ods-coverage-rules.js';
 
 export const CalculateOdsScoresRequestSchema = z
   .object({
@@ -38,6 +39,8 @@ export const CalculatedOdsScoreSchema = z
     confidenceValue: z.number().min(0).max(1),
     evidenceCount: z.number().int().nonnegative(),
     contributions: z.array(OdsScoreContributionSchema),
+    coverageStatus: z.enum(ODS_COVERAGE_STATUSES),
+    sourcesWithoutRecords: z.array(z.string().min(1)),
     rulesVersion: z.string().min(1),
     calculatedAt: z.date(),
   })
@@ -58,6 +61,15 @@ export const CalculatedOdsScoreSchema = z
         code: 'custom',
         path: ['evidenceCount'],
         message: 'A contagem deve corresponder as contribuicoes.',
+      });
+    if (
+      (score.coverageStatus === 'HAS_RECORDS') !==
+      score.contributions.length > 0
+    )
+      ctx.addIssue({
+        code: 'custom',
+        path: ['coverageStatus'],
+        message: 'A cobertura deve corresponder as contribuicoes.',
       });
   });
 

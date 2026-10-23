@@ -34,6 +34,13 @@ model CompanyOdsScore {
   /// Contribuições evidência a evidência — a explicação do score (RF12).
   contributions ScoreContribution[]
 
+  /// Cobertura das fontes: HAS_RECORDS, NO_RECORDS_IN_ALL_SOURCES, NO_RECORDS_IN_SOME_SOURCES
+  /// ou NO_DATA. Separada do índice e da confiança; nulo em scores anteriores ao recálculo.
+  coverage_status String?
+
+  /// Slugs das fontes com ausência confirmada vigente (NOT_FOUND) para o ODS.
+  sources_without_records String[]
+
   /// Versão das regras de pontuação usadas no cálculo.
   rules_version String
 

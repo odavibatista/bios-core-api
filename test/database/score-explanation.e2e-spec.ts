@@ -82,10 +82,66 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
           index_status: 'UNAVAILABLE',
           score_value: null,
           confidence_value: 0,
+          coverage_status: 'NO_DATA',
+          sources_without_records: [],
           contributions: [],
         },
       );
       expect(await prisma.dataSourceRequestLog.count()).toBe(0);
+    });
+
+    it('ausência confirmada nas fontes não pontua, mas se distingue de "sem dados"', async () => {
+      const absent = (sourceSlug: string) =>
+        record.execute({
+          cnpj: CNPJ,
+          sourceSlug,
+          result: { status: 'COLLECTED', findings: [] },
+        });
+      await absent('IBAMA');
+      await calculate.execute(CNPJ);
+      const partial = await get().expect(200);
+      expect(ScoreExplanationResponseSchema.parse(partial.body)).toMatchObject({
+        index_status: 'UNAVAILABLE',
+        score_value: null,
+        confidence_value: 0,
+        coverage_status: 'NO_RECORDS_IN_SOME_SOURCES',
+        sources_without_records: ['IBAMA'],
+      });
+
+      await absent('CGU_CEIS');
+      await absent('CGU_CNEP');
+      await calculate.execute(CNPJ);
+      const complete = await get().expect(200);
+      expect(ScoreExplanationResponseSchema.parse(complete.body)).toMatchObject(
+        {
+          index_status: 'UNAVAILABLE',
+          score_value: null,
+          confidence_value: 0,
+          evidence_count: 0,
+          coverage_status: 'NO_RECORDS_IN_ALL_SOURCES',
+          sources_without_records: ['IBAMA', 'CGU_CEIS', 'CGU_CNEP'],
+          contributions: [],
+        },
+      );
+      const ods13 = await get('13').expect(200);
+      expect(ods13.body).toMatchObject({
+        coverage_status: 'NO_DATA',
+        sources_without_records: [],
+      });
+    });
+
+    it('retrato anterior à cobertura responde com status nulo', async () => {
+      await calculate.execute(CNPJ);
+      await prisma.companyOdsScore.updateMany({
+        where: { cnpj: CNPJ },
+        data: { coverage_status: null, sources_without_records: [] },
+      });
+      const response = await get().expect(200);
+      expect(response.body).toMatchObject({
+        index_status: 'UNAVAILABLE',
+        coverage_status: null,
+        sources_without_records: [],
+      });
     });
 
     it('expõe fontes, estados, sinais, pesos e pontos para cada ODS sem misturá-los', async () => {

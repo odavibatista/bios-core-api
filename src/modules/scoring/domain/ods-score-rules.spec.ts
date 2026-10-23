@@ -51,6 +51,8 @@ describe('RF10: regras fixas por ODS', () => {
       confidenceValue: 0,
       evidenceCount: 0,
       contributions: [],
+      coverageStatus: 'NO_DATA',
+      sourcesWithoutRecords: [],
     });
     expect(
       scoreOdsEvidences(15, [
@@ -77,6 +79,36 @@ describe('RF10: regras fixas por ODS', () => {
     );
     expect(result.scoreValue).toBeNull();
     expect(result.contributions).toEqual([]);
+  });
+
+  it('ausência vigente em todas as fontes não pontua, mas informa a cobertura', () => {
+    const farFuture = new Date('2999-01-01T00:00:00.000Z');
+    const absent = (
+      sourceSlug: string,
+      category: EvidenceCategory,
+    ): ReturnType<typeof storedEvidenceFactory.build> =>
+      storedEvidenceFactory.build({
+        key: `absent-${sourceSlug}`,
+        sourceSlug,
+        category,
+        signal: EvidenceSignal.NEGATIVE,
+        odsNumber: 15,
+        state: EvidenceState.NOT_FOUND,
+        validUntil: farFuture,
+      });
+    const result = scoreOdsEvidences(15, [
+      absent('IBAMA', EvidenceCategory.INFRACAO_AMBIENTAL),
+      absent('CGU_CEIS', EvidenceCategory.CONDUTA_ADMINISTRATIVA),
+      absent('CGU_CNEP', EvidenceCategory.CONDUTA_ADMINISTRATIVA),
+    ]);
+    expect(result).toEqual({
+      scoreValue: null,
+      confidenceValue: 0,
+      evidenceCount: 0,
+      contributions: [],
+      coverageStatus: 'NO_RECORDS_IN_ALL_SOURCES',
+      sourcesWithoutRecords: ['IBAMA', 'CGU_CEIS', 'CGU_CNEP'],
+    });
   });
 
   it('ODS 13 soma somente inventário rastreável positivo, sem comparação com ODS 15', () => {

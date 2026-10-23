@@ -41,7 +41,9 @@ export class GetScoreExplanationUseCase extends UseCase<
       score.evidenceCount !== contributions.length ||
       score.scoreValue !== (contributions.length ? sum : null) ||
       new Set(contributions.map((item) => item.evidenceId)).size !==
-        contributions.length
+        contributions.length ||
+      (score.coverageStatus !== null &&
+        (score.coverageStatus === 'HAS_RECORDS') !== contributions.length > 0)
     )
       throw new ScoreExplanationStaleException();
 
@@ -53,6 +55,8 @@ export class GetScoreExplanationUseCase extends UseCase<
         score_value: null,
         confidence_value: score.confidenceValue,
         evidence_count: 0,
+        coverage_status: score.coverageStatus,
+        sources_without_records: score.sourcesWithoutRecords,
         rules_version: score.rulesVersion,
         calculated_at: score.calculatedAt.toISOString(),
         contributions: [],
@@ -103,6 +107,8 @@ export class GetScoreExplanationUseCase extends UseCase<
       score_value: score.scoreValue,
       confidence_value: score.confidenceValue,
       evidence_count: score.evidenceCount,
+      coverage_status: score.coverageStatus,
+      sources_without_records: score.sourcesWithoutRecords,
       rules_version: score.rulesVersion,
       calculated_at: score.calculatedAt.toISOString(),
       contributions: explained,

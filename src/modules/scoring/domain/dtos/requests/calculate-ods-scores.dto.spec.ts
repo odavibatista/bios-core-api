@@ -32,6 +32,8 @@ describe('contrato de cálculo por ODS', () => {
       confidenceValue: 0.4,
       evidenceCount: 1,
       contributions: [contribution],
+      coverageStatus: 'HAS_RECORDS',
+      sourcesWithoutRecords: [],
       rulesVersion: 'rf10-v1',
       calculatedAt: new Date(),
     };
@@ -46,6 +48,20 @@ describe('contrato de cálculo por ODS', () => {
     expect(
       CalculatedOdsScoreSchema.safeParse({ ...score, confidenceValue: 1.01 })
         .success,
+    ).toBe(false);
+    expect(
+      CalculatedOdsScoreSchema.safeParse({
+        ...score,
+        coverageStatus: 'NO_DATA',
+      }).success,
+    ).toBe(false);
+    expect(
+      CalculatedOdsScoreSchema.safeParse({
+        ...score,
+        scoreValue: null,
+        evidenceCount: 0,
+        contributions: [],
+      }).success,
     ).toBe(false);
   });
 });

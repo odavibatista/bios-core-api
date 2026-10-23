@@ -160,7 +160,9 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       ]);
       await prisma.seed(CATALOG_SEEDERS);
       inventory = ghgInventoryFactory.build();
-      name = faker.company.name();
+      // Sufixo alfabético próprio: o nome da empresa nunca está contido no de uma
+      // organização sorteada pela factory (que termina em dígitos).
+      name = `${faker.company.name()} ${faker.string.alpha({ length: 8 })}`;
       personal = faker.internet.email();
       calls = [];
       status = 200;

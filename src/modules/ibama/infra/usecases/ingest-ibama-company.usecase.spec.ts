@@ -30,6 +30,7 @@ import { combineDumpChecksums } from '../../domain/ibama-dump-checksum.js';
 import { toEvidenceEntry } from '../../domain/ibama-evidence.mapper.js';
 import { IbamaDiscardReason } from '../../domain/ibama-document.js';
 import { IbamaResource } from '../../domain/ibama-resource.js';
+import { IbamaDumpLease } from '../providers/ibama-dump-lease.js';
 import { IbamaDataSource } from '../providers/ibama.data-source.js';
 import { IngestIbamaCompanyUseCase } from './ingest-ibama-company.usecase.js';
 
@@ -44,6 +45,7 @@ describe('IngestIbamaCompanyUseCase', () => {
   const run = ingestionRunFactory.build({ status: IngestionRunStatus.RUNNING });
   const input = { cnpj: IBAMA_CNPJ, jobId: faker.string.uuid() };
   let useCase: IngestIbamaCompanyUseCase;
+  let lease: IbamaDumpLease;
   let autos: FakeIbamaDump;
   let embargos: FakeIbamaDump;
   function records(dump: FakeIbamaDump, values: IbamaRecord[]) {
@@ -73,6 +75,7 @@ describe('IngestIbamaCompanyUseCase', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         IngestIbamaCompanyUseCase,
+        IbamaDumpLease,
         { provide: IbamaDataSource, useValue: source },
         { provide: OpenIngestionRunUseCase, useValue: open },
         { provide: FinishIngestionRunUseCase, useValue: finish },
@@ -81,6 +84,10 @@ describe('IngestIbamaCompanyUseCase', () => {
       ],
     }).compile();
     useCase = moduleRef.get(IngestIbamaCompanyUseCase);
+    lease = moduleRef.get(IbamaDumpLease);
+  });
+  afterEach(async () => {
+    await lease.clear();
   });
   it('abre ON_DEMAND e liga os dois downloads a execucao, filtrando outras empresas e anulados', async () => {
     const auto = ibamaRecordFactory.build();
@@ -118,7 +125,7 @@ describe('IngestIbamaCompanyUseCase', () => {
       cnpj: IBAMA_CNPJ,
       sourceSlug: 'IBAMA',
       ingestionRunId: run.id,
-      collectedAt: open.execute.mock.calls[0][0].startedAt,
+      collectedAt: expect.any(Date),
       entries: [toEvidenceEntry(auto), toEvidenceEntry(embargo)],
     });
     expect(finish.execute).toHaveBeenCalledWith({
@@ -135,6 +142,8 @@ describe('IngestIbamaCompanyUseCase', () => {
       ingestionRunId: run.id,
       removed: 2,
     });
+    expect(autos.dispose).not.toHaveBeenCalled();
+    await lease.clear();
     expect(autos.dispose).toHaveBeenCalledOnce();
     expect(embargos.dispose).toHaveBeenCalledOnce();
     expect(collection.execute).not.toHaveBeenCalled();
@@ -210,6 +219,7 @@ describe('IngestIbamaCompanyUseCase', () => {
     await expect(useCase.execute(input)).rejects.toBe(error);
     expect(entries.execute).not.toHaveBeenCalled();
     expect(finish.execute).not.toHaveBeenCalled();
+    await lease.clear();
     expect(autos.dispose).toHaveBeenCalledOnce();
     expect(embargos.dispose).toHaveBeenCalledOnce();
   });
@@ -228,6 +238,7 @@ describe('IngestIbamaCompanyUseCase', () => {
     entries.execute.mockRejectedValue(error);
     await expect(useCase.execute(input)).rejects.toBe(error);
     expect(finish.execute).not.toHaveBeenCalled();
+    await lease.clear();
     expect(autos.dispose).toHaveBeenCalledOnce();
   });
   it('falha de dispose nao impede limpeza do outro recurso nem muda sucesso', async () => {
@@ -235,7 +246,54 @@ describe('IngestIbamaCompanyUseCase', () => {
     await expect(useCase.execute(input)).resolves.toMatchObject({
       outcome: 'SUCCEEDED',
     });
+    await lease.clear();
     expect(embargos.dispose).toHaveBeenCalledOnce();
+  });
+  it('CNPJs distintos em sequencia compartilham um unico download dos dois dumps', async () => {
+    records(autos, [ibamaRecordFactory.build()]);
+    records(embargos, []);
+    await useCase.execute(input);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const second = await useCase.execute({
+      jobId: faker.string.uuid(),
+      cnpj: IBAMA_OTHER_CNPJ,
+    });
+    expect(source.download).toHaveBeenCalledTimes(2);
+    expect(second).toMatchObject({
+      outcome: 'SUCCEEDED',
+      cnpj: IBAMA_OTHER_CNPJ,
+    });
+    expect(entries.execute).toHaveBeenCalledTimes(2);
+    expect(entries.execute.mock.calls[1][0]).toMatchObject({
+      cnpj: IBAMA_OTHER_CNPJ,
+      entries: [],
+    });
+    expect(entries.execute.mock.calls[1][0].collectedAt).toEqual(
+      entries.execute.mock.calls[0][0].collectedAt,
+    );
+    expect(lease.stats).toMatchObject({ downloads: 1, reuses: 1 });
+  });
+  it('tres avulsos simultaneos fazem um download so e leem os dumps um de cada vez', async () => {
+    const cnpjs = [IBAMA_CNPJ, IBAMA_OTHER_CNPJ, '33000167000101'];
+    let readers = 0;
+    let peak = 0;
+    for (const dump of [autos, embargos])
+      dump.records.mockImplementation(async function* () {
+        readers += 1;
+        peak = Math.max(peak, readers);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        readers -= 1;
+        yield* [];
+      });
+    await Promise.all(
+      cnpjs.map((cnpj) =>
+        useCase.execute({ jobId: faker.string.uuid(), cnpj }),
+      ),
+    );
+    expect(source.download).toHaveBeenCalledTimes(2);
+    expect(lease.stats).toMatchObject({ downloads: 1, peakDownloads: 1 });
+    expect(peak).toBe(1);
+    expect(entries.execute).toHaveBeenCalledTimes(3);
   });
   it('falha ao abrir execucao nao baixa arquivos', async () => {
     const error = new Error(faker.lorem.word());
