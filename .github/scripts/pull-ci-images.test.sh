@@ -3,8 +3,12 @@
 set -euo pipefail
 script="$(cd "$(dirname "$0")" && pwd)/pull-ci-images.sh"
 test_dir=$(mktemp -d)
-trap 'rm -f "$test_dir/calls" "$test_dir/output"; rmdir "$test_dir"' EXIT
+trap 'rm -f "$test_dir/calls" "$test_dir/output" "$test_dir/lock" "$test_dir/lock-sem-redis"; rmdir "$test_dir"' EXIT
 export calls="$test_dir/calls"
+mongo_digest=sha256:$(printf 'a%.0s' {1..64})
+redis_digest=sha256:$(printf 'b%.0s' {1..64})
+printf '%s\n' '# comentario' "mongo:8.3.11 $mongo_digest" "redis:7-alpine $redis_digest" > "$test_dir/lock"
+printf '%s\n' "mongo:8.3.11 $mongo_digest" > "$test_dir/lock-sem-redis"
 
 docker() {
   printf '%s\n' "$*" >> "$calls"
@@ -40,8 +44,10 @@ timeout() {
 }
 export -f docker timeout
 
-for scenario in first second third timed-out all-fail config-failure empty unexpected tag-failure; do
+for scenario in first second third timed-out all-fail config-failure empty unexpected tag-failure missing-digest; do
   export scenario
+  export CI_IMAGES_LOCK="$test_dir/lock"
+  if [[ "$scenario" == missing-digest ]]; then export CI_IMAGES_LOCK="$test_dir/lock-sem-redis"; fi
   : > "$calls"
   status=0
   bash "$script" > "$test_dir/output" 2>&1 || status=$?
@@ -49,19 +55,20 @@ for scenario in first second third timed-out all-fail config-failure empty unexp
     first|second|third|timed-out)
       [[ "$status" == 0 ]]
       case "$scenario" in
-        first) registry=mirror.gcr.io/library; pulls=2; tags=2 ;;
-        second) registry=public.ecr.aws/docker/library; pulls=4; tags=0 ;;
-        third) registry=docker.io/library; pulls=6; tags=2 ;;
-        timed-out) registry=public.ecr.aws/docker/library; pulls=2; tags=0 ;;
+        first) registry=mirror.gcr.io/library; pulls=2 ;;
+        second) registry=public.ecr.aws/docker/library; pulls=4 ;;
+        third) registry=docker.io/library; pulls=6 ;;
+        timed-out) registry=public.ecr.aws/docker/library; pulls=2 ;;
       esac
       [[ "$(grep -c '^pull ' "$calls")" == "$pulls" ]]
-      [[ "$(grep -c '^tag ' "$calls" || true)" == "$tags" ]]
-      grep -Fxq "pull $registry/mongo:8.3.11" "$calls"
-      grep -Fxq "pull $registry/redis:7-alpine" "$calls"
-      if [[ "$tags" == 2 ]]; then
-        grep -Fxq "tag $registry/mongo:8.3.11 public.ecr.aws/docker/library/mongo:8.3.11" "$calls"
-        grep -Fxq "tag $registry/redis:7-alpine public.ecr.aws/docker/library/redis:7-alpine" "$calls"
-      fi
+      # O conteudo e pedido pelo digest; a tag local e aplicada depois.
+      grep -Fxq "pull $registry/mongo@$mongo_digest" "$calls"
+      grep -Fxq "pull $registry/redis@$redis_digest" "$calls"
+      [[ "$(grep -c '^tag ' "$calls")" == 2 ]]
+      grep -Fxq "tag $registry/mongo@$mongo_digest public.ecr.aws/docker/library/mongo:8.3.11" "$calls"
+      grep -Fxq "tag $registry/redis@$redis_digest public.ecr.aws/docker/library/redis:7-alpine" "$calls"
+      # Nenhuma obtencao por tag solta.
+      ! grep -Eq '^pull .*:[a-zA-Z0-9_.-]+$' "$calls"
       ;;
     all-fail)
       [[ "$status" == 1 ]]
@@ -77,6 +84,12 @@ for scenario in first second third timed-out all-fail config-failure empty unexp
     tag-failure)
       [[ "$status" == 43 ]]
       [[ "$(grep -c '^pull ' "$calls")" == 1 ]]
+      ;;
+    missing-digest)
+      # O mongo e obtido; o redis, sem digest no lock, para a infraestrutura.
+      [[ "$status" == 1 ]]
+      [[ "$(grep -c '^pull ' "$calls")" == 1 ]]
+      grep -q 'redis:7-alpine sem digest valido' "$test_dir/output"
       ;;
   esac
   echo "PASS: $scenario"

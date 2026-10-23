@@ -116,9 +116,13 @@ jobs:
       - name: Kernel do runner
         run: uname -r
 
-      # Download das mesmas imagens oficiais por registros alternativos.
+      # Download das mesmas imagens oficiais, fixadas por digest (.github/ci-images.lock),
+      # por registros alternativos.
       - name: Validar fallback dos registros de imagens
         run: bash .github/scripts/pull-ci-images.test.sh
+
+      - name: Validar atualização do lock de imagens
+        run: bash .github/scripts/update-ci-images.test.sh
 
       - name: Obter imagens da infraestrutura de teste
         run: bash .github/scripts/pull-ci-images.sh
