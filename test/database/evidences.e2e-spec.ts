@@ -3,6 +3,8 @@ import { CATALOG_SEEDERS } from '@app/database/catalog.seeders.js';
 import { EvidenceSourceNotFoundError } from '@modules/evidences/domain/dtos/errors/evidence.errors.js';
 import { ListCompanyEvidencesUseCase } from '@modules/evidences/infra/usecases/list-company-evidences.usecase.js';
 import { RecordEvidenceCollectionUseCase } from '@modules/evidences/infra/usecases/record-evidence-collection.usecase.js';
+import { RecordEvidenceEntriesUseCase } from '@modules/evidences/infra/usecases/record-evidence-entries.usecase.js';
+import { OpenEvidenceBatchUseCase } from '@modules/evidences/infra/usecases/open-evidence-batch.usecase.js';
 import { PrismaService } from '@shared/infra/database/prisma.service.js';
 import { inject } from 'vitest';
 import { createDatabaseTestingApp } from '../support/database-testing-app.js';
@@ -25,6 +27,8 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
     let prisma: PrismaService;
     let record: RecordEvidenceCollectionUseCase;
     let list: ListCompanyEvidencesUseCase;
+    let entries: RecordEvidenceEntriesUseCase;
+    let openBatch: OpenEvidenceBatchUseCase;
 
     function rows(cnpj = CNPJ) {
       return prisma.evidenceNormalized.findMany({
@@ -37,6 +41,8 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       ({ app, prisma } = await createDatabaseTestingApp());
       record = app.get(RecordEvidenceCollectionUseCase, { strict: false });
       list = app.get(ListCompanyEvidencesUseCase, { strict: false });
+      entries = app.get(RecordEvidenceEntriesUseCase, { strict: false });
+      openBatch = app.get(OpenEvidenceBatchUseCase, { strict: false });
       await prisma.seed(CATALOG_SEEDERS);
       // O seed não altera fontes existentes; a validade das evidências do
       // IBAMA é fixada aqui para o teste não depender do banco de cada um.
@@ -47,7 +53,11 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
     });
 
     afterEach(async () => {
-      await prisma.reset(['evidence_normalized']);
+      await prisma.reset([
+        'evidence_normalized',
+        'evidence_raw',
+        'evidence_collection_clocks',
+      ]);
     });
 
     afterAll(async () => {
@@ -55,6 +65,124 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
     });
 
     describe('gravação', () => {
+      it('lote mais novo impede avulso que termina depois com dump antigo', async () => {
+        const oldDownload = new Date('2026-10-20T10:00:00.000Z');
+        const newBatchAt = new Date('2026-10-20T10:01:00.000Z');
+        const batch = await openBatch.execute({
+          sourceSlug: 'IBAMA',
+          collectedAt: newBatchAt,
+        });
+        await batch.write([
+          {
+            cnpj: CNPJ,
+            finding: { reference: 'AI-NOVA' },
+            raw: { numero: 'AI-NOVA' },
+          },
+        ]);
+        await batch.finish();
+
+        const output = await entries.execute({
+          cnpj: CNPJ,
+          sourceSlug: 'IBAMA',
+          collectedAt: oldDownload,
+          entries: [
+            {
+              cnpj: CNPJ,
+              finding: { reference: 'AI-ANTIGA' },
+              raw: { numero: 'AI-ANTIGA' },
+            },
+          ],
+        });
+
+        expect(output).toEqual({ saved: 0, removed: 0 });
+        expect(
+          (await rows()).map(({ evidence_key, collected_at }) => ({
+            evidence_key,
+            collected_at,
+          })),
+        ).toEqual([
+          { evidence_key: `IBAMA:${CNPJ}:AI-NOVA`, collected_at: newBatchAt },
+        ]);
+      });
+
+      it('lote novo sem achado impede a ressurreicao de evidencia antiga', async () => {
+        const oldDownload = new Date('2026-10-20T10:00:00.000Z');
+        const newBatchAt = new Date('2026-10-20T10:01:00.000Z');
+        const batch = await openBatch.execute({
+          sourceSlug: 'IBAMA',
+          collectedAt: newBatchAt,
+        });
+        await batch.finish();
+
+        const output = await entries.execute({
+          cnpj: CNPJ,
+          sourceSlug: 'IBAMA',
+          collectedAt: oldDownload,
+          entries: [
+            {
+              cnpj: CNPJ,
+              finding: { reference: 'AI-ANTIGA' },
+              raw: { numero: 'AI-ANTIGA' },
+            },
+          ],
+        });
+
+        expect(output).toEqual({ saved: 0, removed: 0 });
+        expect(await rows()).toEqual([]);
+      });
+
+      it('avulso mais novo impede lote antigo de ressuscitar registro removido', async () => {
+        const oldBatchAt = new Date('2026-10-20T10:00:00.000Z');
+        const newDownload = new Date('2026-10-20T10:01:00.000Z');
+        const batch = await openBatch.execute({
+          sourceSlug: 'IBAMA',
+          collectedAt: oldBatchAt,
+        });
+        await entries.execute({
+          cnpj: CNPJ,
+          sourceSlug: 'IBAMA',
+          collectedAt: newDownload,
+          entries: [
+            {
+              cnpj: CNPJ,
+              finding: { reference: 'AI-NOVA' },
+              raw: { numero: 'AI-NOVA' },
+            },
+          ],
+        });
+        await batch.write([
+          {
+            cnpj: CNPJ,
+            finding: { reference: 'AI-ANTIGA' },
+            raw: { numero: 'AI-ANTIGA' },
+          },
+        ]);
+        await batch.finish();
+
+        expect(
+          (await rows()).map(({ evidence_key, collected_at }) => ({
+            evidence_key,
+            collected_at,
+          })),
+        ).toEqual([
+          { evidence_key: `IBAMA:${CNPJ}:AI-NOVA`, collected_at: newDownload },
+        ]);
+      });
+
+      it('lote concentrado no mesmo CNPJ conclui sem conflito de escrita', async () => {
+        const collectedAt = new Date('2026-10-20T10:00:00.000Z');
+        const batch = await openBatch.execute({
+          sourceSlug: 'IBAMA',
+          collectedAt,
+        });
+        const entries = Array.from({ length: 100 }, (_, index) => ({
+          cnpj: CNPJ,
+          finding: { reference: `AI-${index}` },
+          raw: { numero: `AI-${index}` },
+        }));
+        await expect(batch.write(entries)).resolves.toBe(100);
+        expect(await rows()).toHaveLength(100);
+      });
       it('grava a evidência com a categoria, o ODS e a validade do catálogo', async () => {
         const collectedAt = new Date();
         const ods15 = await prisma.ods.findUniqueOrThrow({
