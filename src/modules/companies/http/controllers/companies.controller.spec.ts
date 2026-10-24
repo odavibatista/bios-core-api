@@ -1,7 +1,7 @@
 import { Reflector } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { IS_PUBLIC_ROUTE } from '@shared/http/decorators/public.decorator.js';
-import { SearchCompaniesByNameUseCase } from '../../infra/usecases/search-companies-by-name.usecase.js';
+import { SearchCompaniesUseCase } from '../../infra/usecases/search-companies.usecase.js';
 import { CompaniesController } from './companies.controller.js';
 
 describe('CompaniesController', () => {
@@ -13,7 +13,7 @@ describe('CompaniesController', () => {
       controllers: [CompaniesController],
       providers: [
         {
-          provide: SearchCompaniesByNameUseCase,
+          provide: SearchCompaniesUseCase,
           useValue: searchCompaniesByName,
         },
       ],
@@ -22,7 +22,7 @@ describe('CompaniesController', () => {
     controller = moduleRef.get(CompaniesController);
   });
 
-  describe('busca por nome', () => {
+  describe('pesquisa de empresas', () => {
     const query = { name: 'petrobras', page: 2, page_size: 10 };
 
     it('entrega a query validada ao caso de uso e devolve a página', async () => {

@@ -32,10 +32,34 @@ export interface SaveCompanyProfileInput {
   refreshedAt: Date;
 }
 
-/** Busca por nome já traduzida: palavras normalizadas (`company-name-terms`) e janela. */
-export interface SearchByNameInput {
-  /** Palavras normalizadas; a empresa precisa casar com todas. */
-  terms: string[];
+/** Índice e confiança do ODS selecionado, com os mínimos opcionais. */
+export interface SearchOdsCriteria {
+  /** Número do ODS (índice e confiança dele vêm junto de cada empresa). */
+  number: number;
+
+  /** Índice mínimo (inclusive); empresa sem índice calculado não passa. */
+  minScore?: number;
+
+  /** Confiança mínima (inclusive); empresa sem confiança calculada não passa. */
+  minConfidence?: number;
+}
+
+/** Pesquisa já traduzida: critérios normalizados e janela. */
+export interface SearchCompaniesInput {
+  /** Palavras normalizadas do nome (`company-name-terms`); vazio: sem filtro por nome. */
+  nameTerms: string[];
+
+  /** Sigla da UF do endereço. */
+  uf?: string;
+
+  /** Palavras normalizadas do nome do município. */
+  cityTerms?: string[];
+
+  /** Código CNAE (2 a 7 dígitos), tratado como prefixo, do CNAE principal ou de um secundário. */
+  cnaePrefix?: string;
+
+  /** ODS selecionado e seus mínimos. */
+  ods?: SearchOdsCriteria;
 
   /** Posição inicial da janela (itens a pular). */
   skip: number;
@@ -44,8 +68,8 @@ export interface SearchByNameInput {
   take: number;
 }
 
-/** Janela de resultados da busca por nome e o total que atende à consulta. */
-export interface SearchByNameResult {
+/** Janela de resultados da pesquisa e o total que atende aos critérios. */
+export interface SearchCompaniesResult {
   items: CompanySearchItem[];
   total: number;
 }
@@ -63,13 +87,14 @@ export abstract class CompanyProfileRepository {
   abstract findByCnpj(cnpj: string): Promise<StoredCompanyProfile | null>;
 
   /**
-   * Procura entre os perfis guardados as empresas cuja razão social ou nome
-   * fantasia tem uma palavra começando por cada um dos termos (UC06, fluxo 1.1).
+   * Pesquisa entre os perfis guardados (UC06, fluxo 1.1; UC08): as empresas que atendem a
+   * todos os critérios informados (nome, UF, município, CNAE e, para um ODS selecionado,
+   * índice e confiança mínimos).
    *
-   * Os mais próximos da frase digitada vêm primeiro; o desempate é a razão
+   * Com nome, os mais próximos da frase digitada vêm primeiro; o desempate é a razão
    * social e o CNPJ, para que a paginação seja estável.
    */
-  abstract searchByName(input: SearchByNameInput): Promise<SearchByNameResult>;
+  abstract search(input: SearchCompaniesInput): Promise<SearchCompaniesResult>;
 
   /**
    * Grava o cadastro, criando o perfil ou atualizando o existente (chave: CNPJ).
