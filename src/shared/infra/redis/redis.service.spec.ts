@@ -64,7 +64,7 @@ describe('RedisService', () => {
   });
 
   it('encerra a conexão no desligamento da aplicação', () => {
-    service.onModuleDestroy();
+    service.onApplicationShutdown();
 
     expect(client.disconnect).toHaveBeenCalled();
   });

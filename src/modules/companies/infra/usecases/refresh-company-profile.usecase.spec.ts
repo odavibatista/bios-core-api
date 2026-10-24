@@ -3,6 +3,7 @@ import { RequestTrigger } from '@prisma/client';
 import type { CadastralRecord } from '@modules/data-sources/domain/dtos/providers/cadastral-record.dto.js';
 import { ReceitaDataSource } from '@modules/receita/infra/providers/receita.data-source.js';
 import { CacheNamespace } from '@shared/domain/dtos/providers/cache-key.dto.js';
+import { RequestScoreRecalculationUseCase } from '@modules/scoring/infra/usecases/request-score-recalculation.usecase.js';
 import { CacheProvider } from '@shared/domain/providers/cache.provider.js';
 import { storedCompanyProfileFactory } from '@test/factories/companies/company-profile.factory.js';
 import { computeCadastralContentHash } from '../../domain/cadastral-content-hash.js';
@@ -48,6 +49,9 @@ describe('RefreshCompanyProfileUseCase', () => {
     save: vi.fn<CompanyProfileRepository['save']>(),
   };
   const cache = { delete: vi.fn<CacheProvider['delete']>() };
+  const requestScores = {
+    execute: vi.fn<RequestScoreRecalculationUseCase['execute']>(),
+  };
   let useCase: RefreshCompanyProfileUseCase;
 
   /** O que foi enviado a `save`. */
@@ -70,6 +74,7 @@ describe('RefreshCompanyProfileUseCase', () => {
     repository.findByCnpj.mockResolvedValue(null);
     repository.save.mockResolvedValue(undefined);
     cache.delete.mockResolvedValue(undefined);
+    requestScores.execute.mockResolvedValue('REQUESTED');
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -78,6 +83,7 @@ describe('RefreshCompanyProfileUseCase', () => {
         { provide: ResolveCnaeDescriptionsUseCase, useValue: cnae },
         { provide: CompanyProfileRepository, useValue: repository },
         { provide: CacheProvider, useValue: cache },
+        { provide: RequestScoreRecalculationUseCase, useValue: requestScores },
       ],
     }).compile();
 
@@ -124,6 +130,35 @@ describe('RefreshCompanyProfileUseCase', () => {
         namespace: CacheNamespace.COMPANY_PROFILE,
         identifier: CNPJ,
       });
+    });
+
+    it('pede o recálculo do índice da empresa depois de gravar o cadastro (campos desnormalizados, UC15)', async () => {
+      const order: string[] = [];
+      repository.save.mockImplementation(() => {
+        order.push('grava');
+
+        return Promise.resolve();
+      });
+      requestScores.execute.mockImplementation(() => {
+        order.push('pede o recálculo');
+
+        return Promise.resolve('REQUESTED');
+      });
+
+      await useCase.execute(CNPJ);
+
+      expect(requestScores.execute).toHaveBeenCalledExactlyOnceWith({
+        cnpj: CNPJ,
+      });
+      expect(order).toEqual(['grava', 'pede o recálculo']);
+    });
+
+    it('sem cadastro gravado (não encontrado ou provedores fora), não pede recálculo', async () => {
+      receita.fetch.mockResolvedValue({ status: 'NOT_FOUND' });
+
+      await useCase.execute(CNPJ);
+
+      expect(requestScores.execute).not.toHaveBeenCalled();
     });
 
     it('só descarta o cache depois de gravar', async () => {

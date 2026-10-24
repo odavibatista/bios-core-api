@@ -26,7 +26,7 @@ describe('NormalizeIbamaRecordsUseCase', () => {
 
   beforeEach(async () => {
     write.mockImplementation((entries) => Promise.resolve(entries.length));
-    finish.mockResolvedValue({ removed: 0 });
+    finish.mockResolvedValue({ removed: 0, affectedCnpjs: [] });
     vi.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
 
     const moduleRef = await Test.createTestingModule({

@@ -1,6 +1,9 @@
 import { EvidenceCategory, EvidenceState } from '@prisma/client';
 import { evidenceSourceFactory } from '@test/factories/evidences/evidence.factory.js';
-import { IBAMA_CNPJ } from '@test/factories/ibama/ibama-dump.factory.js';
+import {
+  IBAMA_CNPJ,
+  IBAMA_OTHER_CNPJ,
+} from '@test/factories/ibama/ibama-dump.factory.js';
 import { faker } from '@test/support/faker.js';
 import { contentHash } from '@shared/domain/canonical-json.js';
 import { InvalidEvidenceError } from '../../domain/dtos/errors/evidence.errors.js';
@@ -20,6 +23,8 @@ describe('RepositoryEvidenceBatch', () => {
     save: vi.fn<EvidenceRepository['save']>(),
     deleteNotCollectedSince:
       vi.fn<EvidenceRepository['deleteNotCollectedSince']>(),
+    findCnpjsNotCollectedSince:
+      vi.fn<EvidenceRepository['findCnpjsNotCollectedSince']>(),
   };
   const rawEvidenceRepository = {
     save: vi.fn<RawEvidenceRepository['save']>(),
@@ -62,6 +67,7 @@ describe('RepositoryEvidenceBatch', () => {
   beforeEach(() => {
     evidenceRepository.save.mockResolvedValue(undefined);
     evidenceRepository.deleteNotCollectedSince.mockResolvedValue(0);
+    evidenceRepository.findCnpjsNotCollectedSince.mockResolvedValue([]);
     rawEvidenceRepository.save.mockImplementation((raw) =>
       Promise.resolve(`raw-${raw.externalReference}`),
     );
@@ -279,12 +285,56 @@ describe('RepositoryEvidenceBatch', () => {
     it('remove da fonte o que a carga não renovou, com o corte na data da carga', async () => {
       evidenceRepository.deleteNotCollectedSince.mockResolvedValue(42);
 
-      await expect(batch.finish()).resolves.toEqual({ removed: 42 });
+      await expect(batch.finish()).resolves.toEqual({
+        removed: 42,
+        affectedCnpjs: [],
+      });
 
       expect(evidenceRepository.deleteNotCollectedSince).toHaveBeenCalledWith(
         source.id,
         collectedAt,
       );
+    });
+
+    it('devolve as empresas afetadas: as que a carga gravou e as donas do que removeu, sem repetir', async () => {
+      const ownerOfRemoved = '00000000000191';
+      evidenceRepository.findCnpjsNotCollectedSince.mockResolvedValue([
+        ownerOfRemoved,
+        IBAMA_CNPJ,
+      ]);
+
+      await batch.write([
+        entry('1'),
+        entry('2'),
+        entry('3', { cnpj: IBAMA_OTHER_CNPJ }),
+      ]);
+      const { affectedCnpjs } = await batch.finish();
+
+      expect([...affectedCnpjs].sort()).toEqual(
+        [...new Set([IBAMA_CNPJ, IBAMA_OTHER_CNPJ, ownerOfRemoved])].sort(),
+      );
+      expect(affectedCnpjs).toHaveLength(new Set(affectedCnpjs).size);
+    });
+
+    it('lê as donas do que vai remover antes de remover (depois, não há mais como saber)', async () => {
+      await batch.finish();
+
+      expect(
+        evidenceRepository.findCnpjsNotCollectedSince.mock
+          .invocationCallOrder[0],
+      ).toBeLessThan(
+        evidenceRepository.deleteNotCollectedSince.mock.invocationCallOrder[0],
+      );
+      expect(
+        evidenceRepository.findCnpjsNotCollectedSince,
+      ).toHaveBeenCalledWith(source.id, collectedAt);
+    });
+
+    it('carga sem registro e sem remoção não afeta empresa alguma', async () => {
+      await expect(batch.finish()).resolves.toEqual({
+        removed: 0,
+        affectedCnpjs: [],
+      });
     });
 
     it('propaga a falha do banco', async () => {

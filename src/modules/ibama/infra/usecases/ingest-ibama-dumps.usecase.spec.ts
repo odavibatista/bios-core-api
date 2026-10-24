@@ -1,4 +1,10 @@
+import { Logger } from '@nestjs/common';
+import {
+  IBAMA_CNPJ,
+  IBAMA_OTHER_CNPJ,
+} from '@test/factories/ibama/ibama-dump.factory.js';
 import { Test } from '@nestjs/testing';
+import { RequestScoreRecalculationBatchUseCase } from '@modules/scoring/infra/usecases/request-score-recalculation-batch.usecase.js';
 import { IngestionRunStatus, RequestTrigger } from '@prisma/client';
 import {
   type SourceLookupResult,
@@ -47,6 +53,10 @@ describe('IngestIbamaDumpsUseCase', () => {
     execute: vi.fn<NormalizeIbamaRecordsUseCase['execute']>(),
   };
   const renew = { execute: vi.fn<RenewSourceEvidencesUseCase['execute']>() };
+  const requestScores = {
+    execute: vi.fn<RequestScoreRecalculationBatchUseCase['execute']>(),
+  };
+  const affected = [IBAMA_CNPJ, IBAMA_OTHER_CNPJ];
   const batch = {
     sourceSlug: 'IBAMA',
     write: vi.fn<EvidenceBatch['write']>(),
@@ -120,7 +130,12 @@ describe('IngestIbamaDumpsUseCase', () => {
     batch.finish.mockImplementation(() => {
       calls.push('encerra a carga');
 
-      return Promise.resolve({ removed: 4 });
+      return Promise.resolve({ removed: 4, affectedCnpjs: affected });
+    });
+    requestScores.execute.mockImplementation(() => {
+      calls.push('pede o recálculo dos índices');
+
+      return Promise.resolve({ requested: affected.length, degraded: 0 });
     });
     finishRun.execute.mockImplementation(({ status }) => {
       calls.push(`encerra a execução ${status}`);
@@ -143,6 +158,10 @@ describe('IngestIbamaDumpsUseCase', () => {
         { provide: OpenEvidenceBatchUseCase, useValue: openBatch },
         { provide: NormalizeIbamaRecordsUseCase, useValue: normalize },
         { provide: RenewSourceEvidencesUseCase, useValue: renew },
+        {
+          provide: RequestScoreRecalculationBatchUseCase,
+          useValue: requestScores,
+        },
       ],
     }).compile();
 
@@ -162,8 +181,29 @@ describe('IngestIbamaDumpsUseCase', () => {
         'normaliza AUTO_INFRACAO',
         'normaliza TERMO_EMBARGO',
         'encerra a carga',
+        'pede o recálculo dos índices',
         'encerra a execução SUCCEEDED',
       ]);
+    });
+
+    it('pede o recálculo só das empresas que a carga alterou (gravadas e removidas), antes de encerrar a execução', async () => {
+      await useCase.execute({ jobId });
+
+      expect(requestScores.execute).toHaveBeenCalledExactlyOnceWith(affected);
+    });
+
+    it('fila sem aceitar alguns pedidos não derruba a ingestão: avisa e encerra bem-sucedida', async () => {
+      const warn = vi
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+      requestScores.execute.mockResolvedValue({ requested: 1, degraded: 1 });
+
+      const result = await useCase.execute({ jobId });
+
+      expect(result.outcome).toBe('SUCCEEDED');
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('1 empresa(s) sem recálculo'),
+      );
     });
 
     it('abre a execução do job na fonte IBAMA e dá a ela o início como data de coleta da carga', async () => {
@@ -321,6 +361,8 @@ describe('IngestIbamaDumpsUseCase', () => {
       expect(openBatch.execute).not.toHaveBeenCalled();
       expect(normalize.execute).not.toHaveBeenCalled();
       expect(batch.finish).not.toHaveBeenCalled();
+      // Dump idêntico: nada mudou além da validade, então não há o que recalcular.
+      expect(requestScores.execute).not.toHaveBeenCalled();
       expect(result).toMatchObject({
         outcome: 'SKIPPED_UNCHANGED',
         recordsRead: 0,
@@ -536,7 +578,7 @@ describe('IngestIbamaDumpsUseCase', () => {
         expect(autos.dispose).not.toHaveBeenCalled();
         expect(embargos.dispose).not.toHaveBeenCalled();
 
-        return Promise.resolve({ removed: 0 });
+        return Promise.resolve({ removed: 0, affectedCnpjs: [] });
       });
 
       await useCase.execute({ jobId });

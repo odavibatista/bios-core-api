@@ -44,6 +44,28 @@ export interface EnqueueOptions {
 
   /** Atraso antes de o job ficar disponível para consumo, em milissegundos. */
   delayMs?: number;
+
+  /**
+   * Coalescência exata pelo `jobId` (exige `jobId`): vários pedidos do mesmo
+   * trabalho viram um só **enquanto ele não começou**, sem nunca perder uma mudança.
+   *
+   * O BullMQ trata o mesmo `jobId` como o mesmo job enquanto o registro existir, e
+   * jobs concluídos ficam por uma hora e os falhos para sempre: sem isto, um pedido
+   * feito depois de o job terminar seria ignorado e devolveria o resultado velho.
+   * Com `coalesce`:
+   *  - job **pendente** (esperando ou agendado): o pedido se funde a ele (ele ainda vai
+   *    ler os dados mais novos);
+   *  - job **concluído ou falho**: o registro é removido e um job novo é publicado;
+   *  - job **ativo**: ele pode já ter lido os dados antigos, então um job de acompanhamento
+   *    (`<jobId>~next`) é publicado, e os pedidos seguintes se fundem a ele enquanto estiver
+   *    pendente; se o acompanhamento também já começou, o próximo elo da cadeia
+   *    (`<jobId>~next~next`) recebe o pedido, e assim por diante (a cadeia tem o tamanho dos
+   *    jobs ativos ao mesmo tempo, que a concorrência do consumidor limita).
+   *
+   * Quem usa deve tolerar dois jobs do mesmo `jobId` ao mesmo tempo (o ativo e o
+   * acompanhamento): o trabalho precisa ser idempotente e não regredir um resultado mais novo.
+   */
+  coalesce?: boolean;
 }
 
 /** Opções da espera pela conclusão de um job. */

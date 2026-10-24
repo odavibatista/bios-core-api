@@ -18,6 +18,7 @@ import {
 import { combineDumpChecksums } from '../../domain/ibama-dump-checksum.js';
 import { toEvidenceEntry } from '../../domain/ibama-evidence.mapper.js';
 import { IbamaResource } from '../../domain/ibama-resource.js';
+import { RequestScoreRecalculationUseCase } from '@modules/scoring/infra/usecases/request-score-recalculation.usecase.js';
 import { IbamaDumpLease } from '../providers/ibama-dump-lease.js';
 import { IBAMA_SLUG, IbamaDataSource } from '../providers/ibama.data-source.js';
 
@@ -49,6 +50,7 @@ export class IngestIbamaCompanyUseCase extends UseCase<
     private readonly recordEntries: RecordEvidenceEntriesUseCase,
     private readonly recordCollection: RecordEvidenceCollectionUseCase,
     private readonly dumpLease: IbamaDumpLease,
+    private readonly requestScores: RequestScoreRecalculationUseCase,
   ) {
     super();
   }
@@ -97,6 +99,8 @@ export class IngestIbamaCompanyUseCase extends UseCase<
             ingestionRunId: run.id,
           });
           const dumpChecksum = combineDumpChecksums(dumps);
+          // UC14 1.1 e passo 5: a coleta avulsa também recalcula o índice da empresa (UC15).
+          await this.requestScores.execute({ cnpj });
           await this.finishRun.execute({
             runId: run.id,
             status: IngestionRunStatus.SUCCEEDED,
