@@ -101,6 +101,15 @@ export const SearchCompaniesQuerySchema = PaginationQuerySchema.extend({
   min_confidence: optionalField(z.coerce.number().min(0).max(1)).describe(
     'Confiança mínima no ODS selecionado (de 0 a 1); exige `ods`',
   ),
+  order: optionalField(
+    z
+      .string()
+      .trim()
+      .transform((order) => order.toLowerCase())
+      .pipe(z.enum(['asc', 'desc'])),
+  ).describe(
+    'Ordena pelo índice do ODS selecionado, do menor para o maior (`asc`) ou do maior para o menor (`desc`); exige `ods`. Empresa sem índice calculado vem sempre ao fim, nos dois sentidos',
+  ),
 }).superRefine((query, context) => {
   const name = query.name ?? '';
   const cityTerms = extractNameTerms(query.city ?? '');
@@ -121,7 +130,7 @@ export const SearchCompaniesQuerySchema = PaginationQuerySchema.extend({
     });
   }
 
-  for (const field of ['min_score', 'min_confidence'] as const) {
+  for (const field of ['min_score', 'min_confidence', 'order'] as const) {
     if (query[field] !== undefined && query.ods === undefined) {
       context.addIssue({
         code: 'custom',
