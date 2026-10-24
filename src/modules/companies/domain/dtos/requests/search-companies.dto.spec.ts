@@ -215,6 +215,36 @@ describe('SearchCompaniesQuerySchema', () => {
     });
   });
 
+  describe('ordenação pelo ODS', () => {
+    it.each([
+      ['asc', 'asc'],
+      ['desc', 'desc'],
+      ['ASC', 'asc'],
+      [' Desc ', 'desc'],
+    ])('aceita %j e devolve %s', (order, expected) => {
+      expect(SearchCompaniesQuerySchema.parse({ ods: '15', order }).order).toBe(
+        expected,
+      );
+    });
+
+    it('exige o ODS selecionado', () => {
+      const result = parse({ name: 'ambev', order: 'asc' });
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0].path).toEqual(['order']);
+    });
+
+    it.each(['up', 'ascendente', 'score', '1'])('recusa %j', (order) => {
+      expect(parse({ ods: '15', order }).success).toBe(false);
+    });
+
+    it('em branco vale como não informado', () => {
+      expect(
+        SearchCompaniesQuerySchema.parse({ ods: '15', order: '  ' }).order,
+      ).toBeUndefined();
+    });
+  });
+
   it('os critérios se combinam', () => {
     expect(
       SearchCompaniesQuerySchema.parse({

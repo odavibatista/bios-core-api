@@ -42,6 +42,9 @@ export interface SearchOdsCriteria {
 
   /** Confiança mínima (inclusive); empresa sem confiança calculada não passa. */
   minConfidence?: number;
+
+  /** Ordena pelo índice do ODS; sem ele, vale a ordem padrão da pesquisa. */
+  order?: 'asc' | 'desc';
 }
 
 /** Pesquisa já traduzida: critérios normalizados e janela. */

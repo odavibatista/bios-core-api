@@ -130,7 +130,47 @@ function odsStages({ ods }: SearchCompaniesInput): Record<string, unknown>[] {
     });
   }
 
+  // Empresa sem índice vai ao fim nos dois sentidos: ausência de índice não é o menor nem o
+  // maior índice (IND02). O campo auxiliar ordena antes do valor.
+  if (ods.order !== undefined) {
+    stages.push({
+      $addFields: {
+        score_missing: {
+          $cond: [
+            { $eq: [{ $ifNull: ['$ods_score.score_value', null] }, null] },
+            1,
+            0,
+          ],
+        },
+      },
+    });
+  }
+
   return stages;
+}
+
+/**
+ * Ordem da lista. Com ordenação pelo ODS: sem índice ao fim, depois o índice no sentido
+ * pedido, a maior confiança primeiro entre índices iguais, e por fim razão social e CNPJ.
+ * Sem ela: a prioridade da frase digitada, quando há nome, e razão social e CNPJ.
+ */
+function sortSpec({
+  nameTerms,
+  ods,
+}: SearchCompaniesInput): Record<string, 1 | -1> {
+  if (ods?.order !== undefined) {
+    return {
+      score_missing: 1,
+      'ods_score.score_value': ods.order === 'asc' ? 1 : -1,
+      'ods_score.confidence_value': -1,
+      legal_name: 1,
+      cnpj: 1,
+    };
+  }
+
+  return nameTerms.length > 0
+    ? { search_rank: 1, legal_name: 1, cnpj: 1 }
+    : { legal_name: 1, cnpj: 1 };
 }
 
 /** Prioridade pela frase digitada, só quando a pesquisa tem nome. */
@@ -181,7 +221,9 @@ function nameRankStage(
  *   - *ODS:* com um ODS selecionado, o índice e a confiança dele vêm junto de cada
  *     empresa e os mínimos informados filtram. Empresa sem índice calculado no ODS não
  *     passa por mínimo algum.
- * - **Ordem:** com nome, primeiro quem *começa* pela frase digitada (as palavras na ordem
+ * - **Ordem:** com a ordenação pelo ODS (RF14), pelo índice dele, `asc` ou `desc`, com quem não
+ *   tem índice sempre ao fim e, entre índices iguais, a maior confiança primeiro. Sem ela, com
+ *   nome, primeiro quem *começa* pela frase digitada (as palavras na ordem
  *   digitada, cada uma como início de palavra), depois as demais; empate, e ordem única
  *   sem nome, pela razão social e pelo CNPJ, que tornam a paginação estável.
  * - **Total:** vem do mesmo `$facet`, numa única ida ao banco.
@@ -202,12 +244,7 @@ export function buildCompanySearchPipeline(
     {
       $facet: {
         items: [
-          {
-            $sort:
-              nameTerms.length > 0
-                ? { search_rank: 1, legal_name: 1, cnpj: 1 }
-                : { legal_name: 1, cnpj: 1 },
-          },
+          { $sort: sortSpec(input) },
           { $skip: skip },
           { $limit: take },
           {
