@@ -17,6 +17,7 @@ import { ibgeCnaeSubclassFactory } from '../factories/data-sources/ibge-cnae.fac
 import { resetCache } from '../support/cache.js';
 import { createDatabaseTestingApp } from '../support/database-testing-app.js';
 import { resetSourceRateLimits } from '../support/source-rate-limit.js';
+import { withoutEnvironmentalCollection } from '../support/without-environmental-collection.js';
 import { createTestAccount } from '../support/test-account.js';
 import { resetThrottleCounters } from '../support/throttle.js';
 
@@ -88,7 +89,9 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
     }
 
     beforeAll(async () => {
-      ({ app, prisma } = await createDatabaseTestingApp());
+      ({ app, prisma } = await createDatabaseTestingApp(
+        withoutEnvironmentalCollection,
+      ));
       server = createServer((incoming, response) => {
         const url = incoming.url ?? '';
         const source = (Object.keys(PREFIX) as Source[]).find((candidate) =>
