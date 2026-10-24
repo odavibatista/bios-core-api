@@ -22,6 +22,7 @@ import {
   type QueueRegistry,
 } from '@shared/infra/providers/bullmq-queue.provider.js';
 import type { Job, Queue } from 'bullmq';
+import { formatCnpj } from '@shared/domain/value-objects/cnpj.js';
 import { inject } from 'vitest';
 import {
   AUTO_INFRACAO_COLUMNS,
@@ -61,6 +62,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
     let app: INestApplication;
     let prisma: PrismaService;
     let queue: Queue;
+    let scoringQueue: Queue;
     let listEvidences: ListCompanyEvidencesUseCase;
     let recordCollection: RecordEvidenceCollectionUseCase;
     let server: Server;
@@ -96,6 +98,9 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       queue = app
         .get<QueueRegistry>(QUEUE_REGISTRY, { strict: false })
         .get(QueueName.IBAMA_INGESTION) as Queue;
+      scoringQueue = app
+        .get<QueueRegistry>(QUEUE_REGISTRY, { strict: false })
+        .get(QueueName.ODS_SCORING) as Queue;
       listEvidences = app.get(ListCompanyEvidencesUseCase, { strict: false });
       recordCollection = app.get(RecordEvidenceCollectionUseCase, {
         strict: false,
@@ -156,6 +161,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         'evidence_raw',
         'evidence_normalized',
         'ingestion_runs',
+        'company_ods_scores',
       ]);
       await prisma.seed(CATALOG_SEEDERS);
       await prisma.dataSource.update({
@@ -188,7 +194,21 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         },
         { timeout: 10_000, interval: 50 },
       );
+      // A ingestão pede o recálculo dos índices (UC15): os jobs do scoring terminam antes
+      // de o próximo teste zerar o banco debaixo deles.
+      await vi.waitFor(
+        async () => {
+          const { waiting, active, delayed } = await scoringQueue.getJobCounts(
+            'waiting',
+            'active',
+            'delayed',
+          );
+          expect(waiting + active + delayed).toBe(0);
+        },
+        { timeout: 10_000, interval: 50 },
+      );
       await queue.obliterate({ force: true });
+      await scoringQueue.obliterate({ force: true });
     });
 
     afterAll(async () => {
@@ -200,6 +220,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         'evidence_raw',
         'evidence_normalized',
         'ingestion_runs',
+        'company_ods_scores',
       ]);
       await resetSourceRateLimits(REDIS_URL);
       await app.close();
@@ -684,6 +705,94 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         expect(job.failedReason).toContain('Job desconhecido');
         expect(await prisma.ingestionRun.count()).toBe(0);
         expect(requests).toEqual([]);
+      });
+    });
+
+    describe('recálculo dos índices (UC14 passo 5 → UC15, #80)', () => {
+      const odsScores = (cnpj: string) =>
+        prisma.companyOdsScore.findMany({
+          where: { cnpj },
+          orderBy: { ods_number: 'asc' },
+        });
+      const infractions = async (cnpj: string) =>
+        (await odsScores(cnpj)).find(({ ods_number }) => ods_number === 15)
+          ?.evidence_count;
+
+      it('pede o recálculo do índice de cada empresa que a carga gravou, e o consumidor o executa', async () => {
+        autoRows = [
+          autoRow({ SEQ_AUTO_INFRACAO: '1' }),
+          autoRow({
+            SEQ_AUTO_INFRACAO: '2',
+            CPF_CNPJ_INFRATOR: formatCnpj(IBAMA_OTHER_CNPJ),
+          }),
+        ];
+
+        await runJob();
+
+        await waitUntil(
+          async () =>
+            (await infractions(IBAMA_CNPJ)) === 1 &&
+            (await infractions(IBAMA_OTHER_CNPJ)) === 1,
+        );
+        // Um índice por ODS ativo, para as duas empresas.
+        expect(await odsScores(IBAMA_CNPJ)).toHaveLength(2);
+        expect(await odsScores(IBAMA_OTHER_CNPJ)).toHaveLength(2);
+      });
+
+      it('a empresa que sumiu do dump também é recalculada: a evidência removida deixa de contar', async () => {
+        autoRows = [
+          autoRow({ SEQ_AUTO_INFRACAO: '1' }),
+          autoRow({
+            SEQ_AUTO_INFRACAO: '2',
+            CPF_CNPJ_INFRATOR: formatCnpj(IBAMA_OTHER_CNPJ),
+          }),
+        ];
+        await runJob();
+        await waitUntil(
+          async () => (await infractions(IBAMA_OTHER_CNPJ)) === 1,
+        );
+
+        // O IBAMA deixou de listar a segunda empresa (dump diferente: nova execução).
+        autoRows = [autoRow({ SEQ_AUTO_INFRACAO: '1' })];
+        await runJob();
+
+        await waitUntil(
+          async () => (await infractions(IBAMA_OTHER_CNPJ)) === 0,
+        );
+        expect(await infractions(IBAMA_CNPJ)).toBe(1);
+      });
+
+      it('dump idêntico (SKIPPED_UNCHANGED) não pede recálculo: nada mudou além da validade', async () => {
+        autoRows = [autoRow({ SEQ_AUTO_INFRACAO: '1' })];
+        await runJob();
+        await waitUntil(async () => (await infractions(IBAMA_CNPJ)) === 1);
+        // O índice aparece no banco um instante antes de o job ser dado como concluído:
+        // a linha de base só vale depois de o recálculo da primeira carga terminar de fato.
+        await vi.waitFor(
+          async () => {
+            const counts = await scoringQueue.getJobCounts(
+              'waiting',
+              'active',
+              'delayed',
+              'completed',
+            );
+            expect(counts.waiting + counts.active + counts.delayed).toBe(0);
+            expect(counts.completed).toBe(1);
+          },
+          { timeout: 10_000, interval: 50 },
+        );
+        const { completed } = await scoringQueue.getJobCounts('completed');
+
+        const { job } = await runJob();
+
+        expect(job.returnvalue).toMatchObject({ outcome: 'SKIPPED_UNCHANGED' });
+        expect(await scoringQueue.getJobCounts('waiting', 'active')).toEqual({
+          waiting: 0,
+          active: 0,
+        });
+        expect((await scoringQueue.getJobCounts('completed')).completed).toBe(
+          completed,
+        );
       });
     });
 

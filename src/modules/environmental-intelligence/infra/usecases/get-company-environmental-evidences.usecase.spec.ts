@@ -7,6 +7,7 @@ import { ListCompanyEvidencesUseCase } from '@modules/evidences/infra/usecases/l
 import { RecordEvidenceCollectionUseCase } from '@modules/evidences/infra/usecases/record-evidence-collection.usecase.js';
 import { GetCompanyEnvironmentalEvidencesUseCase } from './get-company-environmental-evidences.usecase.js';
 import { Test } from '@nestjs/testing';
+import { RequestScoreRecalculationUseCase } from '@modules/scoring/infra/usecases/request-score-recalculation.usecase.js';
 import { CompanyProfileRepository } from '@modules/companies/domain/dtos/repositories/company-profile.repository.js';
 import { CompanyNotFoundException } from '@modules/companies/domain/dtos/errors/company-not-found.exception.js';
 describe('UC07 fontes independentes', () => {
@@ -17,6 +18,9 @@ describe('UC07 fontes independentes', () => {
     list = { execute: vi.fn() },
     collection = {
       execute: vi.fn<RecordEvidenceCollectionUseCase['execute']>(),
+    },
+    scores = {
+      execute: vi.fn<RequestScoreRecalculationUseCase['execute']>(),
     };
   const cnpj = buildCnpj();
   let useCase: GetCompanyEnvironmentalEvidencesUseCase;
@@ -25,6 +29,7 @@ describe('UC07 fontes independentes', () => {
     profiles.findByCnpj.mockResolvedValue({ profile: { cnpj } });
     for (const mock of [ibama, cgu, ghg]) mock.execute.mockResolvedValue([]);
     list.execute.mockResolvedValue([storedEvidenceFactory.build({ cnpj })]);
+    scores.execute.mockResolvedValue('CALCULATED');
     const module = await Test.createTestingModule({
       providers: [
         GetCompanyEnvironmentalEvidencesUseCase,
@@ -34,10 +39,59 @@ describe('UC07 fontes independentes', () => {
         { provide: GetGhgCompanyEvidencesUseCase, useValue: ghg },
         { provide: ListCompanyEvidencesUseCase, useValue: list },
         { provide: RecordEvidenceCollectionUseCase, useValue: collection },
+        { provide: RequestScoreRecalculationUseCase, useValue: scores },
       ],
     }).compile();
     useCase = module.get(GetCompanyEnvironmentalEvidencesUseCase);
   });
+  describe('recálculo do índice (UC15, diagrama 3)', () => {
+    it('com as fontes consolidadas, pede o recálculo e espera, antes de reler o estado', async () => {
+      const order: string[] = [];
+      for (const mock of [ibama, cgu, ghg]) {
+        mock.execute.mockImplementation(() => {
+          order.push('fonte');
+
+          return Promise.resolve([]);
+        });
+      }
+      scores.execute.mockImplementation(() => {
+        order.push('recálculo');
+
+        return Promise.resolve('CALCULATED');
+      });
+      list.execute.mockImplementation(() => {
+        order.push('relê');
+
+        return Promise.resolve([storedEvidenceFactory.build({ cnpj })]);
+      });
+
+      await useCase.execute(cnpj);
+
+      expect(scores.execute).toHaveBeenCalledExactlyOnceWith({
+        cnpj,
+        wait: true,
+      });
+      expect(order).toEqual(['fonte', 'fonte', 'fonte', 'recálculo', 'relê']);
+    });
+
+    it('recálculo que não concluiu no prazo (DEGRADED) não derruba a consulta', async () => {
+      scores.execute.mockResolvedValue('DEGRADED');
+
+      await expect(useCase.execute(cnpj)).resolves.toMatchObject({ cnpj });
+    });
+
+    it('CNPJ inválido ou sem perfil cadastral: nenhuma fonte, nenhum recálculo', async () => {
+      profiles.findByCnpj.mockResolvedValue(null);
+
+      await expect(useCase.execute(cnpj)).rejects.toBeInstanceOf(
+        CompanyNotFoundException,
+      );
+      await expect(useCase.execute('invalido')).rejects.toThrow(/CNPJ/);
+
+      expect(scores.execute).not.toHaveBeenCalled();
+    });
+  });
+
   it('inicia todas as fontes antes de esperar e rele o estado persistido', async () => {
     let resolve!: () => void;
     ibama.execute.mockImplementation(

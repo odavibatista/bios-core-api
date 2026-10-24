@@ -41,8 +41,23 @@ export abstract class OdsScoreRepository {
   abstract findProfileLocation(
     cnpj: string,
   ): Promise<ScoreProfileLocation | null>;
+  /**
+   * Substitui, em uma transação, os índices da empresa. **Nunca regride**: se já há índice
+   * da empresa calculado depois do instante desta leitura (um recálculo concorrente que
+   * leu os dados mais tarde terminou antes), não grava nada e devolve `false`.
+   */
   abstract replaceForCompany(
     cnpj: string,
     scores: readonly OdsScoreToSave[],
-  ): Promise<void>;
+  ): Promise<boolean>;
+
+  /**
+   * Empresas com índice calculado por outra versão das regras, em ordem de CNPJ e a partir
+   * do cursor (exclusivo), no máximo `limit` por chamada (varredura paginada, #80).
+   */
+  abstract findCnpjsWithOtherRulesVersion(
+    rulesVersion: string,
+    afterCnpj: string | null,
+    limit: number,
+  ): Promise<string[]>;
 }

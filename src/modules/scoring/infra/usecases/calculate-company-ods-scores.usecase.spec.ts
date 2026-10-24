@@ -8,6 +8,7 @@ import { ListCompanyEvidencesUseCase } from '@modules/evidences/infra/usecases/l
 import { buildCnpj } from '@test/factories/companies/company-profile.factory.js';
 import { storedEvidenceFactory } from '@test/factories/evidences/evidence.factory.js';
 import { faker } from '@test/support/faker.js';
+import { ScoringNotConfiguredError } from '../../domain/dtos/errors/scoring-not-configured.error.js';
 import { OdsScoreRepository } from '../../domain/dtos/repositories/ods-score.repository.js';
 import { CalculateCompanyOdsScoresUseCase } from './calculate-company-ods-scores.usecase.js';
 
@@ -29,7 +30,7 @@ describe('CalculateCompanyOdsScoresUseCase', () => {
     vi.clearAllMocks();
     repository.findActiveOds.mockResolvedValue([ods13, ods15]);
     repository.findProfileLocation.mockResolvedValue(null);
-    repository.replaceForCompany.mockResolvedValue();
+    repository.replaceForCompany.mockResolvedValue(true);
     evidences.execute.mockResolvedValue([]);
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -58,6 +59,46 @@ describe('CalculateCompanyOdsScoresUseCase', () => {
     await expect(useCase.execute(cnpj)).rejects.toThrow('ODS 16 sem regras');
     expect(evidences.execute).not.toHaveBeenCalled();
     expect(repository.replaceForCompany).not.toHaveBeenCalled();
+  });
+
+  it('ambiente sem ODS ou sem regras lança ScoringNotConfiguredError (irrecuperável para a fila)', async () => {
+    repository.findActiveOds.mockResolvedValueOnce([]);
+    await expect(useCase.execute(cnpj)).rejects.toBeInstanceOf(
+      ScoringNotConfiguredError,
+    );
+
+    repository.findActiveOds.mockResolvedValueOnce([
+      { id: faker.database.mongodbObjectId(), number: 16 },
+    ]);
+    await expect(useCase.execute(cnpj)).rejects.toBeInstanceOf(
+      ScoringNotConfiguredError,
+    );
+  });
+
+  it('o instante do cálculo é o da leitura das evidências, e não o do fim (ordena recálculos concorrentes, #80)', async () => {
+    vi.useFakeTimers();
+    try {
+      const readAt = new Date('2026-10-23T10:00:00.000Z');
+      vi.setSystemTime(readAt);
+      evidences.execute.mockImplementation(() => {
+        // A leitura demora: o relógio anda enquanto ela acontece.
+        vi.setSystemTime(new Date(readAt.getTime() + 5_000));
+
+        return Promise.resolve([]);
+      });
+
+      const results = await useCase.execute(cnpj);
+
+      expect(
+        results.every(({ calculatedAt }) => +calculatedAt === +readAt),
+      ).toBe(true);
+      const [, saved] = repository.replaceForCompany.mock.calls[0];
+      expect(saved.every(({ calculatedAt }) => +calculatedAt === +readAt)).toBe(
+        true,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('calcula ODS separados e persiste uma contribuição por evidência rastreável', async () => {

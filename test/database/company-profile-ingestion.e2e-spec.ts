@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net';
 import type { INestApplication } from '@nestjs/common';
 import { RequestOutcome, RequestTrigger } from '@prisma/client';
 import { CATALOG_SEEDERS } from '@app/database/catalog.seeders.js';
+import { RefreshCompanyProfileUseCase } from '@modules/companies/infra/usecases/refresh-company-profile.usecase.js';
 import { CompanyProfileResponseSchema } from '@modules/companies/domain/dtos/requests/company-profile.dto.js';
 import { ErrorResponseSchema } from '@shared/domain/dtos/errors/error-response.dto.js';
 import { QueueName } from '@shared/domain/dtos/providers/queue-job.dto.js';
@@ -141,6 +142,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       }
       await prisma.reset([
         'company_profile',
+        'company_ods_scores',
         'data_sources',
         'data_source_request_logs',
       ]);
@@ -161,6 +163,8 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
 
     afterEach(async () => {
       timers.splice(0).forEach(clearTimeout);
+      // Atualizar o perfil pede o recálculo dos índices (UC15): termina antes do próximo reset.
+      await scoringIdle();
       await clearQueue();
     });
 
@@ -172,6 +176,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         'user_sessions',
         'login_attempts',
         'company_profile',
+        'company_ods_scores',
         'data_sources',
         'data_source_request_logs',
       ]);
@@ -179,6 +184,29 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       await clearQueue();
       await app.close();
     });
+
+    /** Espera a fila de scoring esvaziar: os jobs pedidos pelo perfil não podem sobrar. */
+    async function scoringIdle(): Promise<void> {
+      const scoring = new Queue(QueueName.ODS_SCORING, {
+        connection: { url: REDIS_URL },
+      });
+      try {
+        await vi.waitFor(
+          async () => {
+            const { waiting, active, delayed } = await scoring.getJobCounts(
+              'waiting',
+              'active',
+              'delayed',
+            );
+            expect(waiting + active + delayed).toBe(0);
+          },
+          { timeout: 10_000, interval: 50 },
+        );
+        await scoring.obliterate({ force: true });
+      } finally {
+        await scoring.close();
+      }
+    }
 
     /** Esvazia a fila: o job de um CNPJ é único por janela de 60 s. */
     async function clearQueue(): Promise<void> {
@@ -298,6 +326,59 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         expect(JSON.stringify(await rawDocument())).not.toContain(
           '12345678901',
         );
+      });
+    });
+
+    describe('recálculo dos índices (UC15, #80)', () => {
+      it('atualizar o perfil pede o recálculo: UF, cidade e CNAEs desnormalizados dos índices são reescritos', async () => {
+        await getCompany().expect(200);
+        const profile = await prisma.companyProfile.findUniqueOrThrow({
+          where: { cnpj: CNPJ },
+        });
+        await vi.waitFor(
+          async () => {
+            expect(
+              await prisma.companyOdsScore.count({ where: { cnpj: CNPJ } }),
+            ).toBe(2);
+          },
+          { timeout: 10_000, interval: 50 },
+        );
+        // O perfil mudou de endereço: os índices guardam a localização antiga.
+        await prisma.companyOdsScore.updateMany({
+          where: { cnpj: CNPJ },
+          data: { uf: 'XX', city: 'Cidade antiga', cnae_codes: [] },
+        });
+
+        await app
+          .get(RefreshCompanyProfileUseCase, { strict: false })
+          .execute(CNPJ);
+
+        await vi.waitFor(
+          async () => {
+            const scores = await prisma.companyOdsScore.findMany({
+              where: { cnpj: CNPJ },
+            });
+            expect(scores).toHaveLength(2);
+            for (const score of scores) {
+              expect(score.uf).toBe(profile.address.uf);
+              expect(score.city).toBe(profile.address.city);
+              expect(score.cnae_codes).toContain(profile.main_cnae.code);
+            }
+          },
+          { timeout: 10_000, interval: 50 },
+        );
+      });
+
+      it('perfil não encontrado ou provedores fora do ar não pedem recálculo', async () => {
+        behavior.BRASIL_API = 'error';
+        behavior.OPEN_CNPJ = 'error';
+        behavior.MINHA_RECEITA = 'error';
+
+        await getCompany().expect(503);
+
+        expect(
+          await prisma.companyOdsScore.count({ where: { cnpj: CNPJ } }),
+        ).toBe(0);
       });
     });
 

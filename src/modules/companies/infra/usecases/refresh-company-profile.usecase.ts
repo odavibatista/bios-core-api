@@ -5,6 +5,7 @@ import type {
   CadastralRecord,
 } from '@modules/data-sources/domain/dtos/providers/cadastral-record.dto.js';
 import { ReceitaDataSource } from '@modules/receita/infra/providers/receita.data-source.js';
+import { RequestScoreRecalculationUseCase } from '@modules/scoring/infra/usecases/request-score-recalculation.usecase.js';
 import { CacheNamespace } from '@shared/domain/dtos/providers/cache-key.dto.js';
 import { UseCase } from '@shared/domain/protocols/use-case.protocol.js';
 import { CacheProvider } from '@shared/domain/providers/cache.provider.js';
@@ -52,6 +53,7 @@ export class RefreshCompanyProfileUseCase extends UseCase<
     private readonly resolveCnaeDescriptionsUseCase: ResolveCnaeDescriptionsUseCase,
     private readonly companyProfileRepository: CompanyProfileRepository,
     private readonly cacheProvider: CacheProvider,
+    private readonly requestScores: RequestScoreRecalculationUseCase,
   ) {
     super();
   }
@@ -92,6 +94,9 @@ export class RefreshCompanyProfileUseCase extends UseCase<
       namespace: CacheNamespace.COMPANY_PROFILE,
       identifier: cnpj,
     });
+    // UC15: os campos desnormalizados dos índices (UF, cidade e CNAEs) vêm do cadastro, e
+    // são reescritos no recálculo. Só publica o pedido: quem atualizou o perfil não espera.
+    await this.requestScores.execute({ cnpj });
 
     return { outcome: 'FOUND' };
   }

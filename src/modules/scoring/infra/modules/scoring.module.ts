@@ -3,7 +3,11 @@ import { EvidencesModule } from '@modules/evidences/infra/modules/evidences.modu
 import { OdsScoreRepository } from '../../domain/dtos/repositories/ods-score.repository.js';
 import { PrismaOdsScoreRepository } from '../db/repositories/prisma-ods-score.repository.js';
 import { CalculateCompanyOdsScoresUseCase } from '../usecases/calculate-company-ods-scores.usecase.js';
+import { RecalculateStaleScoresUseCase } from '../usecases/recalculate-stale-scores.usecase.js';
+import { RequestScoreRecalculationBatchUseCase } from '../usecases/request-score-recalculation-batch.usecase.js';
+import { RequestScoreRecalculationUseCase } from '../usecases/request-score-recalculation.usecase.js';
 import { GetScoreExplanationUseCase } from '../usecases/get-score-explanation.usecase.js';
+import { OdsScoringProcessor } from '../queue/ods-scoring.processor.js';
 import { ScoreExplanationController } from '../../http/controllers/score-explanation.controller.js';
 
 /**
@@ -19,7 +23,17 @@ import { ScoreExplanationController } from '../../http/controllers/score-explana
     { provide: OdsScoreRepository, useClass: PrismaOdsScoreRepository },
     CalculateCompanyOdsScoresUseCase,
     GetScoreExplanationUseCase,
+
+    /* Recálculo por fila (#80) */
+    RequestScoreRecalculationUseCase,
+    RequestScoreRecalculationBatchUseCase,
+    RecalculateStaleScoresUseCase,
+    OdsScoringProcessor,
   ],
-  exports: [CalculateCompanyOdsScoresUseCase],
+  exports: [
+    CalculateCompanyOdsScoresUseCase,
+    RequestScoreRecalculationUseCase,
+    RequestScoreRecalculationBatchUseCase,
+  ],
 })
 export class ScoringModule {}

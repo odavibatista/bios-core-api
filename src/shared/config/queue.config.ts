@@ -57,6 +57,16 @@ export const QUEUE_SCHEDULES: readonly QueueSchedule[] = [
     cron: '30 3 * * *',
     retry: { attempts: 5, backoffMs: 60_000 },
   },
+  {
+    // Varredura por versão de regras (#80): depois da ingestão do IBAMA (04:00), que já
+    // recalcula as empresas que alterou. Só reenfileira quem ficou com o índice calculado
+    // por outra versão das regras; sem mudança de regras, não encontra nada e termina.
+    queue: QueueName.ODS_SCORING,
+    id: 'ods-stale-rules-sweep',
+    jobName: 'recalculate-stale-scores',
+    cron: '30 5 * * *',
+    retry: { attempts: 3, backoffMs: 60_000 },
+  },
 ];
 
 /**

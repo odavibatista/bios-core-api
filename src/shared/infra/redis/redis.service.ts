@@ -2,7 +2,7 @@ import {
   Inject,
   Injectable,
   Logger,
-  type OnModuleDestroy,
+  type OnApplicationShutdown,
 } from '@nestjs/common';
 import type { Redis } from 'ioredis';
 import type { RedisHealthProvider } from '../../domain/providers/redis-health.provider.js';
@@ -25,7 +25,9 @@ export const REDIS_HEALTH_TIMEOUT_MS = 3_000;
  * de conexão e, sem ouvinte, a emissão derrubaria o processo.
  */
 @Injectable()
-export class RedisService implements OnModuleDestroy, RedisHealthProvider {
+export class RedisService
+  implements OnApplicationShutdown, RedisHealthProvider
+{
   private readonly logger = new Logger(RedisService.name);
 
   constructor(@Inject(REDIS_CLIENT) private readonly client: Redis) {
@@ -34,7 +36,11 @@ export class RedisService implements OnModuleDestroy, RedisHealthProvider {
     });
   }
 
-  onModuleDestroy(): void {
+  /**
+   * Em `onApplicationShutdown`, e não em `onModuleDestroy`, pelo mesmo motivo do banco: um
+   * job de fila em andamento ainda usa o limite de requisições e o cache até o worker fechar.
+   */
+  onApplicationShutdown(): void {
     // `disconnect` encerra sem aguardar resposta: com o Redis fora do ar, um
     // `quit` ficaria pendurado e atrasaria o desligamento da aplicação.
     this.client.disconnect();
