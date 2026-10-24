@@ -125,7 +125,7 @@ export class BullMqQueueProvider extends QueueProvider {
     queue: QueueName,
     jobName: string,
     payload: P,
-    { jobId, delayMs }: EnqueueOptions,
+    { jobId, delayMs, coalesce }: EnqueueOptions,
   ): Promise<string> {
     let timer: NodeJS.Timeout | undefined;
     const budget = new Promise<never>((_resolve, reject) => {
@@ -134,11 +134,18 @@ export class BullMqQueueProvider extends QueueProvider {
         QUEUE_PUBLISH_BUDGET_MS,
       );
     });
-    const publishing = this.queueOf(queue).add(jobName, payload, {
-      ...buildJobOptions(queue),
-      jobId,
-      delay: delayMs,
-    });
+    const target = this.queueOf(queue);
+    // A resolução do `jobId` também consulta o Redis: fica dentro do orçamento.
+    const publishing = (async () => {
+      const id =
+        coalesce && jobId ? await this.coalescedJobId(target, jobId) : jobId;
+
+      return target.add(jobName, payload, {
+        ...buildJobOptions(queue),
+        jobId: id,
+        delay: delayMs,
+      });
+    })();
     // Se o orçamento vencer primeiro, a rejeição posterior já tem quem a trate.
     void publishing.catch(() => undefined);
 
@@ -152,6 +159,35 @@ export class BullMqQueueProvider extends QueueProvider {
       return job.id;
     } finally {
       clearTimeout(timer);
+    }
+  }
+
+  /**
+   * O `jobId` a publicar para uma coalescência exata (ver `EnqueueOptions.coalesce`):
+   * o próprio, depois de remover um registro já finalizado, ou o de acompanhamento
+   * quando o job está ativo.
+   */
+  private async coalescedJobId(queue: Queue, jobId: string): Promise<string> {
+    // A cadeia `<id>`, `<id>~next`, `<id>~next~next`...: o primeiro elo que não está ativo
+    // recebe o pedido (pendente, funde; ausente ou finalizado, vira um job novo). Um
+    // acompanhamento que já começou também pode ter lido dados antigos, e o consumidor o
+    // pega na hora quando há concorrência: parar no primeiro acompanhamento perderia o pedido.
+    let candidate = jobId;
+
+    for (;;) {
+      await this.removeIfFinished(queue, candidate);
+
+      if ((await queue.getJobState(candidate)) !== 'active') return candidate;
+
+      candidate = `${candidate}~next`;
+    }
+  }
+
+  private async removeIfFinished(queue: Queue, jobId: string): Promise<void> {
+    const state = await queue.getJobState(jobId);
+
+    if (state === 'completed' || state === 'failed') {
+      await (await queue.getJob(jobId))?.remove();
     }
   }
 

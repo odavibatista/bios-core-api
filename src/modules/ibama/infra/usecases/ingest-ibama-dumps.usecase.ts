@@ -16,6 +16,7 @@ import type { IbamaIngestionJobResult } from '../../domain/dtos/providers/ibama-
 import type { IbamaDump } from '../../domain/dtos/providers/ibama-dump.dto.js';
 import { combineDumpChecksums } from '../../domain/ibama-dump-checksum.js';
 import { IbamaResource } from '../../domain/ibama-resource.js';
+import { RequestScoreRecalculationBatchUseCase } from '@modules/scoring/infra/usecases/request-score-recalculation-batch.usecase.js';
 import { IBAMA_SLUG, IbamaDataSource } from '../providers/ibama.data-source.js';
 import { NormalizeIbamaRecordsUseCase } from './normalize-ibama-records.usecase.js';
 
@@ -75,6 +76,7 @@ export class IngestIbamaDumpsUseCase extends UseCase<
     private readonly openEvidenceBatch: OpenEvidenceBatchUseCase,
     private readonly normalizeIbamaRecords: NormalizeIbamaRecordsUseCase,
     private readonly renewSourceEvidences: RenewSourceEvidencesUseCase,
+    private readonly requestScores: RequestScoreRecalculationBatchUseCase,
   ) {
     super();
   }
@@ -214,7 +216,19 @@ export class IngestIbamaDumpsUseCase extends UseCase<
 
     // Chegar aqui é ter carregado os dois recursos sem erro: só agora é seguro
     // remover o que o IBAMA deixou de listar.
-    const { removed } = await batch.finish();
+    const { removed, affectedCnpjs } = await batch.finish();
+
+    // UC14, passo 5: o índice de cada empresa afetada é recalculado (UC15), um job por
+    // CNPJ, em lotes. Antes de encerrar a execução: se o processo cair aqui, a execução
+    // não fica registrada como bem-sucedida, e a repetição refaz os pedidos.
+    const recalculation = await this.requestScores.execute(affectedCnpjs);
+
+    if (recalculation.degraded > 0) {
+      this.logger.warn(
+        `IBAMA: ${recalculation.degraded} empresa(s) sem recálculo de índice pedido; ` +
+          'ficam para a próxima consulta ou recálculo.',
+      );
+    }
     const recordsDiscarded = discarded + annulled;
 
     await this.finishIngestionRun.execute({

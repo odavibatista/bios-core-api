@@ -43,9 +43,10 @@ export interface EvidenceBatch {
    * ela não renovou, isto é, o que o IBAMA deixou de listar (e os `NOT_FOUND` e
    * `UNKNOWN` de antes). Chame só depois de **todos** os recursos da fonte terem
    * sido carregados: com um deles faltando, evidências válidas dele seriam
-   * removidas. Devolve quantas removeu.
+   * removidas. Devolve quantas removeu e as empresas afetadas: as que tiveram evidência
+   * gravada ou removida pela carga, e que por isso precisam de novo índice (#80).
    */
-  finish(): Promise<{ removed: number }>;
+  finish(): Promise<{ removed: number; affectedCnpjs: string[] }>;
 }
 
 export interface OpenEvidenceBatchInput {

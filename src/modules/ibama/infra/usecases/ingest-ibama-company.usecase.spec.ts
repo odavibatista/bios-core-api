@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { RequestScoreRecalculationUseCase } from '@modules/scoring/infra/usecases/request-score-recalculation.usecase.js';
 import { IngestionRunStatus, RequestTrigger } from '@prisma/client';
 import { SourceOutcome } from '@modules/data-sources/domain/dtos/providers/data-source-request.dto.js';
 import { OpenIngestionRunUseCase } from '@modules/data-sources/infra/usecases/ingestion/open-ingestion-run.usecase.js';
@@ -42,6 +43,9 @@ describe('IngestIbamaCompanyUseCase', () => {
   const collection = {
     execute: vi.fn<RecordEvidenceCollectionUseCase['execute']>(),
   };
+  const requestScores = {
+    execute: vi.fn<RequestScoreRecalculationUseCase['execute']>(),
+  };
   const run = ingestionRunFactory.build({ status: IngestionRunStatus.RUNNING });
   const input = { cnpj: IBAMA_CNPJ, jobId: faker.string.uuid() };
   let useCase: IngestIbamaCompanyUseCase;
@@ -72,6 +76,7 @@ describe('IngestIbamaCompanyUseCase', () => {
     finish.execute.mockResolvedValue();
     entries.execute.mockResolvedValue({ saved: 1, removed: 2 });
     collection.execute.mockResolvedValue({ saved: 1, removed: 0 });
+    requestScores.execute.mockResolvedValue('REQUESTED');
     const moduleRef = await Test.createTestingModule({
       providers: [
         IngestIbamaCompanyUseCase,
@@ -81,6 +86,7 @@ describe('IngestIbamaCompanyUseCase', () => {
         { provide: FinishIngestionRunUseCase, useValue: finish },
         { provide: RecordEvidenceEntriesUseCase, useValue: entries },
         { provide: RecordEvidenceCollectionUseCase, useValue: collection },
+        { provide: RequestScoreRecalculationUseCase, useValue: requestScores },
       ],
     }).compile();
     useCase = moduleRef.get(IngestIbamaCompanyUseCase);
@@ -89,6 +95,27 @@ describe('IngestIbamaCompanyUseCase', () => {
   afterEach(async () => {
     await lease.clear();
   });
+  it('a coleta avulsa bem-sucedida pede o recálculo do índice da empresa, antes de encerrar a execução', async () => {
+    const order: string[] = [];
+    requestScores.execute.mockImplementation(() => {
+      order.push('pede o recálculo');
+
+      return Promise.resolve('REQUESTED');
+    });
+    finish.execute.mockImplementation(() => {
+      order.push('encerra a execução');
+
+      return Promise.resolve();
+    });
+
+    await useCase.execute(input);
+
+    expect(requestScores.execute).toHaveBeenCalledExactlyOnceWith({
+      cnpj: IBAMA_CNPJ,
+    });
+    expect(order).toEqual(['pede o recálculo', 'encerra a execução']);
+  });
+
   it('abre ON_DEMAND e liga os dois downloads a execucao, filtrando outras empresas e anulados', async () => {
     const auto = ibamaRecordFactory.build();
     const embargo = ibamaRecordFactory.build({

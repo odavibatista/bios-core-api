@@ -75,6 +75,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         registry.get(QueueName.ENVIRONMENTAL_EVIDENCES)!,
         registry.get(QueueName.GHG_INVENTORY)!,
         registry.get(QueueName.IBAMA_INGESTION)!,
+        registry.get(QueueName.ODS_SCORING)!,
       ];
       server = createServer((req, res) => {
         const url = new URL(req.url ?? '/', 'http://localhost');
@@ -146,6 +147,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         'company_profile',
         'data_source_request_logs',
         'ingestion_runs',
+        'company_ods_scores',
         'data_sources',
       ]);
       await prisma.seed(CATALOG_SEEDERS);
@@ -215,9 +217,44 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         'company_profile',
         'data_source_request_logs',
         'ingestion_runs',
+        'company_ods_scores',
       ]);
       await app.close();
     });
+    it('a consulta pede o recálculo dos índices (UC15, diagrama 3) e o espera: ao responder, os índices estão gravados', async () => {
+      await run();
+
+      const saved = await prisma.companyOdsScore.findMany({
+        where: { cnpj: inventory.cnpj },
+        orderBy: { ods_number: 'asc' },
+      });
+      expect(saved.map(({ ods_number }) => ods_number)).toEqual([13, 15]);
+      // GHG confirmado conta no ODS 13; IBAMA e CGU, no 15.
+      expect(saved[0].evidence_count).toBeGreaterThan(0);
+      expect(saved[1].evidence_count).toBeGreaterThan(0);
+      const [recalculation] = await queues[3].getCompleted();
+      expect(recalculation).toMatchObject({
+        name: 'recalculate-scores',
+        data: { cnpj: inventory.cnpj },
+      });
+    });
+
+    it('recálculo que não conclui no prazo não derruba a consulta: responde com as evidências e deixa o índice como estava', async () => {
+      await queues[3].pause();
+      try {
+        const result = await run();
+
+        expect(flatten(result)).toHaveLength(4);
+        expect(
+          await prisma.companyOdsScore.count({
+            where: { cnpj: inventory.cnpj },
+          }),
+        ).toBe(0);
+      } finally {
+        await queues[3].resume();
+      }
+    });
+
     it('reune quatro fontes, separa conduta administrativa e preserva proveniencia sem dados pessoais', async () => {
       const result = await run();
       const rows = flatten(result);

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { DataSourcesModule } from '@modules/data-sources/infra/modules/data-sources.module.js';
 import { EvidencesModule } from '@modules/evidences/infra/modules/evidences.module.js';
+import { ScoringModule } from '@modules/scoring/infra/modules/scoring.module.js';
 import { IbamaDataSource } from '../providers/ibama.data-source.js';
 import { IbamaDumpLease } from '../providers/ibama-dump-lease.js';
 import { IbamaIngestionProcessor } from '../queue/ibama-ingestion.processor.js';
@@ -23,7 +24,7 @@ import { NormalizeIbamaRecordsUseCase } from '../usecases/normalize-ibama-record
  * minutos (`IbamaDumpLease`); a consulta IBAMA nao espera pela coleta.
  */
 @Module({
-  imports: [DataSourcesModule, EvidencesModule],
+  imports: [DataSourcesModule, EvidencesModule, ScoringModule],
   providers: [
     IbamaDataSource,
     IbamaDumpLease,

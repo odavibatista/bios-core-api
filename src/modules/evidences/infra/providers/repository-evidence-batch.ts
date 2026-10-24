@@ -52,6 +52,9 @@ async function forEachConcurrent<T>(
 
 /** Carga em lote de uma fonte, gravando pelos repositórios (ver `EvidenceBatch`). */
 export class RepositoryEvidenceBatch implements EvidenceBatch {
+  /** Empresas com evidência gravada por esta carga (a memória cresce com as empresas, não com os registros). */
+  private readonly written = new Set<string>();
+
   constructor(
     private readonly evidenceRepository: EvidenceRepository,
     private readonly rawEvidenceRepository: RawEvidenceRepository,
@@ -90,6 +93,8 @@ export class RepositoryEvidenceBatch implements EvidenceBatch {
       byKey.set(evidence.key, { evidence, entry });
     }
 
+    for (const { entry } of byKey.values()) this.written.add(entry.cnpj);
+
     await forEachConcurrent(
       [...byKey.values()],
       BATCH_WRITE_CONCURRENCY,
@@ -111,12 +116,20 @@ export class RepositoryEvidenceBatch implements EvidenceBatch {
     return byKey.size;
   }
 
-  async finish(): Promise<{ removed: number }> {
+  async finish(): Promise<{ removed: number; affectedCnpjs: string[] }> {
+    // Os donos do que vai ser removido são lidos antes: depois, não há mais como saber.
+    const owners = await this.evidenceRepository.findCnpjsNotCollectedSince(
+      this.source.id,
+      this.collectedAt,
+    );
+    const removed = await this.evidenceRepository.deleteNotCollectedSince(
+      this.source.id,
+      this.collectedAt,
+    );
+
     return {
-      removed: await this.evidenceRepository.deleteNotCollectedSince(
-        this.source.id,
-        this.collectedAt,
-      ),
+      removed,
+      affectedCnpjs: [...new Set([...this.written, ...owners])],
     };
   }
 }

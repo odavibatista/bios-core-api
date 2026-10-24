@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ListCompanyEvidencesUseCase } from '@modules/evidences/infra/usecases/list-company-evidences.usecase.js';
 import { UseCase } from '@shared/domain/protocols/use-case.protocol.js';
+import { ScoringNotConfiguredError } from '../../domain/dtos/errors/scoring-not-configured.error.js';
 import {
   CalculatedOdsScoreSchema,
   CalculateOdsScoresRequestSchema,
@@ -29,14 +30,21 @@ export class CalculateCompanyOdsScoresUseCase extends UseCase<
   override async execute(input: string): Promise<CalculatedOdsScore[]> {
     const { cnpj } = CalculateOdsScoresRequestSchema.parse({ cnpj: input });
     const ods = await this.scores.findActiveOds();
-    if (!ods.length) throw new Error('Nenhum ODS ativo para calcular índices.');
+    if (!ods.length)
+      throw new ScoringNotConfiguredError(
+        'Nenhum ODS ativo para calcular índices.',
+      );
     for (const item of ods)
       if (!ODS_SCORE_RULES[item.number])
-        throw new Error(`ODS ${item.number} sem regras de pontuação.`);
+        throw new ScoringNotConfiguredError(
+          `ODS ${item.number} sem regras de pontuação.`,
+        );
 
+    // O instante da leitura vem antes dela: é o que ordena recálculos concorrentes (o
+    // repositório não deixa um índice mais antigo sobrescrever um mais novo).
+    const calculatedAt = new Date();
     const evidences = await this.evidences.execute(cnpj);
     const location = await this.scores.findProfileLocation(cnpj);
-    const calculatedAt = new Date();
     const results = ods.map((item) =>
       CalculatedOdsScoreSchema.parse({
         cnpj,

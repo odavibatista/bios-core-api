@@ -3,6 +3,7 @@ import { ApiKeysModule } from '@modules/api-keys/infra/modules/api-keys.module.j
 import { DataSourcesModule } from '@modules/data-sources/infra/modules/data-sources.module.js';
 import { IbgeCnaeModule } from '@modules/ibge-cnae/infra/modules/ibge-cnae.module.js';
 import { ReceitaModule } from '@modules/receita/infra/modules/receita.module.js';
+import { ScoringModule } from '@modules/scoring/infra/modules/scoring.module.js';
 import { CompanyProfileRepository } from '../../domain/dtos/repositories/company-profile.repository.js';
 import { CompaniesController } from '../../http/controllers/companies.controller.js';
 import { PublicCompaniesController } from '../../http/controllers/public-companies.controller.js';
@@ -29,7 +30,13 @@ import { SearchCompaniesByNameUseCase } from '../usecases/search-companies-by-na
  * vem do catálogo de fontes (`DataSourcesModule`).
  */
 @Module({
-  imports: [DataSourcesModule, ApiKeysModule, ReceitaModule, IbgeCnaeModule],
+  imports: [
+    DataSourcesModule,
+    ApiKeysModule,
+    ReceitaModule,
+    IbgeCnaeModule,
+    ScoringModule,
+  ],
   controllers: [CompaniesController, PublicCompaniesController],
   exports: [CompanyProfileRepository],
   providers: [

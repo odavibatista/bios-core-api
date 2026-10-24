@@ -80,8 +80,22 @@ export class PrismaOdsScoreRepository
   async replaceForCompany(
     cnpj: string,
     scores: readonly OdsScoreToSave[],
-  ): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
+  ): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      // Todos os índices de uma execução levam o mesmo instante de leitura. Se já há um
+      // mais novo, outro recálculo leu depois e terminou antes: este não pode regredi-lo.
+      const readAt = scores.reduce(
+        (latest, { calculatedAt }) =>
+          calculatedAt > latest ? calculatedAt : latest,
+        new Date(0),
+      );
+      const newer = await tx.companyOdsScore.findFirst({
+        where: { cnpj, calculated_at: { gt: readAt } },
+        select: { id_company_ods_score: true },
+      });
+
+      if (newer) return false;
+
       for (const score of scores) {
         const fields = {
           ods_number: score.odsNumber,
@@ -113,6 +127,28 @@ export class PrismaOdsScoreRepository
       await tx.companyOdsScore.deleteMany({
         where: { cnpj, ods_id: { notIn: scores.map((score) => score.odsId) } },
       });
+
+      return true;
     });
+  }
+
+  async findCnpjsWithOtherRulesVersion(
+    rulesVersion: string,
+    afterCnpj: string | null,
+    limit: number,
+  ): Promise<string[]> {
+    // Um documento por empresa e ODS: lê mais linhas que `limit` para fechar a página com
+    // empresas distintas. O CNPJ é o cursor, então o que sobrar vem na página seguinte.
+    const rows = await this.prisma.companyOdsScore.findMany({
+      where: {
+        rules_version: { not: rulesVersion },
+        ...(afterCnpj ? { cnpj: { gt: afterCnpj } } : {}),
+      },
+      select: { cnpj: true },
+      orderBy: { cnpj: 'asc' },
+      take: limit * 4,
+    });
+
+    return [...new Set(rows.map(({ cnpj }) => cnpj))].slice(0, limit);
   }
 }

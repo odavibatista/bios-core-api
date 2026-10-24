@@ -3,6 +3,7 @@ import { CompanyProfileRepository } from '@modules/companies/domain/dtos/reposit
 import { CompanyNotFoundException } from '@modules/companies/domain/dtos/errors/company-not-found.exception.js';
 import { GetIbamaCompanyEvidencesUseCase } from '@modules/ibama/infra/usecases/get-ibama-company-evidences.usecase.js';
 import { GetGhgCompanyEvidencesUseCase } from '@modules/ghg/infra/usecases/get-ghg-company-evidences.usecase.js';
+import { RequestScoreRecalculationUseCase } from '@modules/scoring/infra/usecases/request-score-recalculation.usecase.js';
 import { UseCase } from '@shared/domain/protocols/use-case.protocol.js';
 import { InvalidEvidenceError } from '@modules/evidences/domain/dtos/errors/evidence.errors.js';
 import {
@@ -26,6 +27,7 @@ export class GetCompanyEnvironmentalEvidencesUseCase extends UseCase<
     private readonly ghg: GetGhgCompanyEvidencesUseCase,
     private readonly list: ListCompanyEvidencesUseCase,
     private readonly collection: RecordEvidenceCollectionUseCase,
+    private readonly scores: RequestScoreRecalculationUseCase,
   ) {
     super();
   }
@@ -60,6 +62,10 @@ export class GetCompanyEnvironmentalEvidencesUseCase extends UseCase<
           });
       }
     }
+    // UC15 (diagrama 3): com as evidências consolidadas, recalcula índice e confiança e
+    // espera no prazo da fila. Fila lenta ou recálculo que falha degradam (o índice fica
+    // como estava até o próximo recálculo) em vez de derrubar a consulta.
+    await this.scores.execute({ cnpj, wait: true });
     return groupCompanyEvidences(cnpj, await this.list.execute(cnpj));
   }
 }

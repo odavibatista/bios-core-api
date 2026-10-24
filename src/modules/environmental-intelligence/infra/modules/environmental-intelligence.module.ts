@@ -5,6 +5,7 @@ import { DataSourcesModule } from '@modules/data-sources/infra/modules/data-sour
 import { IbamaModule } from '@modules/ibama/infra/modules/ibama.module.js';
 import { CguModule } from '@modules/cgu/infra/modules/cgu.module.js';
 import { GhgModule } from '@modules/ghg/infra/modules/ghg.module.js';
+import { ScoringModule } from '@modules/scoring/infra/modules/scoring.module.js';
 import { EvidencesModule } from '@modules/evidences/infra/modules/evidences.module.js';
 import { EnvironmentalEvidencesProcessor } from '../queue/environmental-evidences.processor.js';
 import { RequestCguCompanyEvidencesUseCase } from '../usecases/request-cgu-company-evidences.usecase.js';
@@ -18,6 +19,7 @@ import { GetCompanyEnvironmentalEvidencesUseCase } from '../usecases/get-company
     IbamaModule,
     CguModule,
     GhgModule,
+    ScoringModule,
   ],
   controllers: [EnvironmentalEvidencesController],
   providers: [

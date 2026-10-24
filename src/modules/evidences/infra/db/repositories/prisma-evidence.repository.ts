@@ -211,6 +211,19 @@ export class PrismaEvidenceRepository
     throw new Error('Não foi possível publicar o retrato da fonte.');
   }
 
+  async findCnpjsNotCollectedSince(
+    dataSourceId: string,
+    before: Date,
+  ): Promise<string[]> {
+    const rows = await this.prisma.evidenceNormalized.findMany({
+      where: { data_source_id: dataSourceId, collected_at: { lt: before } },
+      select: { cnpj: true },
+      distinct: ['cnpj'],
+    });
+
+    return rows.map(({ cnpj }) => cnpj);
+  }
+
   async deleteNotCollectedSince(
     dataSourceId: string,
     before: Date,

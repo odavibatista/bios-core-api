@@ -8,14 +8,19 @@ describe('PrismaOdsScoreRepository', () => {
     companyOdsScore: {
       upsert: ReturnType<typeof vi.fn>;
       deleteMany: ReturnType<typeof vi.fn>;
+      findFirst: ReturnType<typeof vi.fn>;
     };
   };
   const tx: TransactionClient = {
-    companyOdsScore: { upsert: vi.fn(), deleteMany: vi.fn() },
+    companyOdsScore: {
+      upsert: vi.fn(),
+      deleteMany: vi.fn(),
+      findFirst: vi.fn(),
+    },
   };
   const prisma = {
     ods: { findMany: vi.fn() },
-    companyOdsScore: { findFirst: vi.fn() },
+    companyOdsScore: { findFirst: vi.fn(), findMany: vi.fn() },
     companyProfile: { findUnique: vi.fn() },
     $transaction: vi.fn(
       async (run: (client: TransactionClient) => Promise<void>) => run(tx),
@@ -23,7 +28,11 @@ describe('PrismaOdsScoreRepository', () => {
   };
   const repo = new PrismaOdsScoreRepository(prisma as unknown as PrismaService);
 
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Sem índice mais novo gravado: a guarda deixa passar.
+    tx.companyOdsScore.findFirst.mockResolvedValue(null);
+  });
 
   it('carrega somente ODS ativos em ordem e preserva os IDs reais', async () => {
     const id = faker.database.mongodbObjectId();
@@ -166,6 +175,123 @@ describe('PrismaOdsScoreRepository', () => {
     });
     expect(tx.companyOdsScore.deleteMany).toHaveBeenCalledWith({
       where: { cnpj: score.cnpj, ods_id: { notIn: [score.odsId] } },
+    });
+  });
+
+  describe('guarda: um recálculo nunca regride um índice mais novo (#80)', () => {
+    const base = {
+      cnpj: '11222333000181',
+      odsNumber: 13,
+      scoreValue: null,
+      confidenceValue: 0,
+      evidenceCount: 0,
+      contributions: [],
+      coverageStatus: 'NO_DATA' as const,
+      sourcesWithoutRecords: [],
+      rulesVersion: 'rf10-v1',
+      location: null,
+    };
+    const readAt = new Date('2026-10-23T10:00:00.000Z');
+
+    it('sem índice mais novo, grava e devolve true', async () => {
+      await expect(
+        repo.replaceForCompany(base.cnpj, [
+          {
+            ...base,
+            odsId: faker.database.mongodbObjectId(),
+            calculatedAt: readAt,
+          },
+        ]),
+      ).resolves.toBe(true);
+
+      expect(tx.companyOdsScore.findFirst).toHaveBeenCalledWith({
+        where: { cnpj: base.cnpj, calculated_at: { gt: readAt } },
+        select: { id_company_ods_score: true },
+      });
+      expect(tx.companyOdsScore.upsert).toHaveBeenCalledOnce();
+    });
+
+    it('com índice calculado depois desta leitura, não grava nada e devolve false', async () => {
+      tx.companyOdsScore.findFirst.mockResolvedValue({
+        id_company_ods_score: faker.database.mongodbObjectId(),
+      });
+
+      await expect(
+        repo.replaceForCompany(base.cnpj, [
+          {
+            ...base,
+            odsId: faker.database.mongodbObjectId(),
+            calculatedAt: readAt,
+          },
+        ]),
+      ).resolves.toBe(false);
+
+      expect(tx.companyOdsScore.upsert).not.toHaveBeenCalled();
+      expect(tx.companyOdsScore.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('compara com o instante de leitura mais recente entre os índices da execução', async () => {
+      const later = new Date(readAt.getTime() + 5);
+
+      await repo.replaceForCompany(base.cnpj, [
+        {
+          ...base,
+          odsId: faker.database.mongodbObjectId(),
+          calculatedAt: readAt,
+        },
+        {
+          ...base,
+          odsNumber: 15,
+          odsId: faker.database.mongodbObjectId(),
+          calculatedAt: later,
+        },
+      ]);
+
+      expect(tx.companyOdsScore.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { cnpj: base.cnpj, calculated_at: { gt: later } },
+        }),
+      );
+    });
+  });
+
+  describe('empresas com índice de outra versão das regras (#80)', () => {
+    it('lê em ordem de CNPJ, a partir do cursor, só das outras versões, e devolve empresas distintas', async () => {
+      prisma.companyOdsScore.findMany.mockResolvedValue([
+        { cnpj: '00000000000191' },
+        { cnpj: '00000000000191' },
+        { cnpj: '11222333000181' },
+        { cnpj: '11222333000181' },
+        { cnpj: '33000167000101' },
+      ]);
+
+      await expect(
+        repo.findCnpjsWithOtherRulesVersion('rf10-v9', '00000000000100', 2),
+      ).resolves.toEqual(['00000000000191', '11222333000181']);
+
+      expect(prisma.companyOdsScore.findMany).toHaveBeenCalledWith({
+        where: {
+          rules_version: { not: 'rf10-v9' },
+          cnpj: { gt: '00000000000100' },
+        },
+        select: { cnpj: true },
+        orderBy: { cnpj: 'asc' },
+        take: 8,
+      });
+    });
+
+    it('sem cursor, lê desde o começo', async () => {
+      prisma.companyOdsScore.findMany.mockResolvedValue([]);
+
+      await expect(
+        repo.findCnpjsWithOtherRulesVersion('rf10-v9', null, 10),
+      ).resolves.toEqual([]);
+
+      expect(prisma.companyOdsScore.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { rules_version: { not: 'rf10-v9' } },
+        }),
+      );
     });
   });
 
