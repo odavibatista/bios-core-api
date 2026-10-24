@@ -1,7 +1,7 @@
-import { existsSync } from 'node:fs';
 import { PrismaClient } from '@prisma/client';
 import { databaseNameOf } from '@shared/infra/database/database-name.js';
 import { DataSourceCatalogSync } from '@modules/data-sources/infra/db/catalog-sync/data-source-catalog-sync.js';
+import { loadDotEnv } from './cli-support.js';
 import { runCatalogSync } from './sync-catalog.runner.js';
 
 /**
@@ -10,7 +10,7 @@ import { runCatalogSync } from './sync-catalog.runner.js';
  * no boot, e nada é gravado sem `--apply`.
  */
 async function main(): Promise<void> {
-  if (existsSync('.env')) process.loadEnvFile('.env');
+  loadDotEnv();
 
   const url = process.env.DATABASE_URL;
 
