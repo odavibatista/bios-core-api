@@ -1,4 +1,4 @@
-import { Injectable, type OnModuleDestroy } from '@nestjs/common';
+import { Injectable, type OnApplicationShutdown } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
@@ -39,7 +39,7 @@ const ListCollectionsResultSchema = z.object({
 @Injectable()
 export class PrismaService
   extends PrismaClient
-  implements OnModuleDestroy, DatabaseHealthProvider
+  implements OnApplicationShutdown, DatabaseHealthProvider
 {
   private readonly environment: string;
   private readonly databaseName: string;
@@ -53,7 +53,16 @@ export class PrismaService
     this.databaseName = databaseNameOf(datasourceUrl);
   }
 
-  async onModuleDestroy(): Promise<void> {
+  /**
+   * Desconecta **depois** de os consumidores de fila terminarem o job em andamento.
+   *
+   * O `@nestjs/bullmq` fecha os workers em `onApplicationShutdown` (esperando o job atual),
+   * e `onModuleDestroy` roda antes disso. Desconectar lá deixaria o job sem banco no meio do
+   * trabalho, com a transação aberta no servidor até expirar, e qualquer escrita nos mesmos
+   * documentos esperaria por ela. Os módulos mais distantes da raiz (onde ficam os workers)
+   * encerram primeiro, e este módulo compartilhado, por último.
+   */
+  async onApplicationShutdown(): Promise<void> {
     await this.$disconnect();
   }
 

@@ -95,10 +95,10 @@ describe('PrismaService', () => {
     });
   });
 
-  it('encerra a conexão ao destruir o módulo', async () => {
+  it('encerra a conexão no desligamento da aplicação', async () => {
     const disconnect = vi.spyOn(service, '$disconnect').mockResolvedValue();
 
-    await service.onModuleDestroy();
+    await service.onApplicationShutdown();
 
     expect(disconnect).toHaveBeenCalledOnce();
   });
