@@ -789,8 +789,8 @@ e suas datas; URLs inválidas são removidas da resposta, sem alterar o históri
 `UNKNOWN`, `NOT_FOUND` e `OUTDATED` não se tornam confirmações e podem ter os
 campos de proveniência nulos. Ausência de inventário GHG continua sendo `UNKNOWN`.
 
-A composição do perfil completo e da API pública permanece na #81. Não há
-alteração de schema Prisma, variáveis de ambiente ou configuração de filas.
+A composição do perfil completo e da API pública foi entregue na #81 (ver "Perfil completo da
+empresa"). Não há alteração de schema Prisma, variáveis de ambiente ou configuração de filas.
 
 ### Índice de aderência por ODS (RF10)
 
@@ -827,7 +827,7 @@ O teto é 0,25 para ODS 13, por sua baixa cobertura estrutural, e 1 para ODS 15.
 `NOT_FOUND` amplia somente a cobertura quando já existe um achado, sem pontuar.
 Fonte sem resposta não amplia cobertura; sinal incorreto ou achado sem
 rastreabilidade não acrescenta qualidade. A composição no perfil e a API
-pública completa ficam na #81.
+pública completa foram entregues na #81 (ver "Perfil completo da empresa").
 
 ### Recálculo dos índices por fila (UC15, #80)
 
@@ -940,7 +940,7 @@ exceção e `ingestion_runs` com status `FAILED`.
 `GetCguCompanyEvidencesUseCase`. O caso de uso recebe CNPJ e `SourceCallContext`,
 consulta os dois cadastros separadamente e grava o retrato de cada fonte.
 O consumidor ambiental despacha a coleta CGU por fila na consolidação (#75).
-A composição do perfil fica na #81; esta entrega não acrescenta endpoint ou cálculo de índice.
+A composição do perfil foi entregue na #81; esta entrega não acrescentou endpoint nem cálculo de índice.
 
 - `CGU_API_KEY` é opcional no bootstrap. Sem token, a API continua disponível,
   `/health` informa `checks.cgu_credentials = missing` sem retornar erro, e
@@ -1295,7 +1295,60 @@ O `RefreshCompanyProfileUseCase` faz, nesta ordem:
    que deixou de existir na fonte (o nome fantasia, por exemplo) é gravado como `null`, e não
    omitido, para não sobrar o valor antigo.
 
-Fica fora desta entrega: o perfil ambiental (UC07: evidências e índice por ODS).
+O perfil ambiental (UC07: evidências e índice por ODS) acompanha esta resposta desde a #81; ver
+"Perfil completo da empresa".
+
+## Perfil completo da empresa
+
+`GET /companies/:cnpj` (painel, sessão) e `GET /v1/companies/:cnpj` (API pública, chave) devolvem
+o **perfil completo** (UC06 + UC07, RF05–RF12, #81): o cadastro, as evidências ambientais e, por
+ODS, o índice, a confiança e a explicação, numa só resposta. `GetCompanyFullProfileUseCase`
+(módulo `environmental-intelligence`) compõe as três partes; os controllers do perfil moram ali,
+e não em `companies`, porque o módulo de empresas não depende da orquestração ambiental.
+
+```jsonc
+{
+  "cnpj": "11222333000181",          // cadastro na raiz, com os mesmos campos de antes
+  "legal_name": "…", "main_cnae": { … }, "refreshed_at": "…",
+  "evidences": [                      // por categoria, com a referência da fonte original
+    { "category": "INFRACAO_AMBIENTAL", "evidences": [ { "source_slug": "IBAMA", "state": "CONFIRMED", "source_reference": "AI-001", … } ] }
+  ],
+  "ods_scores": [                     // ODS ativos, em ordem de número
+    {
+      "ods_number": 15,
+      "calculation_status": "CALCULATED",   // ou "PENDING"
+      "index_status": "AVAILABLE",
+      "score_value": -45, "confidence_value": 0.62,   // lado a lado, nunca combinados
+      "evidence_count": 2, "coverage_status": "HAS_RECORDS", "sources_without_records": [],
+      "rules_version": "rf10-rf11-v3", "calculated_at": "…",
+      "contributions": [ { "evidence": { … }, "weight": 40, "signal": "NEGATIVE", "points": -40 } ]
+    }
+  ]
+}
+```
+
+- **Ordem e falha.** Cadastro, depois evidências (que pedem o recálculo dos índices e esperam no
+  prazo da fila, #80), depois índices. Cada etapa só roda se a anterior deu certo: CNPJ inválido
+  (422), empresa inexistente (404) e cadastro indisponível sem cópia guardada (503) respondem
+  antes de qualquer coleta ambiental. Fonte ambiental fora do ar degrada por conta própria
+  (evidência `UNKNOWN`, nunca nota baixa).
+- **Explicação embutida.** `contributions` é a mesma explicação de
+  `GET /companies/:cnpj/scores/:ods/explanation` (RF12), para quem usa a API pública, que não tem
+  a rota de explicação. O índice não é um veredito de sustentabilidade (IND01) e os ODS 13 e 15 não
+  formam índice geral.
+- **`calculation_status = PENDING`.** ODS sem retrato gravado, ou cujo retrato deixou de ser
+  auditável, sai com todos os números nulos e sem contribuições: pendência nunca é nota baixa
+  (IND02). O recálculo (UC15) o repõe. Falha de infraestrutura, ao contrário, propaga (não vira
+  pendência).
+- **Cache.** As partes ambientais ficam nos namespaces `company-evidences` e `company-scores`
+  por 5 minutos (`ENVIRONMENTAL_PROFILE_CACHE_TTL_SECONDS`), e só juntas e com todos os ODS
+  calculados; o recálculo do índice as apaga (`OdsScoringProcessor`). Com as duas em cache, a
+  consulta não coleta nem recalcula. O cadastro segue no namespace `company-profile`.
+- **Limite.** A rota do painel tem 20 consultas por minuto por IP (como a de evidências), porque
+  consolidar pode disparar coletas externas; a pública conta por chave (NFSE04).
+- **Testes.** Os e2e que só exercitam cadastro, autenticação ou limite trocam a consolidação por
+  uma que não coleta (`withoutEnvironmentalCollection`), para não baixar os dumps do IBAMA;
+  `company-full-profile.e2e-spec.ts` cobre a composição real sobre o que está gravado.
 
 ## Busca de empresa por nome
 
@@ -1442,8 +1495,9 @@ rotas públicas é o UC12, descrito mais abaixo.
 
 `GET /v1/companies/:cnpj` (UC12, RF17) devolve o mesmo perfil da consulta do painel, para
 sistemas de terceiros, autenticado pelo cabeçalho `x-api-key` em vez de uma sessão. O `v1`
-reserva espaço para evoluir o contrato sem quebrar quem já integrou. A resposta cresce com as
-evidências e os índices por ODS quando o perfil ambiental (UC07) existir.
+reserva espaço para evoluir o contrato sem quebrar quem já integrou. Desde a #81 a resposta é o
+perfil completo: cadastro, evidências e, por ODS, índice, confiança e explicação (ver "Perfil
+completo da empresa").
 
 - **`@ApiKeyAuth()`** é o que declara uma rota como API pública: reúne `@Public()` (dispensa a
   sessão), o `ApiKeyGuard`, `@PublicApiRoute()` (liga o limite por chave) e o esquema
@@ -1471,7 +1525,7 @@ evidência local válida ou publica `fetch-ghg-inventory` na fila exclusiva
 `ghg-inventory` e aguarda com `data_sources.request_timeout_ms` (padrão 10 s).
 Timeout, job falho ou Redis indisponível preservam a resposta anterior; sem ela,
 `UNKNOWN`. O job pode concluir depois do timeout do chamador. A consolidação já reúne o GHG
-na #75; a exposição no perfil fica na #81. Não há endpoint nem score novo.
+na #75; a exposição no perfil foi entregue na #81. Não há endpoint nem score novo.
 
 O processor lê razão social/nome fantasia do perfil local para localizar até três
 candidatos no catálogo público. Os serviços usados pelo próprio portal foram

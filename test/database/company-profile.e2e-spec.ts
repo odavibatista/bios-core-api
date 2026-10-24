@@ -11,6 +11,7 @@ import { inject } from 'vitest';
 import { CompanyProfileResponseSchema } from '@modules/companies/domain/dtos/requests/company-profile.dto.js';
 import { CompanyProfileProcessor } from '@modules/companies/infra/queue/company-profile.processor.js';
 import { createDatabaseTestingApp } from '../support/database-testing-app.js';
+import { withoutEnvironmentalCollection } from '../support/without-environmental-collection.js';
 import { resetCache } from '../support/cache.js';
 import { faker } from '../support/faker.js';
 import { createTestAccount } from '../support/test-account.js';
@@ -101,6 +102,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       // consumidor real tem a suíte própria `company-profile-ingestion`.
       ({ app, prisma } = await createDatabaseTestingApp((builder) => {
         builder.overrideProvider(CompanyProfileProcessor).useValue({});
+        withoutEnvironmentalCollection(builder);
       }));
       cache = app.get(CacheProvider);
       await prisma.seed(CATALOG_SEEDERS);
