@@ -57,6 +57,8 @@ npm run start:dev           # API em http://localhost:3000
 | `keys:generate` | Gera as chaves de criptografia do `.env` (`-- --version N` para rotacionar) |
 | `db:push` | Sincroniza coleções e índices do MongoDB com o schema |
 | `catalog:sync` | Compara o catálogo de fontes do banco com o seed (dry-run); `-- --apply` grava. Seção "Catálogo de fontes: carga e sincronização" |
+| `catalog:bootstrap` | Carga inicial de ODS, fontes e blacklist num banco novo (dry-run; `-- --apply` grava). Seção "Carga inicial de um banco novo e primeiro administrador" |
+| `account:promote` | Promove uma conta a `ADMIN` (`-- --email <e-mail>`; `--demote` rebaixa; `--apply` grava) e encerra as sessões dela |
 | `docker:up` / `docker:down` | Sobe/derruba a infraestrutura local |
 
 ## Arquitetura
@@ -1775,9 +1777,9 @@ npm run catalog:sync -- --apply   # grava o que o dry-run mostrou
   `fallback_priority`); quando o banco diverge do seed nesses campos, o dry-run avisa com
   `(mantido)`, e a divergência continua sendo uma decisão consciente.
 - **Pré-requisito para criar fontes:** os ODS precisam existir (o comando recusa, sem gravar
-  nada, se faltarem). Hoje **não há comando de produção que carregue ODS, fontes e blacklist de
-  domínios em um banco novo**: os seeders só rodam nos testes (`PrismaService.seed`, que se
-  recusa fora de `NODE_ENV=test` e de banco `*_test`).
+  nada, se faltarem). Num banco **novo**, quem carrega os ODS, as fontes e a blacklist é o `catalog:bootstrap` (seção
+  "Carga inicial de um banco novo e primeiro administrador"); `PrismaService.seed` segue recusando
+  fora de `NODE_ENV=test` e de banco `*_test`.
 - **Idempotente:** rodar de novo converge para o mesmo estado e, em sincronia, informa
   "O catálogo já está em sincronia com o código".
 
@@ -1788,6 +1790,51 @@ npm run catalog:sync -- --apply   # grava o que o dry-run mostrou
 3. rode `npm run catalog:sync` de novo: deve dizer que já está em sincronia;
 4. para um valor que você quer diferente do seed, ajuste no banco e mantenha o seed como
    está; campos de contrato divergentes voltam a aparecer no diff a cada execução, de propósito.
+
+
+### Carga inicial de um banco novo e primeiro administrador (#329)
+
+Um banco novo não tem nada: sem ODS ativo o cálculo não gera índice algum, sem fontes nenhum
+adapter consulta, e sem a blacklist o [RF22](b) não se cumpre. Os seeders só rodam nos testes, então
+há dois comandos para a produção. Os dois seguem o mesmo padrão do `catalog:sync`: **dry-run por
+padrão**, `-- --apply` grava, nada roda no boot da API, rodam fora do Nest e nunca imprimem a
+connection string.
+
+```bash
+npm run catalog:bootstrap              # mostra o que seria carregado
+npm run catalog:bootstrap -- --apply   # carrega ODS, fontes de dados e blacklist
+npm run account:promote -- --email adm@exemplo.com            # dry-run
+npm run account:promote -- --email adm@exemplo.com --apply    # promove a ADMIN
+```
+
+**`catalog:bootstrap`.** Roda os seeders de catálogo na ordem de dependência (ODS, fontes,
+blacklist), os mesmos dos testes. É **idempotente** e **só cria o que falta**: uma fonte que já existe
+nunca é alterada (ajustes de operação, como `rate_limit_per_minute` e `is_enabled`, prevalecem; para
+alinhar o contrato de uma fonte existente, use `catalog:sync`), e um domínio da blacklist removido pelo
+administrador não é recriado. Os ODS, de título e descrição oficiais, são reaplicados. O resumo mostra,
+por catálogo, quantos itens seriam criados e quantos já existem; sai com `0` se tudo certo, `1` se algo
+falhar ou restar item por carregar e `2` para opção desconhecida.
+
+**`account:promote`.** Troca o papel de uma conta entre `USER` e `ADMIN`: o administrador é a mesma
+entidade da conta comum, e a promoção não tem interface no MVP (`11-Permissões.md`, §11.3).
+
+- **Localiza pelo e-mail** com o mesmo índice cego do login (`BLIND_INDEX_KEY`), normalizado (caixa e
+  espaços), então `  Adm@Exemplo.COM ` acha a conta. O ambiente é validado como a API valida; a chave
+  nunca é impressa, e o comando mostra só o identificador e o papel da conta, nunca o e-mail nem o nome.
+- **Encerra as sessões abertas da conta** (`revocation_reason = ROLE_CHANGE`), na mesma transação da
+  troca. O papel viaja no access token, e o token só vence em até 15 minutos: sem isso, um administrador
+  **rebaixado** seguiria administrador até lá, e um recém-promovido não veria o papel novo. Com a revogação,
+  o token antigo e o refresh token passam a dar `401`, e o novo login já traz o papel certo.
+- **Só promove conta com o e-mail confirmado** (`is_active`): um ADMIN com e-mail não verificado
+  seria um acesso privilegiado sem dono comprovado.
+- **`--demote`** devolve um `ADMIN` a `USER` e **recusa rebaixar o último administrador ativo**, para a
+  gestão da blacklist (RF29) nunca ficar sem quem a opere.
+- Conta que já tem o papel pedido: nada é alterado e as sessões ficam como estão (exit `0`).
+
+**Runbook de banco novo:** (1) `npm run docker:up` ou o MongoDB de destino no ar, com `DATABASE_URL`
+apontando para ele; (2) `npm run db:push`; (3) `npm run catalog:bootstrap`, lendo o resumo, e depois
+`-- --apply`; (4) a pessoa que será administradora se cadastra e confirma o e-mail pela API;
+(5) `npm run account:promote -- --email ...` e depois `-- --apply`.
 
 ### Dados de teste
 
