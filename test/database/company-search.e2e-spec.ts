@@ -1,4 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { CATALOG_SEEDERS } from '@app/database/catalog.seeders.js';
 import { SearchCompaniesResponseSchema } from '@modules/companies/domain/dtos/requests/search-companies.dto.js';
 import { ErrorResponseSchema } from '@shared/domain/dtos/errors/error-response.dto.js';
@@ -14,13 +15,13 @@ import { resetThrottleCounters } from '../support/throttle.js';
 const REDIS_URL = inject('testRedisUrl');
 
 /**
- * Busca de empresas por razão social ou nome fantasia ponta a ponta (UC06,
- * fluxo 1.1; RF04): HTTP, guard e o pipeline de agregação no MongoDB real, que
- * é onde as expressões regulares de início de palavra e a ordenação rodam.
+ * Pesquisa de empresas ponta a ponta (UC06, fluxo 1.1; UC08; RF04, RF13): HTTP, guard e
+ * o pipeline de agregação no MongoDB real, que é onde as expressões regulares de início
+ * de palavra, os filtros, a junção com o índice por ODS e a ordenação rodam.
  * Os perfis são gravados como o consumidor da fila os grava.
  */
 describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
-  'Busca de empresa por nome (e2e)',
+  'Pesquisa de empresas (e2e)',
   () => {
     let app: INestApplication;
     let prisma: PrismaService;
@@ -35,7 +36,15 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         tradeName,
         city = 'SÃO PAULO',
         uf = 'SP',
-      }: { tradeName?: string; city?: string; uf?: string } = {},
+        cnae = '6201501',
+        secondaryCnaes = [],
+      }: {
+        tradeName?: string;
+        city?: string;
+        uf?: string;
+        cnae?: string;
+        secondaryCnaes?: string[];
+      } = {},
     ): Promise<string> {
       sequence += 1;
       const cnpj = String(sequence).padStart(14, '0');
@@ -47,8 +56,11 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
           ...(tradeName === undefined ? {} : { trade_name: tradeName }),
           registration_status: 'ATIVA',
           address: { city, uf },
-          main_cnae: { code: '6201501', description: 'DESENVOLVIMENTO' },
-          secondary_cnaes: [],
+          main_cnae: { code: cnae, description: 'DESENVOLVIMENTO' },
+          secondary_cnaes: secondaryCnaes.map((code) => ({
+            code,
+            description: 'SECUNDARIA',
+          })),
           cadastral_source_id: sourceId,
           content_hash: 'hash',
           refreshed_at: new Date(),
@@ -56,6 +68,33 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       });
 
       return cnpj;
+    }
+
+    /** Grava o índice de uma empresa em um ODS, como o recálculo (UC15) o grava. */
+    async function saveScore(
+      cnpj: string,
+      odsNumber: number,
+      { score, confidence }: { score: number | null; confidence: number },
+    ): Promise<void> {
+      const ods = await prisma.ods.findUniqueOrThrow({
+        where: { ods_number: odsNumber },
+      });
+
+      await prisma.companyOdsScore.create({
+        data: {
+          cnpj,
+          ods_id: ods.id_ods,
+          ods_number: odsNumber,
+          score_value: score,
+          confidence_value: confidence,
+          evidence_count: 0,
+          contributions: [],
+          sources_without_records: [],
+          rules_version: 'rf10-rf11-v3',
+          cnae_codes: [],
+          calculated_at: new Date(),
+        },
+      });
     }
 
     function search(
@@ -97,7 +136,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
     });
 
     afterEach(async () => {
-      await prisma.reset(['company_profile']);
+      await prisma.reset(['company_profile', 'company_ods_scores']);
     });
 
     afterAll(async () => {
@@ -111,7 +150,8 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       });
 
       it.each([
-        ['sem o nome', {}],
+        ['sem nenhum critério', {}],
+        ['só a paginação', { page: 2 }],
         ['nome vazio', { name: '' }],
         ['nome só de espaços', { name: '   ' }],
         ['só palavras curtas', { name: 'a b do' }],
@@ -120,6 +160,21 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         ['página zero', { name: 'petrobras', page: 0 }],
         ['página não numérica', { name: 'petrobras', page: 'x' }],
         ['página grande demais', { name: 'petrobras', page_size: 101 }],
+        ['UF inexistente', { uf: 'XX' }],
+        ['UF com nome por extenso', { uf: 'São Paulo' }],
+        ['município sem letras', { city: '***' }],
+        ['CNAE curto demais', { cnae: '6' }],
+        ['CNAE com letras', { cnae: '62ab' }],
+        ['CNAE longo demais', { cnae: '62015011' }],
+        ['ODS zero', { ods: 0 }],
+        ['ODS acima de 17', { ods: 18 }],
+        ['ODS não numérico', { ods: 'clima' }],
+        ['índice mínimo sem ODS', { uf: 'SP', min_score: 10 }],
+        ['confiança mínima sem ODS', { uf: 'SP', min_confidence: 0.5 }],
+        ['índice mínimo acima de 100', { ods: 15, min_score: 101 }],
+        ['índice mínimo não numérico', { ods: 15, min_score: 'alto' }],
+        ['confiança mínima acima de 1', { ods: 15, min_confidence: 1.5 }],
+        ['confiança mínima negativa', { ods: 15, min_confidence: -0.1 }],
       ])('422: %s', async (_caso, query) => {
         const response = await search(query).expect(422);
 
@@ -222,6 +277,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
             city: 'CAMPINAS',
             uf: 'SP',
             main_cnae: { code: '6201501', description: 'DESENVOLVIMENTO' },
+            ods_score: null,
           },
         ]);
       });
@@ -321,6 +377,348 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
           data: [],
           pagination: { page: 9, page_size: 2, total: 5, total_pages: 3 },
         });
+      });
+    });
+
+    describe('filtros cadastrais (UC08, RF13)', () => {
+      beforeEach(async () => {
+        await saveCompany('ALFA SP CAPITAL', {
+          city: 'SÃO PAULO',
+          uf: 'SP',
+          cnae: '6201501',
+          secondaryCnaes: ['4711301'],
+        });
+        await saveCompany('BETA SP INTERIOR', {
+          city: 'CAMPINAS',
+          uf: 'SP',
+          cnae: '1011201',
+        });
+        await saveCompany('GAMA RJ', {
+          city: 'RIO DE JANEIRO',
+          uf: 'RJ',
+          cnae: '6201502',
+        });
+        await saveCompany('DELTA RN', {
+          city: 'SAO PAULO DO POTENGI',
+          uf: 'RN',
+          cnae: '0111301',
+        });
+      });
+
+      it('por UF, em qualquer caixa', async () => {
+        expect(await names({ uf: 'SP' })).toEqual([
+          'ALFA SP CAPITAL',
+          'BETA SP INTERIOR',
+        ]);
+        expect(await names({ uf: 'rj' })).toEqual(['GAMA RJ']);
+        expect(await names({ uf: 'AM' })).toEqual([]);
+      });
+
+      it('por município, com o nome inteiro e sem distinguir acento nem caixa', async () => {
+        expect(await names({ city: 'sao paulo' })).toEqual(['ALFA SP CAPITAL']);
+        expect(await names({ city: 'São Paulo' })).toEqual(['ALFA SP CAPITAL']);
+        expect(await names({ city: 'rio de janeiro' })).toEqual(['GAMA RJ']);
+      });
+
+      it('município não casa por início de palavra nem por pedaço do nome', async () => {
+        expect(await names({ city: 'paulo' })).toEqual([]);
+        expect(await names({ city: 'sao' })).toEqual([]);
+        expect(await names({ city: 'sao paulo do potengi' })).toEqual([
+          'DELTA RN',
+        ]);
+      });
+
+      it('o município de outro estado fica de fora quando a UF é informada', async () => {
+        expect(await names({ city: 'sao paulo', uf: 'RN' })).toEqual([]);
+        expect(await names({ city: 'sao paulo', uf: 'SP' })).toEqual([
+          'ALFA SP CAPITAL',
+        ]);
+      });
+
+      it('por CNAE: divisão, grupo, classe e subclasse', async () => {
+        expect(await names({ cnae: '62' })).toEqual([
+          'ALFA SP CAPITAL',
+          'GAMA RJ',
+        ]);
+        expect(await names({ cnae: '620' })).toEqual([
+          'ALFA SP CAPITAL',
+          'GAMA RJ',
+        ]);
+        expect(await names({ cnae: '62015' })).toEqual([
+          'ALFA SP CAPITAL',
+          'GAMA RJ',
+        ]);
+        expect(await names({ cnae: '6201501' })).toEqual(['ALFA SP CAPITAL']);
+        expect(await names({ cnae: '10' })).toEqual(['BETA SP INTERIOR']);
+      });
+
+      it('o CNAE casa também o secundário, e aceita a máscara', async () => {
+        expect(await names({ cnae: '4711301' })).toEqual(['ALFA SP CAPITAL']);
+        expect(await names({ cnae: '47' })).toEqual(['ALFA SP CAPITAL']);
+        expect(await names({ cnae: '6201-5/01' })).toEqual(['ALFA SP CAPITAL']);
+      });
+
+      it('o código do CNAE é prefixo, não trecho do meio', async () => {
+        expect(await names({ cnae: '11' })).toEqual([]);
+        expect(await names({ cnae: '201' })).toEqual([]);
+      });
+
+      it('os critérios se somam', async () => {
+        expect(await names({ uf: 'SP', cnae: '62' })).toEqual([
+          'ALFA SP CAPITAL',
+        ]);
+        expect(await names({ uf: 'RJ', cnae: '62', name: 'gama' })).toEqual([
+          'GAMA RJ',
+        ]);
+        expect(await names({ uf: 'SP', cnae: '01' })).toEqual([]);
+        expect(await names({ uf: 'SP', name: 'gama' })).toEqual([]);
+      });
+
+      it('sem nome, a lista vem por razão social; a paginação segue estável', async () => {
+        const pages: string[][] = [];
+
+        for (const page of [1, 2]) {
+          const { body } = await search({
+            uf: 'SP',
+            page,
+            page_size: 1,
+          }).expect(200);
+          const parsed = SearchCompaniesResponseSchema.parse(body);
+
+          expect(parsed.pagination).toMatchObject({ total: 2, total_pages: 2 });
+          pages.push(parsed.data.map((company) => company.legal_name));
+        }
+
+        expect(pages).toEqual([['ALFA SP CAPITAL'], ['BETA SP INTERIOR']]);
+      });
+
+      it('sem ODS selecionado, o item vem com ods_score nulo', async () => {
+        const { body } = await search({ uf: 'RJ' }).expect(200);
+
+        expect(
+          SearchCompaniesResponseSchema.parse(body).data[0].ods_score,
+        ).toBeNull();
+      });
+
+      it('critério em branco vale como não informado', async () => {
+        expect(await names({ uf: 'RJ', city: '', cnae: '', ods: '' })).toEqual([
+          'GAMA RJ',
+        ]);
+      });
+    });
+
+    describe('ODS selecionado: índice e confiança mínimos (UC08, RF13)', () => {
+      let alfa: string;
+      let beta: string;
+      let gama: string;
+      let delta: string;
+
+      beforeEach(async () => {
+        alfa = await saveCompany('ALFA', { uf: 'SP' });
+        beta = await saveCompany('BETA', { uf: 'SP' });
+        gama = await saveCompany('GAMA', { uf: 'SP' });
+        delta = await saveCompany('DELTA', { uf: 'RJ' });
+        // ODS 15: ALFA negativo e confiável, BETA positivo e pouco confiável, GAMA sem
+        // índice conclusivo (nota nula, confiança zero); DELTA nunca foi calculada.
+        await saveScore(alfa, 15, { score: -45, confidence: 0.8 });
+        await saveScore(beta, 15, { score: 20, confidence: 0.3 });
+        await saveScore(gama, 15, { score: null, confidence: 0 });
+        // ODS 13: só ALFA, com valores diferentes dos do ODS 15.
+        await saveScore(alfa, 13, { score: 60, confidence: 0.2 });
+      });
+
+      async function items(query: Record<string, string | number>) {
+        const { body } = await search(query).expect(200);
+
+        return SearchCompaniesResponseSchema.parse(body).data.map(
+          (company) => ({
+            name: company.legal_name,
+            ods_score: company.ods_score,
+          }),
+        );
+      }
+
+      it('seleciona o ODS e traz o índice e a confiança dele em cada empresa, nulos sem cálculo', async () => {
+        expect(await items({ ods: 15 })).toEqual([
+          {
+            name: 'ALFA',
+            ods_score: {
+              ods_number: 15,
+              score_value: -45,
+              confidence_value: 0.8,
+            },
+          },
+          {
+            name: 'BETA',
+            ods_score: {
+              ods_number: 15,
+              score_value: 20,
+              confidence_value: 0.3,
+            },
+          },
+          {
+            name: 'DELTA',
+            ods_score: {
+              ods_number: 15,
+              score_value: null,
+              confidence_value: null,
+            },
+          },
+          {
+            name: 'GAMA',
+            ods_score: {
+              ods_number: 15,
+              score_value: null,
+              confidence_value: 0,
+            },
+          },
+        ]);
+      });
+
+      it('cada ODS traz os seus próprios valores, sem misturá-los', async () => {
+        const climate = await items({ ods: 13, uf: 'SP' });
+
+        expect(climate).toEqual([
+          {
+            name: 'ALFA',
+            ods_score: {
+              ods_number: 13,
+              score_value: 60,
+              confidence_value: 0.2,
+            },
+          },
+          {
+            name: 'BETA',
+            ods_score: {
+              ods_number: 13,
+              score_value: null,
+              confidence_value: null,
+            },
+          },
+          {
+            name: 'GAMA',
+            ods_score: {
+              ods_number: 13,
+              score_value: null,
+              confidence_value: null,
+            },
+          },
+        ]);
+      });
+
+      it('índice mínimo: só quem tem índice igual ou acima; sem índice não passa', async () => {
+        expect(await names({ ods: 15, min_score: 0 })).toEqual(['BETA']);
+        expect(await names({ ods: 15, min_score: -45 })).toEqual([
+          'ALFA',
+          'BETA',
+        ]);
+        expect(await names({ ods: 15, min_score: -100 })).toEqual([
+          'ALFA',
+          'BETA',
+        ]);
+        expect(await names({ ods: 15, min_score: 21 })).toEqual([]);
+      });
+
+      it('índice mínimo zero filtra (não equivale a sem filtro)', async () => {
+        expect(await names({ ods: 15, min_score: 0 })).not.toContain('ALFA');
+      });
+
+      it('confiança mínima: só quem tem confiança igual ou acima', async () => {
+        expect(await names({ ods: 15, min_confidence: 0.5 })).toEqual(['ALFA']);
+        expect(await names({ ods: 15, min_confidence: 0.3 })).toEqual([
+          'ALFA',
+          'BETA',
+        ]);
+      });
+
+      it('confiança mínima zero deixa passar quem tem confiança zero, mas não quem nunca foi calculado', async () => {
+        expect(await names({ ods: 15, min_confidence: 0 })).toEqual([
+          'ALFA',
+          'BETA',
+          'GAMA',
+        ]);
+      });
+
+      it('os dois mínimos se somam', async () => {
+        expect(
+          await names({ ods: 15, min_score: -50, min_confidence: 0.5 }),
+        ).toEqual(['ALFA']);
+        expect(
+          await names({ ods: 15, min_score: 0, min_confidence: 0.5 }),
+        ).toEqual([]);
+      });
+
+      it('os mínimos valem para o ODS selecionado, e não para o outro', async () => {
+        // ALFA tem índice 60 no ODS 13 e -45 no 15.
+        expect(await names({ ods: 13, min_score: 50 })).toEqual(['ALFA']);
+        expect(await names({ ods: 15, min_score: 50 })).toEqual([]);
+      });
+
+      it('somam-se aos filtros cadastrais', async () => {
+        expect(
+          await names({ ods: 15, min_score: -100, uf: 'SP', name: 'beta' }),
+        ).toEqual(['BETA']);
+        expect(await names({ ods: 15, uf: 'RJ' })).toEqual(['DELTA']);
+        expect(await names({ ods: 15, min_score: -100, uf: 'RJ' })).toEqual([]);
+      });
+
+      it('conta o total depois dos mínimos', async () => {
+        const { body } = await search({
+          ods: 15,
+          min_score: -100,
+          page: 1,
+          page_size: 1,
+        }).expect(200);
+        const parsed = SearchCompaniesResponseSchema.parse(body);
+
+        expect(parsed.data).toHaveLength(1);
+        expect(parsed.pagination).toMatchObject({ total: 2, total_pages: 2 });
+      });
+
+      it('empresa de fora da base cadastral não aparece, ainda que tenha índice', async () => {
+        await saveScore('99999999999999', 15, { score: 90, confidence: 1 });
+
+        expect(await names({ ods: 15, min_score: 80 })).toEqual([]);
+        expect(await names({ ods: 15 })).toHaveLength(4);
+      });
+
+      it('não expõe contribuições, datas nem identificadores do índice', async () => {
+        const { body } = await search({ ods: 15 }).expect(200);
+        const serialized = JSON.stringify(body);
+
+        expect(serialized).not.toContain('contributions');
+        expect(serialized).not.toContain('calculated_at');
+        expect(serialized).not.toContain('rules_version');
+        expect(serialized).not.toContain('ods_id');
+        expect(serialized).not.toContain('_id');
+        expect(serialized).not.toContain(delta + 'x');
+      });
+    });
+
+    describe('documentação OpenAPI (RF13)', () => {
+      it('declara os filtros como parâmetros de consulta', () => {
+        const document = SwaggerModule.createDocument(
+          app,
+          new DocumentBuilder().addBearerAuth().build(),
+        );
+        const parameters = (document.paths['/companies']?.get?.parameters ??
+          []) as { name: string; in: string }[];
+
+        for (const name of [
+          'name',
+          'uf',
+          'city',
+          'cnae',
+          'ods',
+          'min_score',
+          'min_confidence',
+          'page',
+          'page_size',
+        ]) {
+          expect(parameters).toContainEqual(
+            expect.objectContaining({ name, in: 'query' }),
+          );
+        }
       });
     });
 

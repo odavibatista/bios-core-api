@@ -6,14 +6,14 @@ import { z } from 'zod';
 import {
   CompanyProfileRepository,
   type SaveCompanyProfileInput,
-  type SearchByNameInput,
-  type SearchByNameResult,
+  type SearchCompaniesInput,
+  type SearchCompaniesResult,
   type StoredCompanyProfile,
 } from '../../../domain/dtos/repositories/company-profile.repository.js';
 import { CompanySearchItemSchema } from '../../../domain/dtos/requests/search-companies.dto.js';
-import { buildNameSearchPipeline } from './company-name-search.pipeline.js';
+import { buildCompanySearchPipeline } from './company-search.pipeline.js';
 
-/** Resposta do `$facet` da busca por nome: a janela e a contagem total. */
+/** Resposta do `$facet` da pesquisa: a janela e a contagem total. */
 const SearchFacetsSchema = z.object({
   items: z.array(CompanySearchItemSchema),
   total: z.array(z.object({ count: z.number().int() })),
@@ -77,14 +77,10 @@ export class PrismaCompanyProfileRepository
     };
   }
 
-  async searchByName({
-    terms,
-    skip,
-    take,
-  }: SearchByNameInput): Promise<SearchByNameResult> {
+  async search(input: SearchCompaniesInput): Promise<SearchCompaniesResult> {
     // O Prisma não expressa expressão regular com `$facet`; o pipeline vai cru.
     const raw = await this.prisma.companyProfile.aggregateRaw({
-      pipeline: buildNameSearchPipeline(terms, skip, take),
+      pipeline: buildCompanySearchPipeline(input),
     });
     const [facets] = z.array(SearchFacetsSchema).parse(raw);
 
