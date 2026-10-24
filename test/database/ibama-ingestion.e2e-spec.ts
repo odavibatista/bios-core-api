@@ -766,6 +766,21 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         autoRows = [autoRow({ SEQ_AUTO_INFRACAO: '1' })];
         await runJob();
         await waitUntil(async () => (await infractions(IBAMA_CNPJ)) === 1);
+        // O índice aparece no banco um instante antes de o job ser dado como concluído:
+        // a linha de base só vale depois de o recálculo da primeira carga terminar de fato.
+        await vi.waitFor(
+          async () => {
+            const counts = await scoringQueue.getJobCounts(
+              'waiting',
+              'active',
+              'delayed',
+              'completed',
+            );
+            expect(counts.waiting + counts.active + counts.delayed).toBe(0);
+            expect(counts.completed).toBe(1);
+          },
+          { timeout: 10_000, interval: 50 },
+        );
         const { completed } = await scoringQueue.getJobCounts('completed');
 
         const { job } = await runJob();
