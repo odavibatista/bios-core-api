@@ -9,7 +9,8 @@ export const ConfirmEmailRequestSchema = z
       .max(200, 'O token informado é inválido.')
       .describe('Token do link de confirmação enviado por e-mail'),
   })
-  .describe('Token para confirmar o e-mail');
+  .describe('Token para confirmar o e-mail')
+  .meta({ id: 'ConfirmEmailRequest' });
 
 export type ConfirmEmailRequest = z.infer<typeof ConfirmEmailRequestSchema>;
 
@@ -21,7 +22,8 @@ export const ResendEmailConfirmationRequestSchema = z
       .max(254, 'O e-mail deve ter no máximo 254 caracteres.')
       .describe('E-mail com o qual a conta foi criada'),
   })
-  .describe('E-mail que receberá um novo link de confirmação');
+  .describe('E-mail que receberá um novo link de confirmação')
+  .meta({ id: 'ResendEmailConfirmationRequest' });
 
 export type ResendEmailConfirmationRequest = z.infer<
   typeof ResendEmailConfirmationRequestSchema

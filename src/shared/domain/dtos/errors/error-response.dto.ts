@@ -17,6 +17,7 @@ export const ErrorResponseSchema = z
     timestamp: z.iso.datetime().describe('Momento do erro (ISO 8601)'),
     path: z.string().describe('Caminho da requisição que originou o erro'),
   })
-  .describe('Resposta de erro padronizada');
+  .describe('Resposta de erro padronizada')
+  .meta({ id: 'ErrorResponse' });
 
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;

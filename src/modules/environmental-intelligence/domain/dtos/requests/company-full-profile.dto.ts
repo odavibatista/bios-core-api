@@ -21,9 +21,11 @@ export const CompanyFullProfileResponseSchema =
     ods_scores: z
       .array(CompanyOdsScoreSchema)
       .describe('Índice, confiança e explicação por ODS, em ordem de número'),
-  }).describe(
-    'Perfil completo da empresa: cadastro, evidências e índices por ODS',
-  );
+  })
+    .describe(
+      'Perfil completo da empresa: cadastro, evidências e índices por ODS',
+    )
+    .meta({ id: 'CompanyFullProfileResponse' });
 
 export type CompanyFullProfileResponse = z.infer<
   typeof CompanyFullProfileResponseSchema

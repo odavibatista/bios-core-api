@@ -21,6 +21,7 @@ import { faker } from '../support/faker.js';
 import { createDatabaseTestingApp } from '../support/database-testing-app.js';
 import { createTestAccount } from '../support/test-account.js';
 import { resetCache } from '../support/cache.js';
+import { dereference } from '../support/openapi.js';
 import { resetThrottleCounters } from '../support/throttle.js';
 
 const redisUrl = inject('testRedisUrl');
@@ -358,7 +359,9 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       expect(operation.security).toEqual([{ jwt: [] }]);
       for (const status of ['200', '401', '404', '422', '429', '500', '503'])
         expect(operation.responses).toHaveProperty(status);
-      const text = JSON.stringify(operation.responses['200']);
+      const text = JSON.stringify(
+        dereference(document, operation.responses['200']),
+      );
       for (const field of [
         'source',
         'source_slug',
@@ -369,7 +372,10 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         'valid_until',
       ])
         expect(text).toContain(field);
-      const response = operation.responses['200'] as ResponseObject;
+      const response = dereference(
+        document,
+        operation.responses['200'],
+      ) as ResponseObject;
       const schema = response.content!['application/json']
         .schema as SchemaObject;
       const categories = schema.properties!.categories as SchemaObject;

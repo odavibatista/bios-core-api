@@ -25,6 +25,41 @@ export const ScoreExplanationRequestSchema = z
   })
   .strict();
 
+/** A evidência que contribuiu para o índice, com o estado de quando contribuiu e o atual. */
+export const ScoreContributionEvidenceSchema = z
+  .object({
+    id: z.string().regex(/^[0-9a-f]{24}$/),
+    category: z.enum(EvidenceCategory),
+    source_slug: z.string().min(1),
+    source: z.string().min(1),
+    state: z
+      .literal(EvidenceState.CONFIRMED)
+      .describe('Estado da evidência quando contribuiu para o índice'),
+    current_state: z.enum(EvidenceState),
+    source_reference: z.string().trim().min(1).nullable(),
+    source_url: EvidenceSourceUrlSchema.nullable(),
+    collected_at: z.iso.datetime(),
+    valid_until: z.iso.datetime(),
+  })
+  .strict()
+  .describe('Evidência que contribuiu para o índice')
+  .meta({ id: 'ScoreContributionEvidence' });
+
+/** Contribuição de uma evidência ao índice: peso, sinal e pontos (RF12). */
+export const ScoreContributionSchema = z
+  .object({
+    evidence: ScoreContributionEvidenceSchema,
+    weight: z.number().positive(),
+    weight_reason: z
+      .enum(['CGU_SANCTION_EXPIRED', 'IBAMA_EMBARGO_LIFTED'])
+      .nullable(),
+    signal: z.enum(EvidenceSignal),
+    points: z.number().min(-100).max(100),
+  })
+  .strict()
+  .describe('Contribuição de uma evidência ao índice')
+  .meta({ id: 'ScoreContribution' });
+
 export const ScoreExplanationResponseSchema = z
   .object({
     cnpj: z.string(),
@@ -37,38 +72,11 @@ export const ScoreExplanationResponseSchema = z
     sources_without_records: z.array(z.string().min(1)),
     rules_version: z.string().min(1),
     calculated_at: z.iso.datetime(),
-    contributions: z.array(
-      z
-        .object({
-          evidence: z
-            .object({
-              id: z.string().regex(/^[0-9a-f]{24}$/),
-              category: z.enum(EvidenceCategory),
-              source_slug: z.string().min(1),
-              source: z.string().min(1),
-              state: z
-                .literal(EvidenceState.CONFIRMED)
-                .describe(
-                  'Estado da evidência quando contribuiu para o índice',
-                ),
-              current_state: z.enum(EvidenceState),
-              source_reference: z.string().trim().min(1).nullable(),
-              source_url: EvidenceSourceUrlSchema.nullable(),
-              collected_at: z.iso.datetime(),
-              valid_until: z.iso.datetime(),
-            })
-            .strict(),
-          weight: z.number().positive(),
-          weight_reason: z
-            .enum(['CGU_SANCTION_EXPIRED', 'IBAMA_EMBARGO_LIFTED'])
-            .nullable(),
-          signal: z.enum(EvidenceSignal),
-          points: z.number().min(-100).max(100),
-        })
-        .strict(),
-    ),
+    contributions: z.array(ScoreContributionSchema),
   })
-  .strict();
+  .strict()
+  .describe('Índice de um ODS com a explicação do cálculo')
+  .meta({ id: 'ScoreExplanationResponse' });
 
 export type ScoreExplanationRequest = z.input<
   typeof ScoreExplanationRequestSchema

@@ -33,6 +33,7 @@ export const CompanyOdsScoreSchema = z
     ),
   })
   .strict()
-  .describe('Índice de aderência e confiança de um ODS');
+  .describe('Índice de aderência e confiança de um ODS')
+  .meta({ id: 'CompanyOdsScore' });
 
 export type CompanyOdsScore = z.infer<typeof CompanyOdsScoreSchema>;

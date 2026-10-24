@@ -22,6 +22,7 @@ export const HealthCheckResponseSchema = z
       .describe('Situação de cada dependência'),
     timestamp: z.iso.datetime().describe('Momento da verificação (ISO 8601)'),
   })
-  .describe('Situação da API e de suas dependências');
+  .describe('Situação da API e de suas dependências')
+  .meta({ id: 'HealthCheckResponse' });
 
 export type HealthCheckResponse = z.infer<typeof HealthCheckResponseSchema>;

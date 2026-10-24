@@ -29,7 +29,8 @@ export const SessionResponseSchema = z
       })
       .describe('Dono da sessão'),
   })
-  .describe('Sessão com o par de tokens');
+  .describe('Sessão com o par de tokens')
+  .meta({ id: 'SessionResponse' });
 
 export type SessionResponse = z.infer<typeof SessionResponseSchema>;
 

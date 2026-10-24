@@ -13,7 +13,8 @@ export const AccountResponseSchema = z
     ),
     role: z.enum(UserRole).describe('Papel de acesso'),
   })
-  .describe('Dados da conta do usuário autenticado');
+  .describe('Dados da conta do usuário autenticado')
+  .meta({ id: 'AccountResponse' });
 
 export type AccountResponse = z.infer<typeof AccountResponseSchema>;
 
@@ -39,7 +40,8 @@ export const UpdateAccountRequestSchema = z
   .refine(({ name, address }) => name !== undefined || address !== undefined, {
     message: 'Informe ao menos um campo a alterar (nome ou endereço).',
   })
-  .describe('Dados da conta a alterar');
+  .describe('Dados da conta a alterar')
+  .meta({ id: 'UpdateAccountRequest' });
 
 export type UpdateAccountRequest = z.infer<typeof UpdateAccountRequestSchema>;
 
@@ -61,7 +63,8 @@ export const ChangeEmailRequestSchema = z
       .max(128, 'A senha deve ter no máximo 128 caracteres.')
       .describe('Senha atual da conta'),
   })
-  .describe('Novo e-mail e senha atual');
+  .describe('Novo e-mail e senha atual')
+  .meta({ id: 'ChangeEmailRequest' });
 
 export type ChangeEmailRequest = z.infer<typeof ChangeEmailRequestSchema>;
 
@@ -74,6 +77,7 @@ export const DeleteAccountRequestSchema = z
       .max(128, 'A senha deve ter no máximo 128 caracteres.')
       .describe('Senha da conta, para confirmar a exclusão'),
   })
-  .describe('Confirmação da exclusão da conta');
+  .describe('Confirmação da exclusão da conta')
+  .meta({ id: 'DeleteAccountRequest' });
 
 export type DeleteAccountRequest = z.infer<typeof DeleteAccountRequestSchema>;
