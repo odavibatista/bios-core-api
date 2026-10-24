@@ -1423,6 +1423,45 @@ se somam: a empresa precisa atender a todos. Campo em branco vale como não info
   janela e a contagem total numa única ida ao banco; a resposta é validada contra o schema antes
   de sair do repositório.
 
+## Exportação da lista em XLSX
+
+`GET /companies/export/xlsx` (UC09, RF15, #85) devolve, em um arquivo XLSX, a lista que a pesquisa de
+empresas devolveria. Exige sessão. Aceita os **mesmos critérios e a mesma ordenação** de
+`GET /companies` (`name`, `uf`, `city`, `cnae`, `ods`, `min_score`, `min_confidence`, `order`), com as
+mesmas regras e o mesmo "ao menos um critério" (422), mas **sem paginação**: `page` e `page_size` são
+ignorados, e o arquivo traz a lista inteira. A tradução dos critérios para o repositório é uma só
+(`toSearchInput`), então o que se baixa é o que a tela mostra.
+
+- **Conteúdo.** Uma linha por empresa, na ordem da pesquisa: CNPJ, razão social, nome fantasia,
+  situação cadastral, UF, município, CNAE principal e descrição do CNAE e, **em colunas separadas para
+  cada ODS ativo**, `ODS n - Índice` e `ODS n - Confiança` (RF15). As colunas de índice cobrem **todos**
+  os ODS, e não só o selecionado na pesquisa: a planilha serve para comparar empresas. O que não foi
+  calculado fica como **célula vazia**, e não como zero; o índice `0` é gravado como `0`. Índice e
+  confiança nunca se combinam.
+- **Sem dado pessoal (INL02).** Só os campos acima, que já são de pessoa jurídica: o nome do
+  empresário individual/MEI sai com o CPF mascarado (`***`), e endereço de rua, hashes, fonte
+  cadastral, datas internas e regras do índice não entram no arquivo.
+- **Texto é texto.** As células de texto são gravadas como texto (tabela de textos do XLSX), nunca
+  como fórmula: uma razão social como `=HYPERLINK(...)` aparece literalmente e não é executada ao
+  abrir no Excel. O CNPJ, inclusive o alfanumérico e o com zeros à esquerda, também é texto.
+- **Sem resultado, sem arquivo.** Nenhuma empresa atende aos critérios: `404 NO_RESULTS_TO_EXPORT`
+  (o UC09 exige ao menos um resultado), e não uma planilha vazia.
+- **Limite de 5000 empresas.** Acima disso, `422 EXPORT_TOO_LARGE` com `details = { total, max }`: o
+  arquivo é montado em memória, e a base são as empresas já consultadas; refinar os critérios resolve.
+  Recusa a exportar em vez de truncar em silêncio.
+- **Resposta.** `Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`,
+  `Content-Disposition: attachment; filename="empresas-bios-AAAA-MM-DD.xlsx"` e `Content-Length`. A
+  planilha se chama `Empresas`, com o cabeçalho em negrito e fixo no topo, colunas com largura e
+  índice e confiança com duas casas decimais (o valor gravado não é arredondado).
+- **Limite de requisições.** 10 exportações por minuto por IP (a pesquisa tem o limite global),
+  porque cada chamada monta um arquivo.
+- **Só lê a base local.** Como a pesquisa, não chama fonte nem publica job. A rota fica em
+  `/companies/export/xlsx` (e não em `/companies/export`) para nunca disputar o caminho com
+  `GET /companies/:cnpj`.
+- **Biblioteca.** `write-excel-file` (uma dependência, `fflate`), que grava o ZIP e o XML do XLSX sem
+  carregar a planilha na memória em objetos pesados. `fflate` também é dependência de desenvolvimento
+  direta, para os testes abrirem o arquivo e conferirem as células (`test/support/xlsx-reader.ts`).
+
 ## Evidências (modelo e persistência)
 
 > **Mudar o texto de um resumo não duplica nada (#258).** A evidência é gravada por *upsert* na

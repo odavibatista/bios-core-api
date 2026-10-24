@@ -60,6 +60,7 @@
     "pdfjs-dist": "6.4.299",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "write-excel-file": "^4.1.1",
     "yauzl": "^3.4.0",
     "zod": "^4.6.5"
   },
@@ -81,6 +82,7 @@
     "eslint": "^10.13.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.7",
+    "fflate": "^0.8.3",
     "globals": "^17.13.0",
     "husky": "^9.1.7",
     "lint-staged": "^17.6.0",

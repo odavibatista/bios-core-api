@@ -31,6 +31,16 @@ export type OdsScoreSnapshot = Pick<
   sourcesWithoutRecords: CalculatedOdsScore['sourcesWithoutRecords'];
 };
 
+/** Índice e confiança de uma empresa em um ODS, sem a explicação (listas e exportações). */
+export interface OdsScoreSummary {
+  cnpj: string;
+  odsNumber: number;
+
+  /** Nulo quando não há evidência conclusiva para o ODS. */
+  scoreValue: number | null;
+  confidenceValue: number;
+}
+
 /** Contrato da leitura dos ODS e da substituição atômica dos índices de uma empresa. */
 export abstract class OdsScoreRepository {
   abstract findActiveOds(): Promise<ActiveOds[]>;
@@ -38,6 +48,10 @@ export abstract class OdsScoreRepository {
     cnpj: string,
     odsNumber: number,
   ): Promise<OdsScoreSnapshot | null>;
+  /** Índice e confiança de todas as empresas dadas, em todos os ODS que têm retrato. */
+  abstract findSummariesByCnpjs(
+    cnpjs: readonly string[],
+  ): Promise<OdsScoreSummary[]>;
   abstract findProfileLocation(
     cnpj: string,
   ): Promise<ScoreProfileLocation | null>;
