@@ -17,7 +17,9 @@ async function bootstrap(): Promise<void> {
     origin: configService.get('CORS_ORIGINS', { infer: true }),
   });
   app.enableShutdownHooks();
-  setupApiDocumentation(app);
+  setupApiDocumentation(app, {
+    serverUrl: configService.get('API_BASE_URL', { infer: true }),
+  });
 
   await app.listen(configService.get('PORT', { infer: true }));
 }
