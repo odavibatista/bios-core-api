@@ -1404,9 +1404,33 @@ se somam: a empresa precisa atender a todos. Campo em branco vale como não info
   para o outro. **Quem não tem índice vai sempre ao fim, nos dois sentidos**: ausência de índice
   (documento inexistente ou nota nula) não é o menor nem o maior índice, e o índice `0` é um índice,
   que se ordena entre os negativos e os positivos. Entre índices iguais, a maior confiança vem
-  primeiro (nos dois sentidos), depois a razão social e o CNPJ, que tornam a paginação estável. A
-  ordenação por índice vale mais que a prioridade da frase digitada. Implementada no mesmo
-  pipeline, com um campo auxiliar `score_missing` que nunca sai na resposta.
+  primeiro (nos dois sentidos) e o CNPJ desempata, o que torna a paginação estável. **Quem não tem
+  índice** vem depois de todos os que têm, por razão social e CNPJ (a confiança dele não entra). A
+  ordenação por índice vale mais que a prioridade da frase digitada. O campo auxiliar
+  `score_missing` (e `sort_confidence`/`sort_name`) nunca sai na resposta.
+- **Como a pesquisa com ODS é executada (#328).** O custo de ler o índice de uma empresa é o de um
+  `$lookup`, e partir do perfil e juntar o índice de **todas** as empresas antes de paginar custava cerca
+  de 0,14 ms por empresa (2,7 s para 20 000). Por isso há três caminhos, escolhidos pelo que a consulta
+  pede (`CompanyProfileRepository.search`):
+  1. **A partir do perfil** (`company-search.pipeline.ts`): sem ODS, com **nome**, ou com ODS que só
+     aparece na resposta (sem mínimo nem ordenação). Neste último caso o `$lookup` roda **depois** da
+     paginação, só para a página (de ~870 ms para ~20 ms em 6 000 empresas);
+  2. **A partir dos índices** (`company-scored-search.pipeline.ts`): ODS com mínimo (sem ordenação),
+     sem nome. Filtra `company_ods_scores` pelos campos desnormalizados (`uf`, `city`, `cnae_codes`) e
+     pelos mínimos, junta o perfil e ordena por razão social;
+  3. **Em dois segmentos**: ODS com ordenação, sem nome. Primeiro as empresas **com nota**, direto do
+     índice composto (`idx_company_ods_scores_ods_*`), pagina antes de juntar o perfil; depois as
+     **sem nota**, lidas do perfil só quando a página chega nelas. O total é a soma dos dois.
+  - **`uf` não nulo separa quem tem perfil de quem só tem índice.** A ingestão do IBAMA recalcula o
+    índice de empresas que ninguém consultou; elas ficam sem localização (`replaceForCompany` grava a do
+    perfil) e **não são da base da pesquisa** (UC08, regra 1). Sem esse corte, em 30 000 índices órfãos a
+    contagem passava de 100 ms para 880 ms. Elas nunca entram na lista, por mais alta que seja a nota.
+  - **Consistência.** A localização dos índices é eventualmente consistente: o recálculo a atualiza
+    (a atualização do perfil o pede), e por isso uma empresa que muda de UF só aparece na UF nova depois
+    do recálculo. O teste `company-search-equivalence.e2e-spec.ts` compara os três caminhos com um
+    oráculo em memória (mais de cem combinações de critérios, ODS, mínimos, ordem e janelas, inclusive a
+    emenda entre os dois segmentos), e `company-search-performance.e2e-spec.ts` reprova a volta do
+    varrimento do perfil inteiro.
 - **Ordem padrão.** Primeiro quem *começa* pela frase digitada (as palavras na ordem digitada, no início
   da razão social ou do nome fantasia); depois as demais. Desempate pela razão social e pelo
   CNPJ, o que torna a paginação estável. `ambev` lista `AMBEV S.A.` antes de

@@ -8,6 +8,7 @@ import { PrismaService } from '@shared/infra/database/prisma.service.js';
 import request, { type Response } from 'supertest';
 import { inject } from 'vitest';
 import { createDatabaseTestingApp } from '../support/database-testing-app.js';
+import { type OdsScoreValues, saveOdsScore } from '../support/ods-score.js';
 import { createTestAccount } from '../support/test-account.js';
 import { resetThrottleCounters } from '../support/throttle.js';
 import { readXlsx } from '../support/xlsx-reader.js';
@@ -76,31 +77,11 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       return cnpj;
     }
 
-    async function saveScore(
+    const saveScore = (
       cnpj: string,
       odsNumber: number,
-      { score, confidence }: { score: number | null; confidence: number },
-    ): Promise<void> {
-      const ods = await prisma.ods.findUniqueOrThrow({
-        where: { ods_number: odsNumber },
-      });
-
-      await prisma.companyOdsScore.create({
-        data: {
-          cnpj,
-          ods_id: ods.id_ods,
-          ods_number: odsNumber,
-          score_value: score,
-          confidence_value: confidence,
-          evidence_count: 0,
-          contributions: [],
-          sources_without_records: [],
-          rules_version: 'rf10-rf11-v3',
-          cnae_codes: [],
-          calculated_at: new Date(),
-        },
-      });
-    }
+      values: OdsScoreValues,
+    ): Promise<void> => saveOdsScore(prisma, cnpj, odsNumber, values);
 
     function exportXlsx(
       query: Record<string, string | number>,
