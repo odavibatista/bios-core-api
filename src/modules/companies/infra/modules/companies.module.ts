@@ -5,8 +5,10 @@ import { ReceitaModule } from '@modules/receita/infra/modules/receita.module.js'
 import { ScoringModule } from '@modules/scoring/infra/modules/scoring.module.js';
 import { CompanyProfileRepository } from '../../domain/dtos/repositories/company-profile.repository.js';
 import { CompaniesController } from '../../http/controllers/companies.controller.js';
+import { CompaniesExportController } from '../../http/controllers/companies-export.controller.js';
 import { PrismaCompanyProfileRepository } from '../db/repositories/prisma-company-profile.repository.js';
 import { CompanyProfileProcessor } from '../queue/company-profile.processor.js';
+import { ExportCompaniesUseCase } from '../usecases/export-companies.usecase.js';
 import { GetCompanyProfileUseCase } from '../usecases/get-company-profile.usecase.js';
 import { RefreshCompanyProfileUseCase } from '../usecases/refresh-company-profile.usecase.js';
 import { ResolveCnaeDescriptionsUseCase } from '../usecases/resolve-cnae-descriptions.usecase.js';
@@ -30,7 +32,7 @@ import { SearchCompaniesUseCase } from '../usecases/search-companies.usecase.js'
  */
 @Module({
   imports: [DataSourcesModule, ReceitaModule, IbgeCnaeModule, ScoringModule],
-  controllers: [CompaniesController],
+  controllers: [CompaniesController, CompaniesExportController],
   exports: [CompanyProfileRepository, GetCompanyProfileUseCase],
   providers: [
     /* Repositórios */
@@ -44,6 +46,7 @@ import { SearchCompaniesUseCase } from '../usecases/search-companies.usecase.js'
     RefreshCompanyProfileUseCase,
     ResolveCnaeDescriptionsUseCase,
     SearchCompaniesUseCase,
+    ExportCompaniesUseCase,
 
     /* Consumidor da fila */
     CompanyProfileProcessor,
