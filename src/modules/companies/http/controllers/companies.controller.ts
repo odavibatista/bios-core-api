@@ -11,7 +11,7 @@ import {
   type SearchCompaniesResponse,
   SearchCompaniesResponseSchema,
 } from '../../domain/dtos/requests/search-companies.dto.js';
-import { SearchCompaniesByNameUseCase } from '../../infra/usecases/search-companies-by-name.usecase.js';
+import { SearchCompaniesUseCase } from '../../infra/usecases/search-companies.usecase.js';
 
 // Privado, como toda rota sem `@Public()`: consultar empresas exige sessão (RF02).
 @ApiTags('Empresas')
@@ -19,14 +19,14 @@ import { SearchCompaniesByNameUseCase } from '../../infra/usecases/search-compan
 @Controller('companies')
 export class CompaniesController implements CompaniesSearchControllerInterface {
   constructor(
-    private readonly searchCompaniesByNameUseCase: SearchCompaniesByNameUseCase,
+    private readonly searchCompaniesUseCase: SearchCompaniesUseCase,
   ) {}
 
   @Get()
   @ApiOperation({
-    summary: 'Busca empresas por razão social ou nome fantasia',
+    summary: 'Pesquisa empresas por nome, UF, município, CNAE e ODS',
     description:
-      'Procura entre as empresas já consultadas pelo BIOS (nenhuma fonte cadastral oferece busca por nome): devolve as que têm, na razão social ou no nome fantasia, uma palavra começando por cada palavra digitada, em qualquer ordem. Acentos e caixa são ignorados. Quem começa pela frase digitada vem primeiro. Para abrir o perfil, use `GET /companies/{cnpj}`. Sem resultados, responde 200 com a lista vazia.',
+      'Procura entre as empresas já consultadas pelo BIOS (nenhuma fonte cadastral oferece busca): devolve as que atendem a todos os critérios informados, e ao menos um é obrigatório. `name`: uma palavra começando por cada palavra digitada, na razão social ou no nome fantasia, em qualquer ordem; quem começa pela frase digitada vem primeiro. `uf`: sigla. `city`: nome inteiro do município, sem distinguir acento, caixa ou pontuação. `cnae`: código de 2 a 7 dígitos, casado como prefixo com o CNAE principal ou algum secundário. `ods`: seleciona um ODS e devolve, em cada empresa, o índice e a confiança dele (`ods_score`); `min_score` e `min_confidence` filtram por esse ODS e exigem `ods`, e empresa sem índice calculado no ODS não passa por mínimo algum. Sem ordem pedida, a lista vem por razão social. Para abrir o perfil, use `GET /companies/{cnpj}`. Sem resultados, responde 200 com a lista vazia.',
   })
   @ResponseSchema(SearchCompaniesResponseSchema, {
     description: 'Página de empresas encontradas',
@@ -39,6 +39,6 @@ export class CompaniesController implements CompaniesSearchControllerInterface {
   searchCompanies(
     @Query({ schema: SearchCompaniesQuerySchema }) query: SearchCompaniesQuery,
   ): Promise<SearchCompaniesResponse> {
-    return this.searchCompaniesByNameUseCase.execute(query);
+    return this.searchCompaniesUseCase.execute(query);
   }
 }

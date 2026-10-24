@@ -3,7 +3,7 @@ import { PrismaService } from '@shared/infra/database/prisma.service.js';
 import { buildCnpj } from '@test/factories/companies/company-profile.factory.js';
 import { faker } from '@test/support/faker.js';
 import { CompanyProfileResponseSchema } from '../../../domain/dtos/requests/company-profile.dto.js';
-import { buildNameSearchPipeline } from './company-name-search.pipeline.js';
+import { buildCompanySearchPipeline } from './company-search.pipeline.js';
 import { PrismaCompanyProfileRepository } from './prisma-company-profile.repository.js';
 
 describe('PrismaCompanyProfileRepository', () => {
@@ -176,7 +176,7 @@ describe('PrismaCompanyProfileRepository', () => {
     expect(stored?.previousContentHash).toBeNull();
   });
 
-  describe('searchByName', () => {
+  describe('search', () => {
     const item = {
       cnpj: '11222333000181',
       legal_name: 'ACME LTDA',
@@ -185,19 +185,23 @@ describe('PrismaCompanyProfileRepository', () => {
       city: 'SAO PAULO',
       uf: 'SP',
       main_cnae: { code: '6201501', description: 'DESENVOLVIMENTO' },
+      ods_score: null,
     };
 
-    it('monta o pipeline com as palavras e a janela pedidas', async () => {
+    it('monta o pipeline com os critérios e a janela pedidos', async () => {
       aggregateRaw.mockResolvedValue([{ items: [], total: [] }]);
-
-      await repository.searchByName({
-        terms: ['ACME', 'LTDA'],
+      const input = {
+        nameTerms: ['ACME', 'LTDA'],
+        uf: 'SP',
+        ods: { number: 15, minScore: -10 },
         skip: 20,
         take: 10,
-      });
+      };
+
+      await repository.search(input);
 
       expect(aggregateRaw).toHaveBeenCalledWith({
-        pipeline: buildNameSearchPipeline(['ACME', 'LTDA'], 20, 10),
+        pipeline: buildCompanySearchPipeline(input),
       });
     });
 
@@ -207,7 +211,7 @@ describe('PrismaCompanyProfileRepository', () => {
       ]);
 
       await expect(
-        repository.searchByName({ terms: ['ACME'], skip: 0, take: 20 }),
+        repository.search({ nameTerms: ['ACME'], skip: 0, take: 20 }),
       ).resolves.toEqual({ items: [item], total: 31 });
     });
 
@@ -215,7 +219,7 @@ describe('PrismaCompanyProfileRepository', () => {
       aggregateRaw.mockResolvedValue([{ items: [], total: [] }]);
 
       await expect(
-        repository.searchByName({ terms: ['NADA'], skip: 0, take: 20 }),
+        repository.search({ nameTerms: ['NADA'], skip: 0, take: 20 }),
       ).resolves.toEqual({ items: [], total: 0 });
     });
 
@@ -223,7 +227,7 @@ describe('PrismaCompanyProfileRepository', () => {
       aggregateRaw.mockResolvedValue([]);
 
       await expect(
-        repository.searchByName({ terms: ['NADA'], skip: 0, take: 20 }),
+        repository.search({ nameTerms: ['NADA'], skip: 0, take: 20 }),
       ).resolves.toEqual({ items: [], total: 0 });
     });
 
@@ -235,8 +239,8 @@ describe('PrismaCompanyProfileRepository', () => {
         },
       ]);
 
-      const { items } = await repository.searchByName({
-        terms: ['ACME'],
+      const { items } = await repository.search({
+        nameTerms: ['ACME'],
         skip: 0,
         take: 20,
       });
@@ -249,7 +253,7 @@ describe('PrismaCompanyProfileRepository', () => {
       aggregateRaw.mockResolvedValue([{ items: [{ cnpj: 1 }], total: [] }]);
 
       await expect(
-        repository.searchByName({ terms: ['ACME'], skip: 0, take: 20 }),
+        repository.search({ nameTerms: ['ACME'], skip: 0, take: 20 }),
       ).rejects.toThrow();
     });
 
@@ -257,7 +261,7 @@ describe('PrismaCompanyProfileRepository', () => {
       aggregateRaw.mockRejectedValue(new Error('banco fora'));
 
       await expect(
-        repository.searchByName({ terms: ['ACME'], skip: 0, take: 20 }),
+        repository.search({ nameTerms: ['ACME'], skip: 0, take: 20 }),
       ).rejects.toThrow('banco fora');
     });
   });
