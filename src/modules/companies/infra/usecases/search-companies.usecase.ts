@@ -4,7 +4,7 @@ import {
   type PaginationQuery,
 } from '@shared/domain/dtos/requests/pagination.dto.js';
 import { UseCase } from '@shared/domain/protocols/use-case.protocol.js';
-import { extractNameTerms } from '../../domain/company-name-terms.js';
+import { toSearchInput } from '../../domain/search-companies-input.js';
 import { CompanyProfileRepository } from '../../domain/dtos/repositories/company-profile.repository.js';
 import type {
   SearchCompaniesQuery,
@@ -39,32 +39,14 @@ export class SearchCompaniesUseCase extends UseCase<
   }
 
   async execute({
-    name,
-    uf,
-    city,
-    cnae,
-    ods,
-    min_score,
-    min_confidence,
-    order,
-    ...pagination
+    page,
+    page_size,
+    ...criteria
   }: SearchCompaniesQuery): Promise<SearchCompaniesResponse> {
-    const { items, total } = await this.companyProfileRepository.search({
-      nameTerms: extractNameTerms(name ?? ''),
-      uf,
-      cityTerms: city === undefined ? undefined : extractNameTerms(city),
-      cnaePrefix: cnae,
-      ods:
-        ods === undefined
-          ? undefined
-          : {
-              number: ods,
-              minScore: min_score,
-              minConfidence: min_confidence,
-              order,
-            },
-      ...toWindow(pagination),
-    });
+    const pagination = { page, page_size };
+    const { items, total } = await this.companyProfileRepository.search(
+      toSearchInput(criteria, toWindow(pagination)),
+    );
 
     return {
       data: items,

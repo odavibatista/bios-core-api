@@ -1,5 +1,6 @@
 import {
   BRAZILIAN_UFS,
+  ExportCompaniesQuerySchema,
   CompanySearchItemSchema,
   SearchCompaniesQuerySchema,
   SearchCompaniesResponseSchema,
@@ -313,5 +314,62 @@ describe('SearchCompaniesResponseSchema', () => {
     });
 
     expect(parsed).toEqual(item);
+  });
+});
+
+describe('ExportCompaniesQuerySchema', () => {
+  it('aceita os mesmos critérios da pesquisa e não traz paginação', () => {
+    expect(
+      ExportCompaniesQuerySchema.parse({
+        name: 'ambev',
+        uf: 'sp',
+        city: 'São Paulo',
+        cnae: '11',
+        ods: '15',
+        min_score: '-10',
+        min_confidence: '0.3',
+        order: 'DESC',
+      }),
+    ).toEqual({
+      name: 'ambev',
+      uf: 'SP',
+      city: 'São Paulo',
+      cnae: '11',
+      ods: 15,
+      min_score: -10,
+      min_confidence: 0.3,
+      order: 'desc',
+    });
+  });
+
+  it('a paginação enviada é descartada: a exportação traz a lista inteira', () => {
+    const parsed = ExportCompaniesQuerySchema.parse({
+      uf: 'SP',
+      page: '3',
+      page_size: '10',
+    });
+
+    expect(parsed).not.toHaveProperty('page');
+    expect(parsed).not.toHaveProperty('page_size');
+  });
+
+  it('exige ao menos um critério, como a pesquisa', () => {
+    expect(ExportCompaniesQuerySchema.safeParse({}).success).toBe(false);
+    expect(ExportCompaniesQuerySchema.safeParse({ page: '2' }).success).toBe(
+      false,
+    );
+  });
+
+  it('aplica as mesmas regras entre os critérios', () => {
+    expect(
+      ExportCompaniesQuerySchema.safeParse({ uf: 'SP', min_score: '1' })
+        .success,
+    ).toBe(false);
+    expect(
+      ExportCompaniesQuerySchema.safeParse({ uf: 'SP', order: 'asc' }).success,
+    ).toBe(false);
+    expect(ExportCompaniesQuerySchema.safeParse({ name: 'a b' }).success).toBe(
+      false,
+    );
   });
 });
