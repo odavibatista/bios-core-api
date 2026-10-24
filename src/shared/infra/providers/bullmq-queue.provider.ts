@@ -168,15 +168,19 @@ export class BullMqQueueProvider extends QueueProvider {
    * quando o job está ativo.
    */
   private async coalescedJobId(queue: Queue, jobId: string): Promise<string> {
-    await this.removeIfFinished(queue, jobId);
+    // A cadeia `<id>`, `<id>~next`, `<id>~next~next`...: o primeiro elo que não está ativo
+    // recebe o pedido (pendente, funde; ausente ou finalizado, vira um job novo). Um
+    // acompanhamento que já começou também pode ter lido dados antigos, e o consumidor o
+    // pega na hora quando há concorrência: parar no primeiro acompanhamento perderia o pedido.
+    let candidate = jobId;
 
-    if ((await queue.getJobState(jobId)) !== 'active') return jobId;
+    for (;;) {
+      await this.removeIfFinished(queue, candidate);
 
-    const followUp = `${jobId}~next`;
+      if ((await queue.getJobState(candidate)) !== 'active') return candidate;
 
-    await this.removeIfFinished(queue, followUp);
-
-    return followUp;
+      candidate = `${candidate}~next`;
+    }
   }
 
   private async removeIfFinished(queue: Queue, jobId: string): Promise<void> {

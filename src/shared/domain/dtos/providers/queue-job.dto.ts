@@ -56,8 +56,11 @@ export interface EnqueueOptions {
    *  - job **pendente** (esperando ou agendado): o pedido se funde a ele (ele ainda vai
    *    ler os dados mais novos);
    *  - job **concluído ou falho**: o registro é removido e um job novo é publicado;
-   *  - job **ativo**: ele pode já ter lido os dados antigos, então um único job de
-   *    acompanhamento (`<jobId>~next`) é publicado, e os pedidos seguintes se fundem a ele.
+   *  - job **ativo**: ele pode já ter lido os dados antigos, então um job de acompanhamento
+   *    (`<jobId>~next`) é publicado, e os pedidos seguintes se fundem a ele enquanto estiver
+   *    pendente; se o acompanhamento também já começou, o próximo elo da cadeia
+   *    (`<jobId>~next~next`) recebe o pedido, e assim por diante (a cadeia tem o tamanho dos
+   *    jobs ativos ao mesmo tempo, que a concorrência do consumidor limita).
    *
    * Quem usa deve tolerar dois jobs do mesmo `jobId` ao mesmo tempo (o ativo e o
    * acompanhamento): o trabalho precisa ser idempotente e não regredir um resultado mais novo.

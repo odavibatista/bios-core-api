@@ -413,6 +413,42 @@ describe('BullMqQueueProvider', () => {
       expect(removed).toEqual([]);
     });
 
+    it('acompanhamento que já começou também pode ter lido dados antigos: o pedido segue para o próximo elo da cadeia', async () => {
+      const { queue, removed } = queueWith({
+        'scores-1': 'active',
+        'scores-1~next': 'active',
+      });
+
+      await publish(queue, 'scores-1');
+
+      expect(publishedId(queue)).toBe('scores-1~next~next');
+      expect(removed).toEqual([]);
+    });
+
+    it('a cadeia para no primeiro elo pendente, sem passar dele', async () => {
+      const { queue } = queueWith({
+        'scores-1': 'active',
+        'scores-1~next': 'waiting',
+        'scores-1~next~next': 'active',
+      });
+
+      await publish(queue, 'scores-1');
+
+      expect(publishedId(queue)).toBe('scores-1~next');
+    });
+
+    it('elo concluído no meio da cadeia é removido e reaproveitado', async () => {
+      const { queue, removed } = queueWith({
+        'scores-1': 'active',
+        'scores-1~next': 'failed',
+      });
+
+      await publish(queue, 'scores-1');
+
+      expect(removed).toEqual(['scores-1~next']);
+      expect(publishedId(queue)).toBe('scores-1~next');
+    });
+
     it('acompanhamento anterior já concluído é removido antes de publicar outro', async () => {
       const { queue, removed } = queueWith({
         'scores-1': 'active',

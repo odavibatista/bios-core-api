@@ -199,8 +199,11 @@ await queues.schedule({ queue, id: 'ibama-daily-ingestion', jobName, cron: '0 4 
   para sempre: sem tratamento, um pedido feito depois de o job terminar seria ignorado e devolveria
   o resultado velho. Com `coalesce`: job **pendente** (esperando ou agendado) absorve o pedido (ele
   ainda vai ler os dados mais novos); job **concluído ou falho** é removido e um novo é publicado;
-  job **ativo** (pode já ter lido os dados antigos) ganha **um** acompanhamento `<jobId>~next`, ao
-  qual os pedidos seguintes se fundem. Quem usa tolera dois jobs do mesmo `jobId` ao mesmo tempo:
+  job **ativo** (pode já ter lido os dados antigos) passa o pedido a um acompanhamento
+  `<jobId>~next`, ao qual os seguintes se fundem enquanto ele estiver pendente; se o acompanhamento
+  também já começou, o pedido vai ao elo seguinte (`~next~next`...), de modo que nenhum pedido seja
+  ignorado por ter o mesmo id de um job em andamento (a cadeia tem o tamanho dos jobs ativos ao mesmo
+  tempo, limitado pela concorrência do consumidor). Quem usa tolera dois jobs do mesmo `jobId` ao mesmo tempo:
   o trabalho precisa ser idempotente e não regredir um resultado mais novo (ver o recálculo dos
   índices). Usado pela fila `ods-scoring`; as demais seguem com `jobId` por janela de tempo.
 - **Espera com prazo.** `enqueueAndWait` devolve o resultado do consumidor ou lança
