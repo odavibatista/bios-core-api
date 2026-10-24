@@ -461,3 +461,36 @@ describe('validateEnvironment', () => {
     },
   );
 });
+
+describe('API_BASE_URL (servers do OpenAPI)', () => {
+  it('é opcional: ausente, fica indefinida', () => {
+    expect(validateEnvironment(REQUIRED).API_BASE_URL).toBeUndefined();
+  });
+
+  it('em branco vale como ausente', () => {
+    expect(
+      validateEnvironment({ ...REQUIRED, API_BASE_URL: '' }).API_BASE_URL,
+    ).toBeUndefined();
+  });
+
+  it.each([
+    ['http://localhost:3000', 'http://localhost:3000'],
+    ['https://api.bios.example', 'https://api.bios.example'],
+    ['https://api.bios.example/', 'https://api.bios.example'],
+    ['https://api.bios.example///', 'https://api.bios.example'],
+    ['https://bios.example/api/v1/', 'https://bios.example/api/v1'],
+  ])('aceita %s e a devolve sem a barra do fim', (value, expected) => {
+    expect(
+      validateEnvironment({ ...REQUIRED, API_BASE_URL: value }).API_BASE_URL,
+    ).toBe(expected);
+  });
+
+  it.each(['api.bios.example', 'ftp://bios.example', '/api', 'não é url'])(
+    'recusa %s',
+    (value) => {
+      expect(() =>
+        validateEnvironment({ ...REQUIRED, API_BASE_URL: value }),
+      ).toThrow(/API_BASE_URL/);
+    },
+  );
+});

@@ -77,6 +77,7 @@ export class AuthController implements AuthControllerInterface {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
+    operationId: 'login',
     summary: 'Autentica com e-mail e senha e abre uma sessão',
     description:
       'Devolve um access token JWT de vida curta e um refresh token opaco de uso único. Cinco senhas incorretas seguidas bloqueiam o IP ou a conta por 15 minutos.',
@@ -102,6 +103,7 @@ export class AuthController implements AuthControllerInterface {
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
+    operationId: 'refreshSession',
     summary: 'Troca o refresh token por um novo par de tokens',
     description:
       'O refresh token é de uso único: a renovação o invalida e devolve outro. Reapresentar um refresh token já usado derruba todas as sessões do usuário e avisa o titular por e-mail. Toda recusa tem a mesma resposta.',
@@ -130,6 +132,7 @@ export class AuthController implements AuthControllerInterface {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth('jwt')
   @ApiOperation({
+    operationId: 'logout',
     summary: 'Encerra a sessão do dispositivo atual',
     description:
       'Revoga a sessão do dispositivo: o access token deixa de ser aceito de imediato, sem esperar o vencimento, e o refresh token deixa de renovar. As sessões dos outros dispositivos não são afetadas.',
@@ -147,6 +150,7 @@ export class AuthController implements AuthControllerInterface {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth('jwt')
   @ApiOperation({
+    operationId: 'logoutAllDevices',
     summary: 'Encerra as sessões de todos os dispositivos do usuário',
     description:
       'Revoga todas as sessões ativas do usuário, inclusive a atual, com efeito imediato sobre os tokens já emitidos.',
@@ -166,6 +170,7 @@ export class AuthController implements AuthControllerInterface {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth('jwt')
   @ApiOperation({
+    operationId: 'changePassword',
     summary: 'Troca a senha do usuário autenticado',
     description:
       'Exige a senha atual. Ao concluir, todas as sessões do usuário, inclusive a atual, são encerradas e é preciso entrar de novo com a senha nova.',
@@ -191,6 +196,7 @@ export class AuthController implements AuthControllerInterface {
   @Post('forgot-password')
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({
+    operationId: 'forgotPassword',
     summary: 'Envia o link de recuperação de senha por e-mail',
     description:
       'O link vale por tempo limitado e só pode ser usado uma vez; pedir outro invalida o anterior. A resposta é a mesma para qualquer e-mail.',
@@ -212,6 +218,7 @@ export class AuthController implements AuthControllerInterface {
   @Post('reset-password')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
+    operationId: 'resetPassword',
     summary: 'Define a nova senha a partir do link de recuperação',
     description:
       'Gasta o token do link e encerra todas as sessões da conta. Depois, é preciso entrar com a senha nova.',

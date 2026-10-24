@@ -18,7 +18,8 @@ export const ChangePasswordRequestSchema = z
       'Nova senha (8 a 128 caracteres, com letra e número)',
     ),
   })
-  .describe('Senha atual e nova senha');
+  .describe('Senha atual e nova senha')
+  .meta({ id: 'ChangePasswordRequest' });
 
 export type ChangePasswordRequest = z.infer<typeof ChangePasswordRequestSchema>;
 
@@ -30,7 +31,8 @@ export const ForgotPasswordRequestSchema = z
       .max(254, 'O e-mail deve ter no máximo 254 caracteres.')
       .describe('E-mail da conta'),
   })
-  .describe('E-mail que receberá o link de recuperação');
+  .describe('E-mail que receberá o link de recuperação')
+  .meta({ id: 'ForgotPasswordRequest' });
 
 export type ForgotPasswordRequest = z.infer<typeof ForgotPasswordRequestSchema>;
 
@@ -46,6 +48,7 @@ export const ResetPasswordRequestSchema = z
       'Nova senha (8 a 128 caracteres, com letra e número)',
     ),
   })
-  .describe('Token do link e nova senha');
+  .describe('Token do link e nova senha')
+  .meta({ id: 'ResetPasswordRequest' });
 
 export type ResetPasswordRequest = z.infer<typeof ResetPasswordRequestSchema>;

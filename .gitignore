@@ -17,6 +17,7 @@ Thumbs.db
 
 # Testes
 /coverage
+/openapi
 /.nyc_output
 
 # IDEs

@@ -28,6 +28,7 @@ export class CompanyProfileController implements CompanyFullProfileControllerInt
   // Consolidar as fontes pode disparar coletas externas: mesmo limite da rota de evidências.
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @ApiOperation({
+    operationId: 'getCompanyProfile',
     summary: 'Consulta o perfil completo de uma empresa pelo CNPJ',
     description:
       'Compõe o cadastro (cache, banco ou provedores BrasilAPI, OpenCNPJ e Minha Receita), as evidências ambientais do IBAMA, da CGU e do GHG Protocol, agrupadas por categoria e com a referência da fonte original, e, por ODS, o índice de aderência, a confiança e a explicação do score, lado a lado e nunca combinados. Cada fonte degrada por conta própria: fonte fora do ar vira evidência `UNKNOWN`, nunca nota baixa. `ods_scores[].calculation_status = PENDING` indica índice ainda não calculado. Com os provedores cadastrais indisponíveis, serve o último cadastro guardado, se houver; sem ele, responde 503. Limite de 20 consultas por minuto por IP, além do limite global. Aceita CNPJ numérico e alfanumérico; os separadores `.` `-` são ignorados (a barra deve ser omitida, pois separa segmentos da URL).',

@@ -138,8 +138,12 @@ jobs:
         if: failure()
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml logs --no-color --tail=200 mongodb redis
 
+      # O teste do documento OpenAPI grava o documento neste caminho; ele sai como artefato
+      # logo abaixo, para o front gerar o cliente sem subir a API.
       - name: Testes e2e (pipeline HTTP e banco real)
         run: npm run test:e2e
+        env:
+          OPENAPI_EXPORT_PATH: openapi/openapi.json
 
       - name: Resumo de cobertura
         if: ${{ !cancelled() && hashFiles('coverage/coverage-summary.json') != '' }}
@@ -150,6 +154,14 @@ jobs:
               .map((metric) => '| ' + metric + ' | ' + total[metric].pct + '% |');
             console.log(['### Cobertura de testes', '', '| Métrica | Cobertura |', '| --- | --- |', ...rows].join('\n'));
           " >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publicar o documento OpenAPI
+        if: ${{ !cancelled() && hashFiles('openapi/openapi.json') != '' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: openapi
+          path: openapi/openapi.json
+          retention-days: 14
 
       - name: Publicar relatório de cobertura
         if: ${{ !cancelled() && hashFiles('coverage/**') != '' }}

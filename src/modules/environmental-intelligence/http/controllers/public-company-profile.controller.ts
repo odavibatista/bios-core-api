@@ -28,6 +28,7 @@ export class PublicCompanyProfileController implements CompanyFullProfileControl
 
   @Get(':cnpj')
   @ApiOperation({
+    operationId: 'getPublicCompanyProfile',
     summary:
       'Consulta o perfil completo de uma empresa pelo CNPJ (API pública)',
     description:

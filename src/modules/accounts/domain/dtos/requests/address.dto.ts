@@ -77,6 +77,7 @@ export const AddressSchema = z
       .enum(BRAZILIAN_STATES, 'Informe a sigla de uma unidade da federação.')
       .describe('Unidade da federação (sigla)'),
   })
-  .describe('Endereço do titular da conta');
+  .describe('Endereço do titular da conta')
+  .meta({ id: 'Address' });
 
 export type Address = z.infer<typeof AddressSchema>;

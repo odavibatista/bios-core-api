@@ -13,6 +13,7 @@ import { CheckHealthUseCase } from '@shared/infra/usecases/health/check-health.u
 import request from 'supertest';
 import { healthCheckResponseFactory } from '../factories/shared/health-check-response.factory.js';
 import { faker } from '../support/faker.js';
+import { dereference } from '../support/openapi.js';
 
 async function createApp(
   configure: (builder: ReturnType<typeof Test.createTestingModule>) => void,
@@ -100,7 +101,10 @@ describe('API (e2e)', () => {
       .get(OPENAPI_DOCUMENT_PATH)
       .expect(200);
 
-    const healthResponses = response.body.paths['/health'].get.responses;
+    const healthResponses = dereference(
+      response.body,
+      response.body.paths['/health'].get.responses,
+    );
     expect(
       healthResponses['200'].content['application/json'].schema.properties,
     ).toHaveProperty('checks');

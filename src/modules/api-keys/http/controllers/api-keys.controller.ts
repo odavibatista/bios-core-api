@@ -48,6 +48,7 @@ export class ApiKeysController implements ApiKeysControllerInterface {
 
   @Post()
   @ApiOperation({
+    operationId: 'createApiKey',
     summary: 'Gera uma chave de API',
     description:
       'O valor completo da chave aparece **somente nesta resposta**: guarde-o agora. O sistema guarda apenas o resumo (hash) e não consegue exibir a chave de novo; se perdê-la, revogue e gere outra.',
@@ -70,6 +71,7 @@ export class ApiKeysController implements ApiKeysControllerInterface {
 
   @Get()
   @ApiOperation({
+    operationId: 'listApiKeys',
     summary: 'Lista as chaves de API ativas do usuário',
     description:
       'Traz nome, prefixo, data de criação e data do último uso. O valor da chave não é reexibido. Chaves revogadas não aparecem.',
@@ -83,6 +85,7 @@ export class ApiKeysController implements ApiKeysControllerInterface {
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
+    operationId: 'revokeApiKey',
     summary: 'Revoga uma chave de API',
     description:
       'A chave é invalidada imediatamente: toda chamada com ela passa a ser recusada. Identificador inexistente, já revogado ou de outro usuário responde igual (404).',

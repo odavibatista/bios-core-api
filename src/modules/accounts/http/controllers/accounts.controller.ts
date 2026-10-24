@@ -97,6 +97,7 @@ export class AccountsController implements AccountsControllerInterface {
   @Post()
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({
+    operationId: 'registerAccount',
     summary: 'Cadastra uma conta e envia o link de confirmação por e-mail',
     description:
       'A conta nasce inativa e só entra em uso depois da confirmação. A resposta é a mesma para um e-mail novo e para um já cadastrado.',
@@ -119,6 +120,7 @@ export class AccountsController implements AccountsControllerInterface {
   @Post('confirm-email')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
+    operationId: 'confirmEmail',
     summary: 'Confirma o e-mail e ativa a conta a partir do token do link',
   })
   @ResponseSchema(AccountMessageResponseSchema, {
@@ -142,6 +144,7 @@ export class AccountsController implements AccountsControllerInterface {
   @Post('resend-confirmation')
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({
+    operationId: 'resendEmailConfirmation',
     summary: 'Pede um novo link de confirmação para uma conta ainda inativa',
     description:
       'O link anterior deixa de valer. A resposta é a mesma para qualquer e-mail.',
@@ -163,6 +166,7 @@ export class AccountsController implements AccountsControllerInterface {
   @Get('me')
   @ApiBearerAuth('jwt')
   @ApiOperation({
+    operationId: 'getOwnAccount',
     summary: 'Devolve os dados da própria conta',
     description:
       'E-mail e endereço são decifrados apenas nesta resposta, ao próprio titular.',
@@ -182,6 +186,7 @@ export class AccountsController implements AccountsControllerInterface {
   @Patch('me')
   @ApiBearerAuth('jwt')
   @ApiOperation({
+    operationId: 'updateOwnAccount',
     summary: 'Edita o nome e/ou o endereço da própria conta',
     description:
       'Ao menos um campo é obrigatório; `address: null` remove o endereço. O e-mail tem fluxo próprio, com confirmação.',
@@ -207,6 +212,7 @@ export class AccountsController implements AccountsControllerInterface {
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiBearerAuth('jwt')
   @ApiOperation({
+    operationId: 'requestEmailChange',
     summary: 'Pede a troca do e-mail da conta',
     description:
       'Exige a senha atual e envia o link de confirmação ao novo endereço; o e-mail atual vale até o link ser aberto. A resposta é a mesma quando o novo e-mail já pertence a outra conta.',
@@ -236,6 +242,7 @@ export class AccountsController implements AccountsControllerInterface {
   @Post('confirm-email-change')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
+    operationId: 'confirmEmailChange',
     summary: 'Efetiva a troca de e-mail a partir do token do link',
   })
   @ResponseSchema(AccountMessageResponseSchema, {
@@ -259,6 +266,7 @@ export class AccountsController implements AccountsControllerInterface {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth('jwt')
   @ApiOperation({
+    operationId: 'deleteOwnAccount',
     summary: 'Exclui a própria conta',
     description:
       'Confirmada com a senha. Remove a conta, as sessões, as chaves de API e os tokens; as tentativas de login ficam desvinculadas do titular. Não há remoção lógica.',
