@@ -10,14 +10,35 @@ import {
   type SearchCompaniesResult,
   type StoredCompanyProfile,
 } from '../../../domain/dtos/repositories/company-profile.repository.js';
-import { CompanySearchItemSchema } from '../../../domain/dtos/requests/search-companies.dto.js';
-import { buildCompanySearchPipeline } from './company-search.pipeline.js';
+import {
+  type CompanySearchItem,
+  CompanySearchItemSchema,
+} from '../../../domain/dtos/requests/search-companies.dto.js';
+import {
+  buildScoredCnpjsPipeline,
+  buildScoredCountPipeline,
+  buildScoredFilteredPipeline,
+  buildScoredPagePipeline,
+  canSearchFromScores,
+  type ScoredSearchInput,
+} from './company-scored-search.pipeline.js';
+import {
+  buildCompanyCountPipeline,
+  buildCompanySearchPipeline,
+  type CompanySearchPipelineOptions,
+} from './company-search.pipeline.js';
 
 /** Resposta do `$facet` da pesquisa: a janela e a contagem total. */
 const SearchFacetsSchema = z.object({
   items: z.array(CompanySearchItemSchema),
   total: z.array(z.object({ count: z.number().int() })),
 });
+
+/** Resposta de um `$count`: uma linha com o total, ou nenhuma quando nada casou. */
+const CountSchema = z.array(z.object({ count: z.number().int() }));
+
+/** Linhas só com o CNPJ (os que já aparecem em outro segmento da lista). */
+const CnpjsSchema = z.array(z.object({ cnpj: z.string() }));
 
 /**
  * Perfil cadastral das empresas no MongoDB.
@@ -78,9 +99,21 @@ export class PrismaCompanyProfileRepository
   }
 
   async search(input: SearchCompaniesInput): Promise<SearchCompaniesResult> {
+    if (!canSearchFromScores(input)) return this.searchFromProfiles(input);
+
+    return input.ods.order === undefined
+      ? this.searchFilteredByScore(input)
+      : this.searchOrderedByScore(input);
+  }
+
+  /** Pesquisa que parte do perfil: sem ODS, com nome, ou com ODS que só aparece na página. */
+  private async searchFromProfiles(
+    input: SearchCompaniesInput,
+    options?: CompanySearchPipelineOptions,
+  ): Promise<SearchCompaniesResult> {
     // O Prisma não expressa expressão regular com `$facet`; o pipeline vai cru.
     const raw = await this.prisma.companyProfile.aggregateRaw({
-      pipeline: buildCompanySearchPipeline(input),
+      pipeline: buildCompanySearchPipeline(input, options),
     });
     const [facets] = z.array(SearchFacetsSchema).parse(raw);
 
@@ -88,6 +121,125 @@ export class PrismaCompanyProfileRepository
       items: facets?.items ?? [],
       total: facets?.total[0]?.count ?? 0,
     };
+  }
+
+  /** Mínimos sem ordenação pelo ODS: os índices que passam, juntados ao perfil. */
+  private async searchFilteredByScore(
+    input: ScoredSearchInput,
+  ): Promise<SearchCompaniesResult> {
+    const raw = await this.prisma.companyOdsScore.aggregateRaw({
+      pipeline: buildScoredFilteredPipeline(input),
+    });
+    const [facets] = z.array(SearchFacetsSchema).parse(raw);
+
+    return {
+      items: facets?.items ?? [],
+      total: facets?.total[0]?.count ?? 0,
+    };
+  }
+
+  /**
+   * Ordenação pelo ODS: primeiro as empresas com nota, em ordem de índice, direto do índice
+   * composto; depois as sem nota, por razão social. A janela pedida cai no primeiro
+   * segmento, no segundo ou na emenda dos dois, e o segundo só é lido quando a página chega
+   * nele.
+   */
+  private async searchOrderedByScore(
+    input: ScoredSearchInput,
+  ): Promise<SearchCompaniesResult> {
+    const { ods, skip, take } = input;
+    const scoredTotal = await this.countScores(
+      buildScoredCountPipeline(input, 'scored'),
+    );
+    const unscored = await this.planUnscoredSegment(input, scoredTotal);
+    const items: CompanySearchItem[] = [];
+    const scoredTake = Math.max(0, Math.min(take, scoredTotal - skip));
+
+    if (scoredTake > 0) {
+      const raw = await this.prisma.companyOdsScore.aggregateRaw({
+        pipeline: buildScoredPagePipeline(input, skip, scoredTake),
+      });
+
+      items.push(...z.array(CompanySearchItemSchema).parse(raw));
+    }
+
+    const remaining = take - scoredTake;
+
+    if (remaining > 0 && unscored.total > 0) {
+      const page = await this.searchFromProfiles(
+        {
+          ...input,
+          ods: { number: ods.number },
+          skip: Math.max(0, skip - scoredTotal),
+          take: remaining,
+        },
+        await unscored.options(),
+      );
+
+      items.push(...page.items);
+    }
+
+    return { items, total: scoredTotal + unscored.total };
+  }
+
+  /**
+   * O segmento das empresas sem nota: quantas são e como a leitura dele se limita.
+   * Com `minScore` ninguém sem nota passa; com só `minConfidence`, passam as que têm
+   * índice sem nota e confiança suficiente; sem mínimo, é toda a base menos as que têm nota.
+   */
+  private async planUnscoredSegment(
+    input: ScoredSearchInput,
+    scoredTotal: number,
+  ): Promise<{
+    total: number;
+    options: () => Promise<CompanySearchPipelineOptions>;
+  }> {
+    const { minScore, minConfidence } = input.ods;
+
+    if (minScore !== undefined) {
+      return { total: 0, options: () => Promise.resolve({}) };
+    }
+
+    if (minConfidence !== undefined) {
+      const includeCnpjs = await this.scoreCnpjs(
+        buildScoredCnpjsPipeline(input, 'unscored'),
+      );
+
+      return {
+        total: includeCnpjs.length,
+        options: () => Promise.resolve({ includeCnpjs }),
+      };
+    }
+
+    const raw = await this.prisma.companyProfile.aggregateRaw({
+      pipeline: buildCompanyCountPipeline(input),
+    });
+    const profileTotal = CountSchema.parse(raw)[0]?.count ?? 0;
+
+    return {
+      total: Math.max(0, profileTotal - scoredTotal),
+      options: async () => ({
+        excludeCnpjs: await this.scoreCnpjs(
+          buildScoredCnpjsPipeline(input, 'scored'),
+        ),
+      }),
+    };
+  }
+
+  private async countScores(
+    pipeline: ReturnType<typeof buildScoredCountPipeline>,
+  ): Promise<number> {
+    const raw = await this.prisma.companyOdsScore.aggregateRaw({ pipeline });
+
+    return CountSchema.parse(raw)[0]?.count ?? 0;
+  }
+
+  private async scoreCnpjs(
+    pipeline: ReturnType<typeof buildScoredCnpjsPipeline>,
+  ): Promise<string[]> {
+    const raw = await this.prisma.companyOdsScore.aggregateRaw({ pipeline });
+
+    return CnpjsSchema.parse(raw).map(({ cnpj }) => cnpj);
   }
 
   async save({
