@@ -175,6 +175,8 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         ['índice mínimo não numérico', { ods: 15, min_score: 'alto' }],
         ['confiança mínima acima de 1', { ods: 15, min_confidence: 1.5 }],
         ['confiança mínima negativa', { ods: 15, min_confidence: -0.1 }],
+        ['ordenação sem ODS', { uf: 'SP', order: 'asc' }],
+        ['ordenação desconhecida', { ods: 15, order: 'up' }],
       ])('422: %s', async (_caso, query) => {
         const response = await search(query).expect(422);
 
@@ -695,6 +697,176 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       });
     });
 
+    describe('ordenação pelo índice do ODS (RF14)', () => {
+      beforeEach(async () => {
+        // ODS 15: índices -45, -10, 20, 20 (empate) e 60; dois sem índice conclusivo
+        // (nota nula) e um nunca calculado.
+        const rows: [string, number | null, number | null][] = [
+          ['CASA', -45, 0.8],
+          ['DUNA', -10, 0.5],
+          ['ECO', 20, 0.3],
+          ['FAROL', 20, 0.9],
+          ['GLEBA', 60, 0.4],
+          ['HORTO', null, 0.7],
+          ['IPE', null, 0],
+        ];
+
+        for (const [name, score, confidence] of rows) {
+          const cnpj = await saveCompany(name, { uf: 'SP' });
+
+          await saveScore(cnpj, 15, { score, confidence: confidence ?? 0 });
+        }
+
+        await saveCompany('JACA', { uf: 'SP' }); // sem documento de índice
+        await saveCompany('LIRIO', { uf: 'RJ' });
+      });
+
+      it('crescente: do menor ao maior índice, com os sem índice ao fim', async () => {
+        expect(await names({ uf: 'SP', ods: 15, order: 'asc' })).toEqual([
+          'CASA',
+          'DUNA',
+          'FAROL',
+          'ECO',
+          'GLEBA',
+          'HORTO',
+          'IPE',
+          'JACA',
+        ]);
+      });
+
+      it('decrescente: do maior ao menor índice, e os sem índice continuam ao fim', async () => {
+        expect(await names({ uf: 'SP', ods: 15, order: 'desc' })).toEqual([
+          'GLEBA',
+          'FAROL',
+          'ECO',
+          'DUNA',
+          'CASA',
+          'HORTO',
+          'IPE',
+          'JACA',
+        ]);
+      });
+
+      it('empate de índice: a maior confiança vem primeiro, nos dois sentidos', async () => {
+        const asc = await names({ uf: 'SP', ods: 15, order: 'asc' });
+        const desc = await names({ uf: 'SP', ods: 15, order: 'desc' });
+
+        expect(asc.indexOf('FAROL')).toBeLessThan(asc.indexOf('ECO'));
+        expect(desc.indexOf('FAROL')).toBeLessThan(desc.indexOf('ECO'));
+      });
+
+      it('entre os sem índice, a maior confiança vem primeiro e depois a razão social', async () => {
+        const asc = await names({ uf: 'SP', ods: 15, order: 'asc' });
+
+        expect(asc.slice(-3)).toEqual(['HORTO', 'IPE', 'JACA']);
+      });
+
+      it('o índice zero é um índice: não vai para o fim junto dos sem índice', async () => {
+        const cnpj = await saveCompany('MARE', { uf: 'SP' });
+
+        await saveScore(cnpj, 15, { score: 0, confidence: 0.1 });
+
+        const asc = await names({ uf: 'SP', ods: 15, order: 'asc' });
+
+        expect(asc.indexOf('MARE')).toBeLessThan(asc.indexOf('HORTO'));
+        expect(asc.indexOf('MARE')).toBeGreaterThan(asc.indexOf('DUNA'));
+        expect(asc.indexOf('MARE')).toBeLessThan(asc.indexOf('ECO'));
+      });
+
+      it('a ordem vale para o ODS selecionado, e não para o outro', async () => {
+        const cnpj = (
+          await prisma.companyProfile.findFirstOrThrow({
+            where: { legal_name: 'GLEBA' },
+          })
+        ).cnpj;
+
+        await saveScore(cnpj, 13, { score: -90, confidence: 0.5 });
+
+        const climate = await names({ uf: 'SP', ods: 13, order: 'asc' });
+        const land = await names({ uf: 'SP', ods: 15, order: 'asc' });
+
+        expect(climate[0]).toBe('GLEBA');
+        expect(land[0]).toBe('CASA');
+      });
+
+      it('os mínimos e a ordem se combinam, e o total conta só quem passou', async () => {
+        const { body } = await search({
+          uf: 'SP',
+          ods: 15,
+          min_score: 0,
+          order: 'desc',
+        }).expect(200);
+        const parsed = SearchCompaniesResponseSchema.parse(body);
+
+        expect(parsed.data.map((company) => company.legal_name)).toEqual([
+          'GLEBA',
+          'FAROL',
+          'ECO',
+        ]);
+        expect(parsed.pagination.total).toBe(3);
+      });
+
+      it('a ordenação vale mais que a prioridade da frase digitada', async () => {
+        await saveCompany('GLEBA NORTE', { uf: 'SP' });
+        const sul = await saveCompany('SUL GLEBA', { uf: 'SP' });
+
+        await saveScore(sul, 15, { score: -80, confidence: 0.2 });
+
+        expect(await names({ name: 'gleba', ods: 15, order: 'asc' })).toEqual([
+          'SUL GLEBA',
+          'GLEBA',
+          'GLEBA NORTE',
+        ]);
+      });
+
+      it('a paginação segue a ordem, sem repetir nem pular empresas', async () => {
+        const pages: string[][] = [];
+
+        for (const page of [1, 2, 3, 4]) {
+          const { body } = await search({
+            uf: 'SP',
+            ods: 15,
+            order: 'desc',
+            page,
+            page_size: 2,
+          }).expect(200);
+          const parsed = SearchCompaniesResponseSchema.parse(body);
+
+          expect(parsed.pagination).toMatchObject({ total: 8, total_pages: 4 });
+          pages.push(parsed.data.map((company) => company.legal_name));
+        }
+
+        expect(pages.flat()).toEqual(
+          await names({ uf: 'SP', ods: 15, order: 'desc', page_size: 100 }),
+        );
+        expect(new Set(pages.flat()).size).toBe(8);
+      });
+
+      it('aceita a ordem em maiúsculas', async () => {
+        expect((await names({ uf: 'SP', ods: 15, order: 'DESC' }))[0]).toBe(
+          'GLEBA',
+        );
+      });
+
+      it('sem ordem pedida, a lista continua por razão social', async () => {
+        expect((await names({ uf: 'SP', ods: 15 })).slice(0, 3)).toEqual([
+          'CASA',
+          'DUNA',
+          'ECO',
+        ]);
+      });
+
+      it('não expõe o campo auxiliar da ordenação', async () => {
+        const { body } = await search({
+          uf: 'SP',
+          ods: 15,
+          order: 'asc',
+        }).expect(200);
+
+        expect(JSON.stringify(body)).not.toContain('score_missing');
+      });
+    });
+
     describe('documentação OpenAPI (RF13)', () => {
       it('declara os filtros como parâmetros de consulta', () => {
         const document = SwaggerModule.createDocument(
@@ -712,6 +884,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
           'ods',
           'min_score',
           'min_confidence',
+          'order',
           'page',
           'page_size',
         ]) {

@@ -87,6 +87,16 @@ describe('SearchCompaniesUseCase', () => {
     });
   });
 
+  it('leva a ordenação pelo ODS ao repositório', async () => {
+    await useCase.execute({ ods: 15, order: 'desc', page: 1, page_size: 20 });
+
+    expect(companyProfileRepository.search).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ods: expect.objectContaining({ order: 'desc' }),
+      }),
+    );
+  });
+
   it('o ODS sem mínimos vai sem mínimos', async () => {
     await useCase.execute({ ods: 13, page: 1, page_size: 20 });
 
