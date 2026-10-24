@@ -47,6 +47,15 @@ function facetOf(input: Partial<SearchCompaniesInput>) {
   return stage.$facet;
 }
 
+/** O `$project` que monta o item da lista (depois do `$lookup`, quando ele cai na página). */
+function projectOf(input: Partial<SearchCompaniesInput>) {
+  const stage = facetOf(input).items.find((item) => '$project' in item) as {
+    $project: Record<string, unknown>;
+  };
+
+  return stage.$project;
+}
+
 /**
  * As expressões regulares do pipeline rodam no MongoDB (PCRE); aqui são
  * executadas pelo motor do JavaScript, que entende a mesma sintaxe usada
@@ -257,16 +266,52 @@ describe('buildCompanySearchPipeline', () => {
   describe('ODS selecionado', () => {
     it('sem ODS, não consulta o índice e o item traz ods_score nulo', () => {
       const pipeline = pipelineOf({ uf: 'SP' });
-      const { $project } = facetOf({ uf: 'SP' }).items[3] as {
-        $project: { ods_score: unknown };
-      };
+      const $project = projectOf({ uf: 'SP' });
 
       expect(stageOf(pipeline, '$lookup')).toBeUndefined();
+      expect(
+        facetOf({ uf: 'SP' }).items.some((item) => '$lookup' in item),
+      ).toBe(false);
       expect($project.ods_score).toEqual({ $literal: null });
     });
 
+    it('com mínimo ou ordenação, junta o índice de todas as empresas antes de paginar', () => {
+      for (const ods of [
+        { number: 15, minScore: 0 },
+        { number: 15, minConfidence: 0.5 },
+        { number: 15, order: 'asc' as const },
+      ]) {
+        const pipeline = pipelineOf({ uf: 'SP', ods });
+
+        expect(stageOf(pipeline, '$lookup')).toBeDefined();
+        expect(
+          facetOf({ uf: 'SP', ods }).items.some((item) => '$lookup' in item),
+        ).toBe(false);
+      }
+    });
+
+    it('sem mínimo nem ordenação, o índice só é lido para a página: o $lookup vem depois do $limit', () => {
+      const input = { uf: 'SP', ods: { number: 15 } };
+      const items = facetOf(input).items;
+      const keys = items.map((item) => Object.keys(item)[0]);
+
+      expect(stageOf(pipelineOf(input), '$lookup')).toBeUndefined();
+      expect(keys.indexOf('$lookup')).toBeGreaterThan(keys.indexOf('$limit'));
+      expect(keys.indexOf('$lookup')).toBeLessThan(keys.indexOf('$project'));
+    });
+
+    it('com a leitura na página, a lista segue na ordem padrão e a contagem não depende do índice', () => {
+      const { items, total } = facetOf({ ods: { number: 15 } });
+
+      expect(items[0]).toEqual({ $sort: { legal_name: 1, cnpj: 1 } });
+      expect(total).toEqual([{ $count: 'count' }]);
+    });
+
     it('junta o índice e a confiança do ODS pelo CNPJ e pelo número do ODS', () => {
-      const pipeline = pipelineOf({ uf: 'SP', ods: { number: 15 } });
+      const pipeline = pipelineOf({
+        uf: 'SP',
+        ods: { number: 15, minScore: 0 },
+      });
       const { $lookup } = stageOf(pipeline, '$lookup') as {
         $lookup: {
           from: string;
@@ -332,9 +377,7 @@ describe('buildCompanySearchPipeline', () => {
     });
 
     it('o item traz o ODS selecionado, o índice e a confiança (nulos sem cálculo)', () => {
-      const { $project } = facetOf({ ods: { number: 15 } }).items[3] as {
-        $project: { ods_score: Record<string, unknown> };
-      };
+      const $project = projectOf({ ods: { number: 15 } });
 
       expect($project.ods_score).toEqual({
         ods_number: { $literal: 15 },
@@ -380,21 +423,21 @@ describe('buildCompanySearchPipeline', () => {
     const sortOf = (input: Partial<SearchCompaniesInput>) =>
       (facetOf(input).items[0] as { $sort: Record<string, number> }).$sort;
 
-    it('crescente: sem índice ao fim, índice do menor ao maior, maior confiança primeiro', () => {
+    it('crescente: com índice primeiro, do menor ao maior, maior confiança primeiro, CNPJ por último', () => {
       const sort = sortOf({ ods: { number: 15, order: 'asc' } });
 
       expect(sort).toEqual({
         score_missing: 1,
         'ods_score.score_value': 1,
-        'ods_score.confidence_value': -1,
-        legal_name: 1,
+        sort_confidence: -1,
+        sort_name: 1,
         cnpj: 1,
       });
       expect(Object.keys(sort)).toEqual([
         'score_missing',
         'ods_score.score_value',
-        'ods_score.confidence_value',
-        'legal_name',
+        'sort_confidence',
+        'sort_name',
         'cnpj',
       ]);
     });
@@ -403,8 +446,8 @@ describe('buildCompanySearchPipeline', () => {
       expect(sortOf({ ods: { number: 15, order: 'desc' } })).toEqual({
         score_missing: 1,
         'ods_score.score_value': -1,
-        'ods_score.confidence_value': -1,
-        legal_name: 1,
+        sort_confidence: -1,
+        sort_name: 1,
         cnpj: 1,
       });
     });
@@ -421,6 +464,23 @@ describe('buildCompanySearchPipeline', () => {
           1,
           0,
         ],
+      });
+    });
+
+    it('quem não tem índice se ordena só por razão social e CNPJ: a confiança dele não entra', () => {
+      const pipeline = pipelineOf({ ods: { number: 15, order: 'asc' } });
+      const { $addFields } = pipeline.find(addsScoreMissing) as {
+        $addFields: { sort_confidence: Stage; sort_name: Stage };
+      };
+      const missing = {
+        $eq: [{ $ifNull: ['$ods_score.score_value', null] }, null],
+      };
+
+      expect($addFields.sort_confidence).toEqual({
+        $cond: [missing, null, '$ods_score.confidence_value'],
+      });
+      expect($addFields.sort_name).toEqual({
+        $cond: [missing, '$legal_name', null],
       });
     });
 
@@ -459,9 +519,7 @@ describe('buildCompanySearchPipeline', () => {
     });
 
     it('projeta só o resumo da empresa, sem o _id nem os hashes', () => {
-      const { $project } = facetOf({ nameTerms: ['AMBEV'] }).items[3] as {
-        $project: Record<string, unknown>;
-      };
+      const $project = projectOf({ nameTerms: ['AMBEV'] });
 
       expect(Object.keys($project).sort()).toEqual(
         [
