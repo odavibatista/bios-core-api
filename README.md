@@ -1350,16 +1350,18 @@ e não em `companies`, porque o módulo de empresas não depende da orquestraç�
   uma que não coleta (`withoutEnvironmentalCollection`), para não baixar os dumps do IBAMA;
   `company-full-profile.e2e-spec.ts` cobre a composição real sobre o que está gravado.
 
-## Busca de empresa por nome
+## Pesquisa de empresas (nome e filtros)
 
-`GET /companies?name=<texto>&page=<n>&page_size=<n>` lista as empresas pela razão social ou pelo
-nome fantasia (UC06 fluxo 1.1, RF04) para quem não conhece o CNPJ; o usuário escolhe uma e abre o
-perfil em `GET /companies/:cnpj`. Exige sessão, como a consulta por CNPJ.
+`GET /companies` lista as empresas da base local (UC06 fluxo 1.1 e UC08; RF04, RF13) por nome, UF,
+município, CNAE e, para um ODS selecionado, índice e confiança mínimos; o usuário escolhe uma e abre
+o perfil em `GET /companies/:cnpj`. Exige sessão, como a consulta por CNPJ. Os critérios são
+opcionais, mas **ao menos um** é obrigatório (`name`, `uf`, `city`, `cnae` ou `ods`), e os que vêm
+se somam: a empresa precisa atender a todos. Campo em branco vale como não informado.
 
 - **Só a base local.** Nenhuma fonte cadastral (BrasilAPI, OpenCNPJ, Minha Receita) oferece busca
   por nome, então a busca opera **apenas sobre os perfis já guardados**: uma empresa que ninguém
   consultou pelo CNPJ não aparece. A busca nunca chama provedor nem publica job
-  (`SearchCompaniesByNameUseCase`); quem a abre depois pelo CNPJ dispara a atualização, se o
+  (`SearchCompaniesUseCase`); quem a abre depois pelo CNPJ dispara a atualização, se o
   cadastro venceu.
 - **O que casa.** Aproximação por **início de palavra**: a empresa entra quando *cada* palavra
   digitada começa alguma palavra da razão social ou do nome fantasia, em qualquer ordem. `petro`
@@ -1376,19 +1378,40 @@ perfil em `GET /companies/:cnpj`. Exige sessão, como a consulta por CNPJ.
 - **Limites da consulta.** O texto tem até 100 caracteres, no máximo 8 palavras contam, e é
   preciso **ao menos uma palavra com 3 caracteres ou mais** (`a b do` é recusado): sem isso, a
   busca varreria a base inteira. Fora disso: `422 VALIDATION_FAILED`.
+- **Filtros cadastrais (#83).** Valem sobre `company_profile`, com ou sem nome:
+  - `uf`: sigla das 27 unidades da federação, em qualquer caixa (`rj` vale `RJ`); outra coisa é 422;
+  - `city`: o **nome inteiro** do município, sem distinguir acento, caixa nem pontuação
+    (`sao paulo` acha `SÃO PAULO`, `santa barbara d oeste` acha `Santa Bárbara d'Oeste`), mas não por
+    início de palavra: `sao paulo` não acha `SAO PAULO DO POTENGI`. Sem `uf`, casa o município de
+    qualquer estado; para desambiguar, informe a UF;
+  - `cnae`: de 2 a 7 dígitos (divisão, grupo, classe ou subclasse), com ou sem a máscara
+    (`6201-5/01`), tratado como **prefixo** do código do CNAE principal **ou** de algum secundário.
+    `62` acha todas as empresas de tecnologia da informação; `01` não acha `6201501`.
+- **ODS selecionado, índice e confiança mínimos (#83).** `ods` (1 a 17) seleciona o ODS a que tudo
+  o que é de índice se refere (UC08, regra 2). A pesquisa junta ao perfil o documento de
+  `company_ods_scores` daquele ODS (`$lookup` pelo CNPJ e pelo número do ODS) e devolve em cada
+  empresa `ods_score = { ods_number, score_value, confidence_value }`, com os dois valores nulos
+  quando a empresa não tem índice calculado nesse ODS. `min_score` (-100 a 100) e
+  `min_confidence` (0 a 1) filtram por `>=` e **exigem `ods`** (422 sem ele). Empresa sem índice
+  calculado no ODS, ou com índice nulo, não passa por `min_score`; sem documento, também não passa
+  por `min_confidence`. O mínimo `0` filtra de fato (não equivale a "sem filtro"). Índice e
+  confiança vêm em campos separados e nunca combinados. Nada do que explica o índice
+  (contribuições, regras, datas) sai na lista: isso é do perfil.
 - **Ordem.** Primeiro quem *começa* pela frase digitada (as palavras na ordem digitada, no início
   da razão social ou do nome fantasia); depois as demais. Desempate pela razão social e pelo
   CNPJ, o que torna a paginação estável. `ambev` lista `AMBEV S.A.` antes de
-  `DISTRIBUIDORA AMBEV`.
+  `DISTRIBUIDORA AMBEV`. Sem nome, a lista vem por razão social e CNPJ. A ordenação pelo índice do
+  ODS é a #84.
 - **Resposta.** `{ data, pagination }`, com `pagination = { page, page_size, total,
   total_pages }` (padrão das listagens, em `pagination.dto.ts`; `page_size` até 100, padrão 20).
   Cada item é o resumo para reconhecer a empresa: `cnpj`, `legal_name`, `trade_name`,
-  `registration_status`, `city`, `uf` e o CNAE principal. Nada achado é `200` com `data: []`, e
+  `registration_status`, `city`, `uf`, o CNAE principal e `ods_score` (nulo quando a pesquisa não
+  seleciona ODS). Nada achado é `200` com `data: []`, e
   não `404`; página além do fim traz a lista vazia e o `total` correto.
 - **Dados pessoais (INL02).** A busca lê a razão social já gravada, que tem o CPF do empresário
   individual/MEI mascarado (`***`). Logo, digitar um CPF não encontra o titular, e o nome dele
   (público por lei) continua achável.
-- **Uma agregação só.** O `$facet` do pipeline (`company-name-search.pipeline.ts`) devolve a
+- **Uma agregação só.** O `$facet` do pipeline (`company-search.pipeline.ts`) devolve a
   janela e a contagem total numa única ida ao banco; a resposta é validada contra o schema antes
   de sair do repositório.
 

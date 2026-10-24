@@ -12,22 +12,23 @@ import type {
 } from '../../domain/dtos/requests/search-companies.dto.js';
 
 /**
- * Busca empresas por razão social ou nome fantasia (UC06, fluxo 1.1; RF04).
+ * Pesquisa empresas por nome, UF, município, CNAE e, para um ODS selecionado, índice e
+ * confiança mínimos (UC06, fluxo 1.1; UC08; RF04, RF13).
  *
  * Nenhuma das fontes cadastrais (BrasilAPI, OpenCNPJ, Minha Receita) oferece
- * busca por nome, então a busca opera **só sobre os perfis já guardados**: uma
- * empresa que ninguém consultou antes pelo CNPJ não aparece. Isso também
- * significa que a busca nunca chama provedor externo nem publica job. Quem
+ * busca, então a pesquisa opera **só sobre os perfis já guardados**: uma
+ * empresa que ninguém consultou antes pelo CNPJ não aparece (UC08, regra 1). Isso também
+ * significa que ela nunca chama provedor externo nem publica job. Quem
  * escolhe um resultado abre o perfil pela consulta por CNPJ, que faz a
  * atualização quando o cadastro venceu.
  *
  * A razão social e o nome fantasia guardados já têm o CPF mascarado (INL02);
  * como a busca lê esses campos, digitar um CPF não encontra o titular.
  *
- * Lista vazia não é erro: a busca respondeu, e nada casou.
+ * Lista vazia não é erro: a pesquisa respondeu, e nada casou.
  */
 @Injectable()
-export class SearchCompaniesByNameUseCase extends UseCase<
+export class SearchCompaniesUseCase extends UseCase<
   SearchCompaniesQuery,
   SearchCompaniesResponse
 > {
@@ -39,10 +40,23 @@ export class SearchCompaniesByNameUseCase extends UseCase<
 
   async execute({
     name,
+    uf,
+    city,
+    cnae,
+    ods,
+    min_score,
+    min_confidence,
     ...pagination
   }: SearchCompaniesQuery): Promise<SearchCompaniesResponse> {
-    const { items, total } = await this.companyProfileRepository.searchByName({
-      terms: extractNameTerms(name),
+    const { items, total } = await this.companyProfileRepository.search({
+      nameTerms: extractNameTerms(name ?? ''),
+      uf,
+      cityTerms: city === undefined ? undefined : extractNameTerms(city),
+      cnaePrefix: cnae,
+      ods:
+        ods === undefined
+          ? undefined
+          : { number: ods, minScore: min_score, minConfidence: min_confidence },
       ...toWindow(pagination),
     });
 
