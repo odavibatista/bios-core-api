@@ -26,6 +26,15 @@ function conditionsOf(input: Partial<SearchCompaniesInput>): Condition[] {
   return (first as { $match: { $and: Condition[] } }).$match.$and;
 }
 
+/** O estágio acrescenta o campo auxiliar `score_missing` (quem não tem índice)? */
+function addsScoreMissing(stage: Stage): boolean {
+  const added = stage.$addFields;
+
+  return (
+    typeof added === 'object' && added !== null && 'score_missing' in added
+  );
+}
+
 function stageOf(pipeline: Stage[], key: string): Stage | undefined {
   return pipeline.find((stage) => key in stage);
 }
@@ -364,6 +373,72 @@ describe('buildCompanySearchPipeline', () => {
       expect(facetOf({ uf: 'SP' }).items[0]).toEqual({
         $sort: { legal_name: 1, cnpj: 1 },
       });
+    });
+  });
+
+  describe('ordenação pelo índice do ODS (RF14)', () => {
+    const sortOf = (input: Partial<SearchCompaniesInput>) =>
+      (facetOf(input).items[0] as { $sort: Record<string, number> }).$sort;
+
+    it('crescente: sem índice ao fim, índice do menor ao maior, maior confiança primeiro', () => {
+      const sort = sortOf({ ods: { number: 15, order: 'asc' } });
+
+      expect(sort).toEqual({
+        score_missing: 1,
+        'ods_score.score_value': 1,
+        'ods_score.confidence_value': -1,
+        legal_name: 1,
+        cnpj: 1,
+      });
+      expect(Object.keys(sort)).toEqual([
+        'score_missing',
+        'ods_score.score_value',
+        'ods_score.confidence_value',
+        'legal_name',
+        'cnpj',
+      ]);
+    });
+
+    it('decrescente: só inverte o índice; quem não tem índice continua ao fim', () => {
+      expect(sortOf({ ods: { number: 15, order: 'desc' } })).toEqual({
+        score_missing: 1,
+        'ods_score.score_value': -1,
+        'ods_score.confidence_value': -1,
+        legal_name: 1,
+        cnpj: 1,
+      });
+    });
+
+    it('marca quem não tem índice (ausente ou nulo) com score_missing = 1', () => {
+      const pipeline = pipelineOf({ ods: { number: 15, order: 'asc' } });
+      const { $addFields } = pipeline.find(addsScoreMissing) as {
+        $addFields: { score_missing: Stage };
+      };
+
+      expect($addFields.score_missing).toEqual({
+        $cond: [
+          { $eq: [{ $ifNull: ['$ods_score.score_value', null] }, null] },
+          1,
+          0,
+        ],
+      });
+    });
+
+    it('a ordenação pelo ODS vale mais que a prioridade do nome', () => {
+      const sort = sortOf({
+        nameTerms: ['AMBEV'],
+        ods: { number: 15, order: 'asc' },
+      });
+
+      expect(sort).not.toHaveProperty('search_rank');
+    });
+
+    it('sem ordenação pedida, não cria o campo auxiliar nem ordena pelo índice', () => {
+      const input = { ods: { number: 15, minScore: 0 } };
+      const pipeline = pipelineOf(input);
+
+      expect(pipeline.some(addsScoreMissing)).toBe(false);
+      expect(sortOf(input)).toEqual({ legal_name: 1, cnpj: 1 });
     });
   });
 

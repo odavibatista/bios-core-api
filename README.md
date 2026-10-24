@@ -1352,8 +1352,8 @@ e não em `companies`, porque o módulo de empresas não depende da orquestraç�
 
 ## Pesquisa de empresas (nome e filtros)
 
-`GET /companies` lista as empresas da base local (UC06 fluxo 1.1 e UC08; RF04, RF13) por nome, UF,
-município, CNAE e, para um ODS selecionado, índice e confiança mínimos; o usuário escolhe uma e abre
+`GET /companies` lista as empresas da base local (UC06 fluxo 1.1 e UC08; RF04, RF13, RF14) por nome, UF,
+município, CNAE e, para um ODS selecionado, índice e confiança mínimos, e as ordena pelo índice dele; o usuário escolhe uma e abre
 o perfil em `GET /companies/:cnpj`. Exige sessão, como a consulta por CNPJ. Os critérios são
 opcionais, mas **ao menos um** é obrigatório (`name`, `uf`, `city`, `cnae` ou `ods`), e os que vêm
 se somam: a empresa precisa atender a todos. Campo em branco vale como não informado.
@@ -1397,11 +1397,19 @@ se somam: a empresa precisa atender a todos. Campo em branco vale como não info
   por `min_confidence`. O mínimo `0` filtra de fato (não equivale a "sem filtro"). Índice e
   confiança vêm em campos separados e nunca combinados. Nada do que explica o índice
   (contribuições, regras, datas) sai na lista: isso é do perfil.
-- **Ordem.** Primeiro quem *começa* pela frase digitada (as palavras na ordem digitada, no início
+- **Ordenar pelo índice do ODS (#84).** `order=asc` (do menor ao maior índice) ou `order=desc` (do
+  maior ao menor), em qualquer caixa; exige `ods` (422 sem ele) e vale para o ODS selecionado, não
+  para o outro. **Quem não tem índice vai sempre ao fim, nos dois sentidos**: ausência de índice
+  (documento inexistente ou nota nula) não é o menor nem o maior índice, e o índice `0` é um índice,
+  que se ordena entre os negativos e os positivos. Entre índices iguais, a maior confiança vem
+  primeiro (nos dois sentidos), depois a razão social e o CNPJ, que tornam a paginação estável. A
+  ordenação por índice vale mais que a prioridade da frase digitada. Implementada no mesmo
+  pipeline, com um campo auxiliar `score_missing` que nunca sai na resposta.
+- **Ordem padrão.** Primeiro quem *começa* pela frase digitada (as palavras na ordem digitada, no início
   da razão social ou do nome fantasia); depois as demais. Desempate pela razão social e pelo
   CNPJ, o que torna a paginação estável. `ambev` lista `AMBEV S.A.` antes de
-  `DISTRIBUIDORA AMBEV`. Sem nome, a lista vem por razão social e CNPJ. A ordenação pelo índice do
-  ODS é a #84.
+  `DISTRIBUIDORA AMBEV`. Sem nome, a lista vem por razão social e CNPJ. Com `order`, vale a ordenação
+  pelo índice do ODS, descrita acima.
 - **Resposta.** `{ data, pagination }`, com `pagination = { page, page_size, total,
   total_pages }` (padrão das listagens, em `pagination.dto.ts`; `page_size` até 100, padrão 20).
   Cada item é o resumo para reconhecer a empresa: `cnpj`, `legal_name`, `trade_name`,

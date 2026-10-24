@@ -46,6 +46,7 @@ export class SearchCompaniesUseCase extends UseCase<
     ods,
     min_score,
     min_confidence,
+    order,
     ...pagination
   }: SearchCompaniesQuery): Promise<SearchCompaniesResponse> {
     const { items, total } = await this.companyProfileRepository.search({
@@ -56,7 +57,12 @@ export class SearchCompaniesUseCase extends UseCase<
       ods:
         ods === undefined
           ? undefined
-          : { number: ods, minScore: min_score, minConfidence: min_confidence },
+          : {
+              number: ods,
+              minScore: min_score,
+              minConfidence: min_confidence,
+              order,
+            },
       ...toWindow(pagination),
     });
 
