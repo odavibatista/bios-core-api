@@ -193,7 +193,8 @@ export const CompanySearchOdsScoreSchema = z
       .nullable()
       .describe('Confiança (RF11), separada do índice; nula sem cálculo'),
   })
-  .describe('Índice e confiança no ODS selecionado');
+  .describe('Índice e confiança no ODS selecionado')
+  .meta({ id: 'CompanySearchOdsScore' });
 
 /** Empresa na lista de resultados: o bastante para reconhecê-la e abrir o perfil. */
 export const CompanySearchItemSchema = z
@@ -214,13 +215,16 @@ export const CompanySearchItemSchema = z
       'Índice e confiança no ODS selecionado; nulo quando a pesquisa não seleciona ODS',
     ),
   })
-  .describe('Empresa encontrada');
+  .describe('Empresa encontrada')
+  .meta({ id: 'CompanySearchItem' });
 
 export type CompanySearchItem = z.infer<typeof CompanySearchItemSchema>;
 
 export const SearchCompaniesResponseSchema = paginatedSchema(
   CompanySearchItemSchema,
-).describe('Página de empresas encontradas');
+)
+  .describe('Página de empresas encontradas')
+  .meta({ id: 'SearchCompaniesResponse' });
 
 export type SearchCompaniesResponse = z.infer<
   typeof SearchCompaniesResponseSchema

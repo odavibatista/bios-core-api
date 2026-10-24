@@ -26,6 +26,7 @@ export class ScoreExplanationController implements ScoreExplanationControllerInt
 
   @Get(':cnpj/scores/:odsNumber/explanation')
   @ApiOperation({
+    operationId: 'getScoreExplanation',
     summary: 'Explica as contribuições do índice de um ODS',
     description:
       'Lê o índice já calculado, sem coletar ou recalcular. Lista as evidências que contribuíram, com fonte, estado no cálculo, estado atual, peso, sinal e pontos. A soma dos pontos reproduz o índice. Índice nulo retorna UNAVAILABLE com lista vazia. Sem score responde 404; se uma evidência contribuinte deixou de ser auditável, responde 409. O índice não é um veredito de sustentabilidade.',

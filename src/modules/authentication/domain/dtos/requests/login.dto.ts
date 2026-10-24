@@ -20,6 +20,7 @@ export const LoginRequestSchema = z
       .max(128, 'A senha deve ter no máximo 128 caracteres.')
       .describe('Senha da conta'),
   })
-  .describe('Credenciais de acesso');
+  .describe('Credenciais de acesso')
+  .meta({ id: 'LoginRequest' });
 
 export type LoginRequest = z.infer<typeof LoginRequestSchema>;

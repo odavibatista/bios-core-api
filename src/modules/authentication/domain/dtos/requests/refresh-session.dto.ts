@@ -9,6 +9,7 @@ export const RefreshSessionRequestSchema = z
       .max(200, 'O refresh token informado é inválido.')
       .describe('Refresh token vigente, de uso único'),
   })
-  .describe('Refresh token a trocar por um novo par de tokens');
+  .describe('Refresh token a trocar por um novo par de tokens')
+  .meta({ id: 'RefreshSessionRequest' });
 
 export type RefreshSessionRequest = z.infer<typeof RefreshSessionRequestSchema>;
