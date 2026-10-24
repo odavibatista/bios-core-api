@@ -45,6 +45,66 @@ describe('PrismaOdsScoreRepository', () => {
     });
   });
 
+  describe('findSummariesByCnpjs', () => {
+    it('lê só índice e confiança das empresas dadas, em todos os ODS', async () => {
+      prisma.companyOdsScore.findMany.mockResolvedValue([
+        {
+          cnpj: '11222333000181',
+          ods_number: 15,
+          score_value: -5,
+          confidence_value: 0.2,
+        },
+        {
+          cnpj: '11222333000181',
+          ods_number: 13,
+          score_value: null,
+          confidence_value: 0,
+        },
+      ]);
+
+      await expect(
+        repo.findSummariesByCnpjs(['11222333000181', '00000000000191']),
+      ).resolves.toEqual([
+        {
+          cnpj: '11222333000181',
+          odsNumber: 15,
+          scoreValue: -5,
+          confidenceValue: 0.2,
+        },
+        {
+          cnpj: '11222333000181',
+          odsNumber: 13,
+          scoreValue: null,
+          confidenceValue: 0,
+        },
+      ]);
+      expect(prisma.companyOdsScore.findMany).toHaveBeenCalledWith({
+        where: { cnpj: { in: ['11222333000181', '00000000000191'] } },
+        select: {
+          cnpj: true,
+          ods_number: true,
+          score_value: true,
+          confidence_value: true,
+        },
+      });
+    });
+
+    it('sem empresas, nem consulta o banco', async () => {
+      await expect(repo.findSummariesByCnpjs([])).resolves.toEqual([]);
+      expect(prisma.companyOdsScore.findMany).not.toHaveBeenCalled();
+    });
+
+    it('nota ausente no documento vale como nula', async () => {
+      prisma.companyOdsScore.findMany.mockResolvedValue([
+        { cnpj: '11222333000181', ods_number: 13, confidence_value: 0 },
+      ]);
+
+      const [summary] = await repo.findSummariesByCnpjs(['11222333000181']);
+
+      expect(summary.scoreValue).toBeNull();
+    });
+  });
+
   it('lê o retrato do índice e mapeia as contribuições sem recálculo', async () => {
     const id = faker.database.mongodbObjectId();
     const calculatedAt = new Date();

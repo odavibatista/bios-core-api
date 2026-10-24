@@ -68,7 +68,7 @@ const optionalField = <T extends z.ZodType>(schema: T) =>
  * Índice mínimo e confiança mínima se referem ao ODS selecionado e não existem sem ele
  * (UC08, regra 2).
  */
-export const SearchCompaniesQuerySchema = PaginationQuerySchema.extend({
+const SearchCriteriaSchema = z.object({
   name: optionalField(z.string().trim().max(MAX_NAME_LENGTH)).describe(
     'Razão social ou nome fantasia, inteiro ou em parte; acentos e caixa são ignorados. Exige ao menos uma palavra com 3 letras ou mais',
   ),
@@ -110,7 +110,15 @@ export const SearchCompaniesQuerySchema = PaginationQuerySchema.extend({
   ).describe(
     'Ordena pelo índice do ODS selecionado, do menor para o maior (`asc`) ou do maior para o menor (`desc`); exige `ods`. Empresa sem índice calculado vem sempre ao fim, nos dois sentidos',
   ),
-}).superRefine((query, context) => {
+});
+
+type SearchCriteria = z.infer<typeof SearchCriteriaSchema>;
+
+/** Regras entre os critérios, comuns à pesquisa e à exportação. */
+function validateSearchCriteria(
+  query: SearchCriteria,
+  context: z.RefinementCtx,
+): void {
   const name = query.name ?? '';
   const cityTerms = extractNameTerms(query.city ?? '');
 
@@ -153,9 +161,24 @@ export const SearchCompaniesQuerySchema = PaginationQuerySchema.extend({
       message: 'Informe ao menos um critério: nome, uf, city, cnae ou ods.',
     });
   }
-});
+}
+
+/** Pesquisa paginada de empresas. */
+export const SearchCompaniesQuerySchema = PaginationQuerySchema.extend(
+  SearchCriteriaSchema.shape,
+).superRefine(validateSearchCriteria);
 
 export type SearchCompaniesQuery = z.infer<typeof SearchCompaniesQuerySchema>;
+
+/**
+ * Exportação da lista em XLSX (UC09, RF15): os mesmos critérios e a mesma ordenação da
+ * pesquisa, sem paginação, porque o arquivo traz a lista inteira.
+ */
+export const ExportCompaniesQuerySchema = SearchCriteriaSchema.superRefine(
+  validateSearchCriteria,
+);
+
+export type ExportCompaniesQuery = z.infer<typeof ExportCompaniesQuerySchema>;
 
 /** Índice e confiança de uma empresa no ODS selecionado na pesquisa. */
 export const CompanySearchOdsScoreSchema = z
