@@ -2,7 +2,7 @@ import type { INestApplication } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { CATALOG_SEEDERS } from '@app/database/catalog.seeders.js';
 import { LAST_USED_PRECISION_MS } from '@modules/api-keys/infra/usecases/authenticate-api-key.usecase.js';
-import { CompanyProfileResponseSchema } from '@modules/companies/domain/dtos/requests/company-profile.dto.js';
+import { CompanyFullProfileResponseSchema } from '@modules/environmental-intelligence/domain/dtos/requests/company-full-profile.dto.js';
 import { API_KEY_HEADER } from '@shared/config/throttler.config.js';
 import {
   type ErrorResponse,
@@ -13,6 +13,7 @@ import request from 'supertest';
 import { inject } from 'vitest';
 import { resetCache } from '../support/cache.js';
 import { createDatabaseTestingApp } from '../support/database-testing-app.js';
+import { withoutEnvironmentalCollection } from '../support/without-environmental-collection.js';
 import { faker } from '../support/faker.js';
 import { createTestAccount } from '../support/test-account.js';
 import { resetThrottleCounters } from '../support/throttle.js';
@@ -42,7 +43,9 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
     let accessToken: string;
 
     beforeAll(async () => {
-      ({ app, prisma } = await createDatabaseTestingApp());
+      ({ app, prisma } = await createDatabaseTestingApp(
+        withoutEnvironmentalCollection,
+      ));
       await prisma.seed(CATALOG_SEEDERS);
       const source = await prisma.dataSource.findUniqueOrThrow({
         where: { slug: 'BRASIL_API' },
@@ -150,7 +153,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
     });
 
     describe('com chave válida', () => {
-      it('200: devolve o perfil cadastral, igual ao da consulta do painel', async () => {
+      it('200: devolve o perfil completo, igual ao da consulta do painel', async () => {
         const { key } = await createKey();
 
         const publicResponse = await getProfile(key).expect(200);
@@ -160,8 +163,13 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
           .expect(200);
 
         expect(
-          CompanyProfileResponseSchema.parse(publicResponse.body),
-        ).toMatchObject({ cnpj: CNPJ, registration_status: 'ATIVA' });
+          CompanyFullProfileResponseSchema.parse(publicResponse.body),
+        ).toMatchObject({
+          cnpj: CNPJ,
+          registration_status: 'ATIVA',
+          evidences: expect.any(Array),
+          ods_scores: expect.any(Array),
+        });
         expect(publicResponse.body).toEqual(panelResponse.body);
       });
 

@@ -1,12 +1,10 @@
 import { Module } from '@nestjs/common';
-import { ApiKeysModule } from '@modules/api-keys/infra/modules/api-keys.module.js';
 import { DataSourcesModule } from '@modules/data-sources/infra/modules/data-sources.module.js';
 import { IbgeCnaeModule } from '@modules/ibge-cnae/infra/modules/ibge-cnae.module.js';
 import { ReceitaModule } from '@modules/receita/infra/modules/receita.module.js';
 import { ScoringModule } from '@modules/scoring/infra/modules/scoring.module.js';
 import { CompanyProfileRepository } from '../../domain/dtos/repositories/company-profile.repository.js';
 import { CompaniesController } from '../../http/controllers/companies.controller.js';
-import { PublicCompaniesController } from '../../http/controllers/public-companies.controller.js';
 import { PrismaCompanyProfileRepository } from '../db/repositories/prisma-company-profile.repository.js';
 import { CompanyProfileProcessor } from '../queue/company-profile.processor.js';
 import { GetCompanyProfileUseCase } from '../usecases/get-company-profile.usecase.js';
@@ -16,8 +14,9 @@ import { SearchCompaniesByNameUseCase } from '../usecases/search-companies-by-na
 
 /**
  * Perfil cadastral de pessoas jurídicas: consulta por CNPJ e por nome,
- * pesquisa e exportação (UC06, UC08, UC09), e a consulta por chave de API
- * para sistemas de terceiros (UC12).
+ * pesquisa e exportação (UC06, UC08, UC09). A rota do perfil completo (cadastro +
+ * perfil ambiental) e a consulta por chave de API (UC12) moram no
+ * `EnvironmentalIntelligenceModule`, que compõe este módulo com evidências e índices.
  *
  * Entidades (schemas Prisma em `../../entity`): `CompanyProfile`.
  *
@@ -30,15 +29,9 @@ import { SearchCompaniesByNameUseCase } from '../usecases/search-companies-by-na
  * vem do catálogo de fontes (`DataSourcesModule`).
  */
 @Module({
-  imports: [
-    DataSourcesModule,
-    ApiKeysModule,
-    ReceitaModule,
-    IbgeCnaeModule,
-    ScoringModule,
-  ],
-  controllers: [CompaniesController, PublicCompaniesController],
-  exports: [CompanyProfileRepository],
+  imports: [DataSourcesModule, ReceitaModule, IbgeCnaeModule, ScoringModule],
+  controllers: [CompaniesController],
+  exports: [CompanyProfileRepository, GetCompanyProfileUseCase],
   providers: [
     /* Repositórios */
     {
