@@ -25,6 +25,7 @@ export class HealthController implements HealthControllerInterface {
 
   @Get()
   @ApiOperation({
+    operationId: 'checkHealth',
     summary:
       'Verifica a API, o banco, o Redis e a configuração opcional da CGU',
   })

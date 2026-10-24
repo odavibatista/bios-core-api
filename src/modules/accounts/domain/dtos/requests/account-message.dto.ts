@@ -8,7 +8,8 @@ export const AccountMessageResponseSchema = z
   .object({
     message: z.string().describe('Mensagem para exibir ao usuário'),
   })
-  .describe('Mensagem de resultado');
+  .describe('Mensagem de resultado')
+  .meta({ id: 'AccountMessageResponse' });
 
 export type AccountMessageResponse = z.infer<
   typeof AccountMessageResponseSchema

@@ -9,6 +9,7 @@ import { ScoreExplanationResponseSchema } from '@modules/scoring/domain/dtos/req
 import { CalculateCompanyOdsScoresUseCase } from '@modules/scoring/infra/usecases/calculate-company-ods-scores.usecase.js';
 import { PrismaService } from '@shared/infra/database/prisma.service.js';
 import { createDatabaseTestingApp } from '../support/database-testing-app.js';
+import { dereference } from '../support/openapi.js';
 import { createTestAccount } from '../support/test-account.js';
 import { resetThrottleCounters } from '../support/throttle.js';
 
@@ -353,7 +354,9 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       expect(operation.security).toEqual([{ jwt: [] }]);
       for (const status of ['200', '401', '404', '409', '422', '429', '500'])
         expect(operation.responses).toHaveProperty(status);
-      const response = JSON.stringify(operation.responses['200']);
+      const response = JSON.stringify(
+        dereference(document, operation.responses['200']),
+      );
       for (const field of [
         'index_status',
         'score_value',

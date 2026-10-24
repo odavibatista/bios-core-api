@@ -32,7 +32,8 @@ export const PaginationMetaSchema = z
       .int()
       .describe('Total de páginas (0 quando não há itens)'),
   })
-  .describe('Paginação');
+  .describe('Paginação')
+  .meta({ id: 'PaginationMeta' });
 
 export type PaginationMeta = z.infer<typeof PaginationMetaSchema>;
 

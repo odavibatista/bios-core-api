@@ -107,6 +107,20 @@ export const environmentSchema = z.object({
             .filter(Boolean),
     ),
 
+  /* URL pública da API, publicada em `servers` no documento OpenAPI (RF17): é com ela que um
+     cliente gerado monta as chamadas. Sem valor, o documento usa a URL relativa "/". Sem
+     barra no fim, para não gerar "//" ao somar o caminho de cada rota. */
+  API_BASE_URL: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z
+      .url({
+        protocol: /^https?$/,
+        error: 'deve ser uma URL http:// ou https://',
+      })
+      .transform((url) => url.replace(/\/+$/, ''))
+      .optional(),
+  ),
+
   /* E-mails transacionais (RF18). Sem SMTP configurado a aplicação não sobe:
      confirmação de cadastro e recuperação de senha dependem de envio. */
   SMTP_HOST: z.string().nonempty(),

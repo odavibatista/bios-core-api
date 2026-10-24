@@ -8,6 +8,7 @@ import {
   EvidenceSignal,
   EvidenceState,
 } from '@prisma/client';
+import { JsonValueSchema } from '@shared/domain/dtos/requests/json-value.dto.js';
 import { parseCnpj } from '@shared/domain/value-objects/cnpj.js';
 import type { StoredEvidence } from './dtos/repositories/evidence.repository.js';
 export const CompanyEnvironmentalEvidencesRequestSchema = z
@@ -23,57 +24,60 @@ export const CompanyEnvironmentalEvidencesRequestSchema = z
     }),
   })
   .strict();
+/** Uma evidência ambiental com a referência da fonte original (RF09). */
+export const CompanyEvidenceSchema = z
+  .object({
+    id: z.string(),
+    source_slug: z.string(),
+    source: z
+      .string()
+      .min(1)
+      .describe('Nome público do órgão/programa no catálogo de fontes'),
+    ods_number: z.number().int(),
+    state: z.enum(EvidenceState),
+    signal: z.enum(EvidenceSignal).nullable(),
+    summary: z.string().nullable(),
+    source_reference: z.string().trim().min(1).nullable(),
+    source_url: EvidenceSourceUrlSchema.nullable().describe(
+      'Link HTTPS original; pode exigir autenticação no órgão',
+    ),
+    details: JsonValueSchema.nullable(),
+    published_at: z.iso.datetime().nullable(),
+    collected_at: z.iso.datetime(),
+    valid_until: z.iso.datetime(),
+  })
+  .strict()
+  .superRefine((evidence, ctx) => {
+    if (
+      evidence.state === EvidenceState.CONFIRMED &&
+      !evidence.source_reference &&
+      !evidence.source_url
+    )
+      ctx.addIssue({
+        code: 'custom',
+        path: ['source_reference'],
+        message: 'Evidência confirmada exige referência ou link rastreável.',
+      });
+  })
+  .describe('Evidência ambiental com a referência da fonte original')
+  .meta({ id: 'CompanyEvidence' });
+/** As evidências de uma categoria. */
+export const EvidenceCategoryGroupSchema = z
+  .object({
+    category: z.enum(EvidenceCategory),
+    evidences: z.array(CompanyEvidenceSchema),
+  })
+  .strict()
+  .describe('Evidências de uma categoria')
+  .meta({ id: 'EvidenceCategoryGroup' });
 export const CompanyEnvironmentalEvidencesResponseSchema = z
   .object({
     cnpj: z.string(),
-    categories: z.array(
-      z
-        .object({
-          category: z.enum(EvidenceCategory),
-          evidences: z.array(
-            z
-              .object({
-                id: z.string(),
-                source_slug: z.string(),
-                source: z
-                  .string()
-                  .min(1)
-                  .describe(
-                    'Nome público do órgão/programa no catálogo de fontes',
-                  ),
-                ods_number: z.number().int(),
-                state: z.enum(EvidenceState),
-                signal: z.enum(EvidenceSignal).nullable(),
-                summary: z.string().nullable(),
-                source_reference: z.string().trim().min(1).nullable(),
-                source_url: EvidenceSourceUrlSchema.nullable().describe(
-                  'Link HTTPS original; pode exigir autenticação no órgão',
-                ),
-                details: z.json().nullable(),
-                published_at: z.iso.datetime().nullable(),
-                collected_at: z.iso.datetime(),
-                valid_until: z.iso.datetime(),
-              })
-              .strict()
-              .superRefine((evidence, ctx) => {
-                if (
-                  evidence.state === EvidenceState.CONFIRMED &&
-                  !evidence.source_reference &&
-                  !evidence.source_url
-                )
-                  ctx.addIssue({
-                    code: 'custom',
-                    path: ['source_reference'],
-                    message:
-                      'Evidência confirmada exige referência ou link rastreável.',
-                  });
-              }),
-          ),
-        })
-        .strict(),
-    ),
+    categories: z.array(EvidenceCategoryGroupSchema),
   })
-  .strict();
+  .strict()
+  .describe('Evidências ambientais da empresa, agrupadas por categoria')
+  .meta({ id: 'CompanyEnvironmentalEvidencesResponse' });
 export type CompanyEnvironmentalEvidencesResponse = z.infer<
   typeof CompanyEnvironmentalEvidencesResponseSchema
 >;

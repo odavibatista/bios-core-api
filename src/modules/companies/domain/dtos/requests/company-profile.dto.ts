@@ -6,7 +6,8 @@ const CnaeSchema = z
     code: z.string().describe('Código CNAE'),
     description: z.string().describe('Descrição textual do CNAE'),
   })
-  .describe('Atividade econômica');
+  .describe('Atividade econômica')
+  .meta({ id: 'Cnae' });
 
 /** Endereço público da pessoa jurídica. */
 const CompanyAddressSchema = z
@@ -20,7 +21,8 @@ const CompanyAddressSchema = z
     uf: z.string().describe('Unidade da federação (sigla)'),
     zipcode: z.string().nullable().describe('CEP'),
   })
-  .describe('Endereço da empresa');
+  .describe('Endereço da empresa')
+  .meta({ id: 'CompanyAddress' });
 
 /**
  * Perfil cadastral de uma empresa (RF05, RF06).
@@ -42,7 +44,8 @@ export const CompanyProfileResponseSchema = z
       .datetime()
       .describe('Quando o cadastro foi atualizado pela última vez na fonte'),
   })
-  .describe('Perfil cadastral da empresa');
+  .describe('Perfil cadastral da empresa')
+  .meta({ id: 'CompanyProfileResponse' });
 
 export type CompanyProfileResponse = z.infer<
   typeof CompanyProfileResponseSchema

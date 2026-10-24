@@ -40,6 +40,7 @@ export const RegisterUserRequestSchema = z
       .describe('E-mail de acesso, que será confirmado por link'),
     password: PasswordSchema,
   })
-  .describe('Dados para criar uma conta');
+  .describe('Dados para criar uma conta')
+  .meta({ id: 'RegisterUserRequest' });
 
 export type RegisterUserRequest = z.infer<typeof RegisterUserRequestSchema>;

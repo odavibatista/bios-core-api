@@ -10,7 +10,8 @@ export const CreateApiKeyRequestSchema = z
       .max(60, 'O nome deve ter no máximo 60 caracteres.')
       .describe('Nome de identificação da chave (ex.: "integração com o CRM")'),
   })
-  .describe('Dados para gerar uma chave de API');
+  .describe('Dados para gerar uma chave de API')
+  .meta({ id: 'CreateApiKeyRequest' });
 
 export type CreateApiKeyRequest = z.infer<typeof CreateApiKeyRequestSchema>;
 
@@ -29,7 +30,8 @@ export const ApiKeyResponseSchema = z
       .nullable()
       .describe('Último uso; nulo se nunca foi usada'),
   })
-  .describe('Chave de API');
+  .describe('Chave de API')
+  .meta({ id: 'ApiKeyResponse' });
 
 export type ApiKeyResponse = z.infer<typeof ApiKeyResponseSchema>;
 
@@ -43,13 +45,16 @@ export const CreatedApiKeyResponseSchema = ApiKeyResponseSchema.extend({
     .describe(
       'Valor completo da chave. Exibido uma única vez: guarde-o agora, pois não poderá ser consultado depois',
     ),
-}).describe('Chave de API recém-gerada');
+})
+  .describe('Chave de API recém-gerada')
+  .meta({ id: 'CreatedApiKeyResponse' });
 
 export type CreatedApiKeyResponse = z.infer<typeof CreatedApiKeyResponseSchema>;
 
 /** Lista de chaves ativas. */
 export const ApiKeyListResponseSchema = z
   .object({ data: z.array(ApiKeyResponseSchema).describe('Chaves ativas') })
-  .describe('Chaves de API ativas do usuário');
+  .describe('Chaves de API ativas do usuário')
+  .meta({ id: 'ApiKeyListResponse' });
 
 export type ApiKeyListResponse = z.infer<typeof ApiKeyListResponseSchema>;
