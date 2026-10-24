@@ -4,6 +4,7 @@ import {
   type CatalogSyncPlan,
   type CatalogValue,
 } from '@modules/data-sources/domain/catalog-sync.js';
+import { safeMessage } from './cli-support.js';
 import type { DataSourceCatalogSync } from '@modules/data-sources/infra/db/catalog-sync/data-source-catalog-sync.js';
 
 export interface CatalogSyncCliDeps {
@@ -55,13 +56,6 @@ export function formatCatalogPlan(plan: CatalogSyncPlan): string[] {
   }
 
   return lines;
-}
-
-/** Nunca devolve uma connection string, mesmo que o driver a inclua na mensagem. */
-function safeMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-
-  return message.replace(/mongodb(\+srv)?:\/\/\S+/gi, '[conexão omitida]');
 }
 
 /**

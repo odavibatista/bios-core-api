@@ -34,6 +34,8 @@
     "keys:generate": "node scripts/generate-keys.mjs",
     "db:push": "prisma db push",
     "catalog:sync": "nest build && node dist/app/cli/sync-catalog.main.js",
+    "catalog:bootstrap": "nest build && node dist/app/cli/bootstrap-catalog.main.js",
+    "account:promote": "nest build && node dist/app/cli/promote-account.main.js",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "postinstall": "prisma generate",

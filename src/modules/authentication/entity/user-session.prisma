@@ -80,4 +80,8 @@ enum SessionRevocationReason {
 
   /// Refresh token já rotacionado foi reapresentado: indício de vazamento (RF32).
   REUSE_DETECTED
+
+  /// Troca do papel da conta (`USER` ↔ `ADMIN`) pelo operador, fora da API (#329): o papel viaja
+  /// no access token, então as sessões abertas são encerradas para o novo papel valer já.
+  ROLE_CHANGE
 }
