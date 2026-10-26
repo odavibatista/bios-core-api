@@ -1,5 +1,6 @@
 import { CacheNamespace } from '@shared/domain/dtos/providers/cache-key.dto.js';
 import { groupCompanyEvidences } from '@modules/evidences/domain/company-environmental-evidences.dto.js';
+import { storedEvidenceFactory } from '@test/factories/evidences/evidence.factory.js';
 import { companyProfileResponseFactory } from '@test/factories/companies/company-profile.factory.js';
 import {
   calculatedOdsScoreFactory,
@@ -16,6 +17,12 @@ describe('GetCompanyFullProfileUseCase', () => {
   const evidences = { execute: vi.fn() };
   const scores = { execute: vi.fn() };
   const cache = { get: vi.fn(), set: vi.fn() };
+  const list = { execute: vi.fn() };
+  const config = {
+    get: vi.fn((key: string): number =>
+      key === 'QUEUE_WAIT_TIMEOUT_MS' ? 10_000 : 15_000,
+    ),
+  };
   const calls: string[] = [];
   let useCase: GetCompanyFullProfileUseCase;
 
@@ -23,11 +30,17 @@ describe('GetCompanyFullProfileUseCase', () => {
     calls.length = 0;
     cache.get.mockResolvedValue(undefined);
     cache.set.mockResolvedValue(undefined);
+    list.execute.mockResolvedValue([]);
+    config.get.mockImplementation((key: string) =>
+      key === 'QUEUE_WAIT_TIMEOUT_MS' ? 10_000 : 15_000,
+    );
     useCase = new GetCompanyFullProfileUseCase(
       profile as never,
       evidences as never,
       scores as never,
       cache as never,
+      list as never,
+      config as never,
     );
   });
 
@@ -60,7 +73,10 @@ describe('GetCompanyFullProfileUseCase', () => {
     expect(result).toMatchObject(cadastral);
     expect(result.evidences.length).toBeGreaterThan(0);
     expect(result.ods_scores).toEqual([calculatedOdsScoreFactory.build()]);
-    expect(profile.execute).toHaveBeenCalledWith(' 11.222.333/0001-81 ');
+    expect(profile.execute).toHaveBeenCalledWith(
+      ' 11.222.333/0001-81 ',
+      10_000,
+    );
   });
 
   it('usa o CNPJ canônico do cadastro nas etapas seguintes', async () => {
@@ -79,6 +95,44 @@ describe('GetCompanyFullProfileUseCase', () => {
 
     expect(calls).toEqual(['cadastro', 'evidências', 'índices']);
   });
+
+  it('marca coleta concluída nesta consulta separadamente de fonte persistida', async () => {
+    arrange();
+    evidences.execute.mockImplementation(() =>
+      Promise.resolve(
+        groupCompanyEvidences(CNPJ, [
+          storedEvidenceFactory.build({
+            cnpj: CNPJ,
+            sourceSlug: 'IBAMA',
+            collectedAt: new Date(),
+          }),
+        ]),
+      ),
+    );
+    const result = await useCase.execute(CNPJ);
+    expect(result.provenance.sources).toContainEqual({
+      source_slug: 'IBAMA',
+      origin: 'COLLECTION',
+      evidence_state: 'CONFIRMED',
+    });
+  });
+
+  it('devolve retrato persistido, fontes pendentes e dica de reconsulta após o prazo', async () => {
+    config.get.mockImplementation((key: string) =>
+      key === 'QUEUE_WAIT_TIMEOUT_MS' ? 10_000 : 2_000,
+    );
+    arrange([pendingOdsScoreFactory.build()]);
+    evidences.execute.mockImplementation(() => new Promise(() => undefined));
+    const result = await useCase.execute(CNPJ);
+    expect(result.provenance.sources).toHaveLength(4);
+    expect(
+      result.provenance.sources.every((source) => source.origin === 'PENDING'),
+    ).toBe(true);
+    expect(result.provenance.retry_after_seconds).toBe(30);
+    expect(result.provenance.scores_pending).toBe(true);
+    expect(result.ods_scores[0]?.calculation_status).toBe('PENDING');
+    expect(cache.set).not.toHaveBeenCalled();
+  }, 5_000);
 
   it('a falha do cadastro (inválido, inexistente ou indisponível) impede qualquer coleta ambiental', async () => {
     profile.execute.mockRejectedValue(new Error('não encontrada'));
@@ -134,9 +188,16 @@ describe('GetCompanyFullProfileUseCase', () => {
         pendingOdsScoreFactory.build(),
       ]);
 
-      await useCase.execute(CNPJ);
+      const result = await useCase.execute(CNPJ);
 
       expect(cache.set).not.toHaveBeenCalled();
+      expect(result.provenance.scores_pending).toBe(true);
+      expect(result.provenance.retry_after_seconds).toBe(30);
+      expect(
+        result.provenance.sources.every(
+          (source) => source.origin === 'UNAVAILABLE',
+        ),
+      ).toBe(true);
     });
 
     it('com as duas partes em cache, serve delas sem coletar nem ler índices', async () => {
@@ -159,6 +220,17 @@ describe('GetCompanyFullProfileUseCase', () => {
         ...cadastral,
         evidences: cachedEvidences,
         ods_scores: cachedScores,
+        provenance: {
+          sources: (
+            ['IBAMA', 'CGU_CEIS', 'CGU_CNEP', 'GHG_PROTOCOL'] as const
+          ).map((source_slug) => ({
+            source_slug,
+            origin: 'UNAVAILABLE',
+            evidence_state: null,
+          })),
+          scores_pending: false,
+          retry_after_seconds: 900,
+        },
       });
       expect(evidences.execute).not.toHaveBeenCalled();
       expect(scores.execute).not.toHaveBeenCalled();

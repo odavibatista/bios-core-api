@@ -1365,7 +1365,15 @@ e não em `companies`, porque o módulo de empresas não depende da orquestraç�
       "rules_version": "rf10-rf11-v3", "calculated_at": "…",
       "contributions": [ { "evidence": { … }, "weight": 40, "signal": "NEGATIVE", "points": -40 } ]
     }
-  ]
+  ],
+  "provenance": {
+    "sources": [
+      { "source_slug": "IBAMA", "origin": "PERSISTED", "evidence_state": "CONFIRMED" },
+      { "source_slug": "CGU_CEIS", "origin": "PENDING", "evidence_state": null }
+    ],
+    "scores_pending": true,
+    "retry_after_seconds": 30
+  }
 }
 ```
 
@@ -1374,6 +1382,18 @@ e não em `companies`, porque o módulo de empresas não depende da orquestraç�
   (422), empresa inexistente (404) e cadastro indisponível sem cópia guardada (503) respondem
   antes de qualquer coleta ambiental. Fonte ambiental fora do ar degrada por conta própria
   (evidência `UNKNOWN`, nunca nota baixa).
+- **Prazo total.** `COMPANY_PROFILE_REQUEST_TIMEOUT_MS` (padrão 15 000 ms, faixa 2 000–60 000)
+  limita a espera das duas rotas. O cadastro recebe o prazo restante com reserva para compor a
+  resposta. Se a coleta ambiental ainda estiver em andamento, a API devolve o retrato persistido
+  e os índices disponíveis; os jobs publicados podem terminar depois. Sem cadastro local e sem
+  resposta dos provedores dentro do prazo, a resposta continua sendo 503, não 404.
+- **Proveniência.** Cada fonte de `provenance.sources` traz `origin` (`COLLECTION`, `PERSISTED`,
+  `PENDING` ou `UNAVAILABLE`) e `evidence_state` (`CONFIRMED`, `NOT_FOUND`, `UNKNOWN`, `OUTDATED`
+  ou `null`). `NOT_FOUND` confirma ausência de registro na fonte consultada; `UNKNOWN` e `null`
+  não confirmam ausência. `scores_pending` indica índice ainda não calculado, separado do estado
+  de cada fonte. `retry_after_seconds` sugere 30 s para coleta ou índice pendente, ou 900 s para
+  indisponibilidade; vale `null` sem pendências. A origem é uma projeção do retrato persistido
+  e das datas de coleta, sem gravar estado novo no banco.
 - **Explicação embutida.** `contributions` é a mesma explicação de
   `GET /companies/:cnpj/scores/:ods/explanation` (RF12), para quem usa a API pública, que não tem
   a rota de explicação. O índice não é um veredito de sustentabilidade (IND01) e os ODS 13 e 15 não
