@@ -1,7 +1,17 @@
 import { z } from 'zod';
+import { EvidenceState } from '@prisma/client';
 import { CompanyProfileResponseSchema } from '@modules/companies/domain/dtos/requests/company-profile.dto.js';
 import { CompanyEnvironmentalEvidencesResponseSchema } from '@modules/evidences/domain/dtos/requests/company-evidences.dto.js';
 import { CompanyOdsScoreSchema } from '@modules/scoring/domain/dtos/requests/company-ods-scores.dto.js';
+
+export const CompanySourceProvenanceSchema = z
+  .object({
+    source_slug: z.enum(['IBAMA', 'CGU_CEIS', 'CGU_CNEP', 'GHG_PROTOCOL']),
+    origin: z.enum(['COLLECTION', 'PERSISTED', 'PENDING', 'UNAVAILABLE']),
+    evidence_state: z.enum(EvidenceState).nullable(),
+  })
+  .strict()
+  .meta({ id: 'CompanySourceProvenance' });
 
 /**
  * Perfil completo de uma empresa (UC06 + UC07, RF05–RF12).
@@ -21,6 +31,14 @@ export const CompanyFullProfileResponseSchema =
     ods_scores: z
       .array(CompanyOdsScoreSchema)
       .describe('Índice, confiança e explicação por ODS, em ordem de número'),
+    provenance: z
+      .object({
+        sources: z.array(CompanySourceProvenanceSchema),
+        scores_pending: z.boolean(),
+        retry_after_seconds: z.number().int().positive().nullable(),
+      })
+      .strict()
+      .meta({ id: 'CompanyProfileProvenance' }),
   })
     .describe(
       'Perfil completo da empresa: cadastro, evidências e índices por ODS',
