@@ -74,7 +74,10 @@ export class GetCompanyProfileUseCase extends UseCase<
     super();
   }
 
-  override async execute(input: string): Promise<CompanyProfileResponse> {
+  override async execute(
+    input: string,
+    timeoutMs?: number,
+  ): Promise<CompanyProfileResponse> {
     const cnpj = parseCnpj(input);
 
     if (!cnpj) throw new InvalidCnpjException();
@@ -96,7 +99,7 @@ export class GetCompanyProfileUseCase extends UseCase<
       return stored.profile;
     }
 
-    const outcome = await this.refresh(cnpj);
+    const outcome = await this.refresh(cnpj, timeoutMs);
 
     if (outcome === 'NOT_FOUND') throw new CompanyNotFoundException();
 
@@ -165,7 +168,10 @@ export class GetCompanyProfileUseCase extends UseCase<
    * Todo desfecho que não seja resposta clara dos provedores — prazo, falha do
    * job, Redis fora do ar, resultado fora do contrato — vira `UNAVAILABLE`.
    */
-  private async refresh(cnpj: string): Promise<RefreshOutcome> {
+  private async refresh(
+    cnpj: string,
+    timeoutMs?: number,
+  ): Promise<RefreshOutcome> {
     try {
       const result = await this.queueProvider.enqueueAndWait<
         CompanyProfileJobPayload,
@@ -174,7 +180,7 @@ export class GetCompanyProfileUseCase extends UseCase<
         QueueName.COMPANY_PROFILE,
         FETCH_COMPANY_PROFILE_JOB,
         { cnpj },
-        { jobId: companyProfileJobId(cnpj) },
+        { jobId: companyProfileJobId(cnpj), timeoutMs },
       );
       const parsed = CompanyProfileJobResultSchema.safeParse(result);
 

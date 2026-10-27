@@ -259,6 +259,25 @@ describe('validateEnvironment', () => {
   });
 
   describe('filas', () => {
+    it('valida o orçamento total do perfil', () => {
+      expect(
+        validateEnvironment(REQUIRED).COMPANY_PROFILE_REQUEST_TIMEOUT_MS,
+      ).toBe(15_000);
+      expect(
+        validateEnvironment({
+          ...REQUIRED,
+          COMPANY_PROFILE_REQUEST_TIMEOUT_MS: '2500',
+        }).COMPANY_PROFILE_REQUEST_TIMEOUT_MS,
+      ).toBe(2_500);
+      for (const value of ['1999', '60001', 'abc']) {
+        expect(() =>
+          validateEnvironment({
+            ...REQUIRED,
+            COMPANY_PROFILE_REQUEST_TIMEOUT_MS: value,
+          }),
+        ).toThrow(/COMPANY_PROFILE_REQUEST_TIMEOUT_MS/);
+      }
+    });
     it('aceita um prazo de espera dentro dos limites', () => {
       const timeout = faker.number.int({ min: 1_000, max: 60_000 });
 

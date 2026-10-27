@@ -42,4 +42,15 @@ export const companyFullProfileResponseFactory =
       pendingOdsScoreFactory.build({ ods_number: 13 }),
       pendingOdsScoreFactory.build({ ods_number: 15 }),
     ],
+    provenance: {
+      sources: (['IBAMA', 'CGU_CEIS', 'CGU_CNEP', 'GHG_PROTOCOL'] as const).map(
+        (source_slug) => ({
+          source_slug,
+          origin: 'PENDING' as const,
+          evidence_state: null,
+        }),
+      ),
+      scores_pending: true,
+      retry_after_seconds: 30,
+    },
   }));

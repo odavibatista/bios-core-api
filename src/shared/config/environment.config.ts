@@ -152,6 +152,12 @@ export const environmentSchema = z.object({
     .min(1_000)
     .max(60_000)
     .default(10_000),
+  COMPANY_PROFILE_REQUEST_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .min(2_000)
+    .max(60_000)
+    .default(15_000),
   QUEUE_SCHEDULES_SYNC_ON_BOOT: z.stringbool().default(true),
 
   /* Cache de consultas (NFDE01) — ver cache.config.ts.
