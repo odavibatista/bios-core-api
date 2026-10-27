@@ -2,12 +2,14 @@ import { Controller, Get, type ExecutionContext } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import { Duration } from '../domain/value-objects/duration.js';
 import { PublicApiRoute } from '../http/decorators/public-api-route.decorator.js';
+import { RouteRateLimit } from '../http/decorators/route-rate-limit.decorator.js';
 import { faker } from '@test/support/faker.js';
 import type { Environment } from './environment.config.js';
 import {
   API_KEY_HEADER,
   apiKeyOf,
   buildThrottlers,
+  ROUTE_THROTTLERS,
   ThrottlerName,
 } from './throttler.config.js';
 
@@ -28,6 +30,27 @@ class PublicApiProbeController {
   any(): void {}
 }
 
+@Controller()
+class RouteLimitProbeController {
+  @RouteRateLimit(ThrottlerName.COMPANY_PROFILE)
+  @Get('perfil')
+  profile(): void {}
+
+  @RouteRateLimit(ThrottlerName.COMPANY_EXPORT)
+  @Get('exportacao')
+  exportation(): void {}
+
+  @Get('livre')
+  free(): void {}
+}
+
+@RouteRateLimit(ThrottlerName.COMPANY_SEARCH)
+@Controller()
+class SearchLimitProbeController {
+  @Get('busca')
+  search(): void {}
+}
+
 /** Configuração com janelas e limites conhecidos. */
 function configOf(
   values: Partial<Environment>,
@@ -42,6 +65,10 @@ const ENVIRONMENT: Partial<Environment> = {
   THROTTLE_LIMIT: 120,
   THROTTLE_PUBLIC_API_TTL: Duration.parse('30s'),
   THROTTLE_PUBLIC_API_LIMIT: 60,
+  THROTTLE_COMPANY_PROFILE_LIMIT: 61,
+  THROTTLE_COMPANY_EVIDENCES_LIMIT: 22,
+  THROTTLE_COMPANY_SEARCH_LIMIT: 63,
+  THROTTLE_COMPANY_EXPORT_LIMIT: 14,
 };
 
 describe('configuração do limite de requisições', () => {
@@ -72,15 +99,19 @@ describe('configuração do limite de requisições', () => {
   describe('limites declarados', () => {
     const throttlers = buildThrottlers(configOf(ENVIRONMENT));
 
-    it('declara o limite geral e o da API pública', () => {
+    it('declara o limite geral, o da API pública e um por rota de empresa', () => {
       expect(throttlers.map(({ name }) => name)).toEqual([
         ThrottlerName.DEFAULT,
         ThrottlerName.PUBLIC_API,
+        ThrottlerName.COMPANY_PROFILE,
+        ThrottlerName.COMPANY_EVIDENCES,
+        ThrottlerName.COMPANY_SEARCH,
+        ThrottlerName.COMPANY_EXPORT,
       ]);
     });
 
     it('converte a janela de duração para milissegundos, como a biblioteca espera', () => {
-      expect(throttlers).toMatchObject([
+      expect(throttlers.slice(0, 2)).toMatchObject([
         { ttl: 60_000, limit: 120 },
         { ttl: 30_000, limit: 60 },
       ]);
@@ -177,6 +208,90 @@ describe('configuração do limite de requisições', () => {
       it('o limite geral não é dispensado em lugar nenhum', () => {
         expect(throttlers[0].skipIf).toBeUndefined();
       });
+    });
+  });
+
+  describe('limites próprios das rotas de empresa', () => {
+    const throttlers = buildThrottlers(configOf(ENVIRONMENT));
+    const byName = (name: string) =>
+      throttlers.find((throttler) => throttler.name === name)!;
+
+    /** Contexto mínimo: o limite só consulta o método e a classe do endpoint. */
+    const contextOf = (controller: new () => object, method: string) =>
+      ({
+        getHandler: () =>
+          (controller.prototype as Record<string, () => void>)[method],
+        getClass: () => controller,
+      }) as unknown as ExecutionContext;
+
+    it.each([
+      [ThrottlerName.COMPANY_PROFILE, 61],
+      [ThrottlerName.COMPANY_EVIDENCES, 22],
+      [ThrottlerName.COMPANY_SEARCH, 63],
+      [ThrottlerName.COMPANY_EXPORT, 14],
+    ])(
+      'o limite %s vem da variável de ambiente (%i) e usa a janela geral',
+      (name, limit) => {
+        expect(byName(name)).toMatchObject({ limit, ttl: 60_000 });
+      },
+    );
+
+    it('cada limite tem a variável própria declarada', () => {
+      expect(ROUTE_THROTTLERS).toEqual({
+        companyProfile: 'THROTTLE_COMPANY_PROFILE_LIMIT',
+        companyEvidences: 'THROTTLE_COMPANY_EVIDENCES_LIMIT',
+        companySearch: 'THROTTLE_COMPANY_SEARCH_LIMIT',
+        companyExport: 'THROTTLE_COMPANY_EXPORT_LIMIT',
+      });
+    });
+
+    it('segue a janela geral quando ela muda', () => {
+      const custom = buildThrottlers(
+        configOf({ ...ENVIRONMENT, THROTTLE_TTL: Duration.parse('5m') }),
+      );
+
+      expect(
+        custom.find(({ name }) => name === ThrottlerName.COMPANY_PROFILE)?.ttl,
+      ).toBe(300_000);
+    });
+
+    it('conta por endereço, sem chave de rastreio própria', () => {
+      for (const name of Object.keys(ROUTE_THROTTLERS)) {
+        expect(byName(name).getTracker).toBeUndefined();
+      }
+    });
+
+    it('incide só na rota que declara o limite, e não nas demais', () => {
+      const profile = byName(ThrottlerName.COMPANY_PROFILE);
+      const exportation = byName(ThrottlerName.COMPANY_EXPORT);
+      const profileContext = contextOf(RouteLimitProbeController, 'profile');
+      const exportContext = contextOf(RouteLimitProbeController, 'exportation');
+      const freeContext = contextOf(RouteLimitProbeController, 'free');
+
+      expect(profile.skipIf?.(profileContext)).toBe(false);
+      expect(profile.skipIf?.(exportContext)).toBe(true);
+      expect(profile.skipIf?.(freeContext)).toBe(true);
+      expect(exportation.skipIf?.(exportContext)).toBe(false);
+      expect(exportation.skipIf?.(profileContext)).toBe(true);
+    });
+
+    it('um controller marcado leva o limite a todas as suas rotas', () => {
+      const context = contextOf(SearchLimitProbeController, 'search');
+
+      expect(byName(ThrottlerName.COMPANY_SEARCH).skipIf?.(context)).toBe(
+        false,
+      );
+      expect(byName(ThrottlerName.COMPANY_PROFILE).skipIf?.(context)).toBe(
+        true,
+      );
+    });
+
+    it('a API pública não é afetada por estes limites', () => {
+      expect(
+        byName(ThrottlerName.PUBLIC_API).skipIf?.(
+          contextOf(RouteLimitProbeController, 'profile'),
+        ),
+      ).toBe(true);
     });
   });
 });

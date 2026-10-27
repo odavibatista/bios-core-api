@@ -1,5 +1,6 @@
 import { Controller, Get, HttpStatus, Param } from '@nestjs/common';
-import { Throttle } from '@nestjs/throttler';
+import { ThrottlerName } from '@shared/config/throttler.config.js';
+import { RouteRateLimit } from '@shared/http/decorators/route-rate-limit.decorator.js';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -29,12 +30,12 @@ export class EnvironmentalEvidencesController implements EnvironmentalEvidencesC
   ) {}
 
   @Get(':cnpj/evidences')
-  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @RouteRateLimit(ThrottlerName.COMPANY_EVIDENCES)
   @ApiOperation({
     operationId: 'getCompanyEvidences',
     summary: 'Consulta evidências e referências às fontes originais',
     description:
-      'Exige perfil cadastral local; sem ele, responde 404 sem iniciar coletas. Limite de 20 consultas por minuto por IP, além do limite global. Reúne IBAMA local, CGU e GHG com degradação independente e agrupa por categoria. source é o nome público do catálogo. source_reference identifica o registro; source_url é um link HTTPS original, inclusive para o recurso oficial quando não existe link individual. O acesso ao recurso CGU pode exigir credencial do próprio órgão. Sem referência ou link rastreável, uma evidência guardada como CONFIRMED é apresentada como UNKNOWN, sem sinal, resumo ou detalhes confirmatórios. Não inventa links, não altera o histórico e não calcula score. UNKNOWN e NOT_FOUND podem ter referências nulas. Aceita CNPJ numérico ou alfanumérico; omita a barra de formatação na URL.',
+      'Exige perfil cadastral local; sem ele, responde 404 sem iniciar coletas. Limite próprio por IP (padrão: 20 consultas por minuto, `THROTTLE_COMPANY_EVIDENCES_LIMIT`, NFSE04), no lugar do limite global. Reúne IBAMA local, CGU e GHG com degradação independente e agrupa por categoria. source é o nome público do catálogo. source_reference identifica o registro; source_url é um link HTTPS original, inclusive para o recurso oficial quando não existe link individual. O acesso ao recurso CGU pode exigir credencial do próprio órgão. Sem referência ou link rastreável, uma evidência guardada como CONFIRMED é apresentada como UNKNOWN, sem sinal, resumo ou detalhes confirmatórios. Não inventa links, não altera o histórico e não calcula score. UNKNOWN e NOT_FOUND podem ter referências nulas. Aceita CNPJ numérico ou alfanumérico; omita a barra de formatação na URL.',
   })
   @ApiParam({
     name: 'cnpj',

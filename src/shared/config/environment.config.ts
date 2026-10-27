@@ -175,6 +175,13 @@ export const environmentSchema = z.object({
   }),
   THROTTLE_PUBLIC_API_LIMIT: z.coerce.number().int().min(1).default(60),
 
+  /* Limite próprio das rotas de empresa (NFSE04): requisições por IP em cada janela
+     THROTTLE_TTL, no lugar do limite geral. */
+  THROTTLE_COMPANY_PROFILE_LIMIT: z.coerce.number().int().min(1).default(60),
+  THROTTLE_COMPANY_EVIDENCES_LIMIT: z.coerce.number().int().min(1).default(20),
+  THROTTLE_COMPANY_SEARCH_LIMIT: z.coerce.number().int().min(1).default(60),
+  THROTTLE_COMPANY_EXPORT_LIMIT: z.coerce.number().int().min(1).default(10),
+
   /* Sessões (RF32, NFSE05) — access token curto; refresh token renovado a cada rotação.
      O access token é assinado com HMAC-SHA256 (HS256) por este segredo de 32 bytes:
      trocá-lo invalida os access tokens em circulação (vivem 15 minutos), mas não as
