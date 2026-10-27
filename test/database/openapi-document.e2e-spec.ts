@@ -15,6 +15,7 @@ const COMPONENT_PREFIX = '#/components/schemas/';
 /** Toda operação da API e o `operationId` que o cliente gerado leva no nome do método. */
 const EXPECTED_OPERATIONS: Record<string, string> = {
   'GET /health': 'checkHealth',
+  'GET /ods': 'listOds',
   'POST /accounts': 'registerAccount',
   'POST /accounts/confirm-email': 'confirmEmail',
   'POST /accounts/resend-confirmation': 'resendEmailConfirmation',
