@@ -912,5 +912,18 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         }
       });
     });
+
+    describe('limite de requisições (#335)', () => {
+      it('aceita 60 pesquisas por minuto por IP e recusa a seguinte com 429', async () => {
+        for (let attempt = 0; attempt < 60; attempt += 1) {
+          await search({ uf: 'SP' }).expect(200);
+        }
+
+        const response = await search({ uf: 'SP' }).expect(429);
+
+        expect(response.body).toMatchObject({ code: 'RATE_LIMIT_EXCEEDED' });
+        expect(Number(response.headers['retry-after'])).toBeGreaterThan(0);
+      });
+    });
   },
 );
