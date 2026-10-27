@@ -1412,6 +1412,32 @@ e não em `companies`, porque o módulo de empresas não depende da orquestraç�
   uma que não coleta (`withoutEnvironmentalCollection`), para não baixar os dumps do IBAMA;
   `company-full-profile.e2e-spec.ts` cobre a composição real sobre o que está gravado.
 
+## ODS que o BIOS calcula (`GET /ods`)
+
+`GET /ods` (RF10, #332) lista os ODS **ativos** da coleção `ods`, em ordem de número, com
+`ods_number`, `title` e `description` (hoje o 13 e o 15). Exige sessão. É de onde o seletor do
+front tira as opções: uma lista de 1 a 17 "funcionaria" e não mostraria nada, porque o BIOS só
+calcula os ODS de referência.
+
+- **O mesmo conjunto vale na pesquisa e na exportação.** `ods` em `GET /companies` e em
+  `GET /companies/export/xlsx` é conferido contra os ODS ativos (`EnsureActiveOdsUseCase`). Um ODS
+  inexistente ou desativado responde **422 `ODS_NOT_AVAILABLE`**, com `details.ods` e a lista dos
+  válidos em `details.valid_ods`. Antes, `?ods=7` respondia 200 com índice nulo e `?ods=7&min_score=50`
+  respondia 200 com lista vazia, indistinguível de "nenhuma empresa atende". Desativar um ODS
+  (`is_active = false`) o tira de `GET /ods` e passa a recusá-lo na pesquisa, sem reiniciar a API
+  (a conferência lê a coleção a cada pedido com `ods`; a coleção tem no máximo 17 documentos).
+- **ODS ativo sem índice na empresa continua sendo 200.** `?ods=13` devolve `ods_score` com valores
+  nulos para a empresa que ainda não tem índice no 13: é ausência de cálculo *da empresa*, e a
+  pesquisa por ODS ativo nunca deixa de aceitar o critério.
+- **Rótulos em pt-BR dos enums (decisão registrada).** O contrato continua devolvendo os valores
+  dos enums (`EvidenceCategory`, `EvidenceState`, `EvidenceSignal`, `coverage_status`,
+  `calculation_status`, `weight_reason`) e **não** um dicionário de rótulos: o app Angular é o único
+  consumidor com texto para o usuário, e o cliente gerado do OpenAPI (#330) tipa cada enum, então um
+  `Record<EvidenceState, string>` no front reprova a compilação se o BIOS ganhar um valor novo. Um
+  dicionário na API criaria uma segunda fonte para manter junto dos enums e não serviria às demais
+  APIs consumidoras, que trabalham com os códigos. Se um segundo cliente com tela passar a existir, a
+  decisão se reabre.
+
 ## Pesquisa de empresas (nome e filtros)
 
 `GET /companies` lista as empresas da base local (UC06 fluxo 1.1 e UC08; RF04, RF13, RF14) por nome, UF,

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { EnsureActiveOdsUseCase } from '@modules/scoring/infra/usecases/ensure-active-ods.usecase.js';
 import { ListOdsScoreSummariesUseCase } from '@modules/scoring/infra/usecases/list-ods-score-summaries.usecase.js';
 import { UseCase } from '@shared/domain/protocols/use-case.protocol.js';
 import {
@@ -41,6 +42,7 @@ export interface CompaniesExport {
  * colunas separadas: a planilha serve para comparar empresas, e não só no ODS selecionado.
  * Só leva dados de pessoa jurídica (INL02). Lê a base local: não chama fonte nem publica job.
  *
+ * @throws {OdsNotAvailableException} quando o `ods` não é calculado pelo BIOS (422).
  * @throws {NoResultsToExportException} quando nenhuma empresa atende aos critérios.
  * @throws {ExportTooLargeException} quando passam de `EXPORT_MAX_COMPANIES`.
  */
@@ -52,6 +54,7 @@ export class ExportCompaniesUseCase extends UseCase<
   constructor(
     private readonly companyProfileRepository: CompanyProfileRepository,
     private readonly listScores: ListOdsScoreSummariesUseCase,
+    private readonly ensureActiveOds: EnsureActiveOdsUseCase,
   ) {
     super();
   }
@@ -59,6 +62,8 @@ export class ExportCompaniesUseCase extends UseCase<
   override async execute(
     query: ExportCompaniesQuery,
   ): Promise<CompaniesExport> {
+    if (query.ods !== undefined) await this.ensureActiveOds.execute(query.ods);
+
     const { items, total } = await this.companyProfileRepository.search(
       toSearchInput(query, { skip: 0, take: EXPORT_MAX_COMPANIES }),
     );
