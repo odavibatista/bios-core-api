@@ -47,6 +47,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
     let recalculate: RequestScoreRecalculationUseCase;
     let accessToken: string;
     let collectionRuns = 0;
+    let stallCollection = false;
 
     const getProfile = (cnpj = CNPJ) =>
       request(app.getHttpServer())
@@ -68,6 +69,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
             ) => ({
               execute: async (cnpj: string) => {
                 collectionRuns += 1;
+                if (stallCollection) await new Promise<void>(() => undefined);
                 await scores.execute({ cnpj, wait: true });
 
                 return groupCompanyEvidences(cnpj, await list.execute(cnpj));
@@ -83,6 +85,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
 
     beforeEach(async () => {
       collectionRuns = 0;
+      stallCollection = false;
       await prisma.reset(collections);
       await prisma.seed(CATALOG_SEEDERS);
       await resetCache(REDIS_URL);
@@ -158,6 +161,34 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
           contributions: [],
         });
       }
+    });
+
+    it('distingue ausência confirmada de fonte indisponível na proveniência', async () => {
+      await record.execute({
+        cnpj: CNPJ,
+        sourceSlug: 'CGU_CEIS',
+        result: { status: 'COLLECTED', findings: [] },
+      });
+      await record.execute({
+        cnpj: CNPJ,
+        sourceSlug: 'CGU_CNEP',
+        result: { status: 'UNAVAILABLE' },
+      });
+
+      const profile = CompanyFullProfileResponseSchema.parse(
+        (await getProfile().expect(200)).body,
+      );
+      expect(profile.provenance.sources).toContainEqual({
+        source_slug: 'CGU_CEIS',
+        origin: 'PERSISTED',
+        evidence_state: 'NOT_FOUND',
+      });
+      expect(profile.provenance.sources).toContainEqual({
+        source_slug: 'CGU_CNEP',
+        origin: 'UNAVAILABLE',
+        evidence_state: 'UNKNOWN',
+      });
+      expect(profile.provenance.retry_after_seconds).toBe(900);
     });
 
     it('com evidências confirmadas: traz fonte, índice, confiança e explicação por ODS, sem combiná-los', async () => {
@@ -251,6 +282,38 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       await getProfile().expect(200);
 
       expect(collectionRuns).toBe(2);
+    });
+
+    it('responde com retrato parcial e proveniência dentro do orçamento quando a coleta não conclui', async () => {
+      stallCollection = true;
+      const start = performance.now();
+      const response = await getProfile().expect(200);
+      const elapsed = performance.now() - start;
+      const profile = CompanyFullProfileResponseSchema.parse(response.body);
+
+      console.info(`Perfil degradado: ${elapsed.toFixed(0)} ms`);
+      expect(elapsed).toBeLessThan(15_000);
+      expect(profile.provenance.retry_after_seconds).toBe(30);
+      expect(profile.provenance.scores_pending).toBe(true);
+      expect(profile.provenance.sources).toHaveLength(4);
+      expect(
+        profile.provenance.sources.every(
+          (source) =>
+            source.origin === 'PENDING' && source.evidence_state === null,
+        ),
+      ).toBe(true);
+      expect(profile.ods_scores).toHaveLength(2);
+      expect(collectionRuns).toBe(1);
+    }, 20_000);
+
+    it('perfil com cache cheio cumpre o prazo de 2 segundos', async () => {
+      await getProfile().expect(200);
+      const start = performance.now();
+      await getProfile().expect(200);
+      const elapsed = performance.now() - start;
+      console.info(`Perfil em cache: ${elapsed.toFixed(0)} ms`);
+      expect(elapsed).toBeLessThan(2_000);
+      expect(collectionRuns).toBe(1);
     });
   },
 );
