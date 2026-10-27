@@ -4,6 +4,7 @@ import { PrismaService } from '@shared/infra/database/prisma.service.js';
 import {
   OdsScoreRepository,
   type ActiveOds,
+  type OdsCatalogEntry,
   type OdsScoreToSave,
   type OdsScoreSnapshot,
   type OdsScoreSummary,
@@ -26,6 +27,25 @@ export class PrismaOdsScoreRepository
       orderBy: { ods_number: 'asc' },
     });
     return rows.map((row) => ({ id: row.id_ods, number: row.ods_number }));
+  }
+
+  async findOdsCatalog(): Promise<OdsCatalogEntry[]> {
+    const rows = await this.prisma.ods.findMany({
+      where: { is_active: true },
+      select: {
+        id_ods: true,
+        ods_number: true,
+        title: true,
+        description: true,
+      },
+      orderBy: { ods_number: 'asc' },
+    });
+    return rows.map((row) => ({
+      id: row.id_ods,
+      number: row.ods_number,
+      title: row.title,
+      description: row.description,
+    }));
   }
 
   async findByCnpjAndOdsNumber(
