@@ -369,6 +369,29 @@ com duas instâncias no ar.
 | --- | --- | --- |
 | `default` | `THROTTLE_TTL` / `THROTTLE_LIMIT` | endereço IP |
 | `publicApi` | `THROTTLE_PUBLIC_API_TTL` / `THROTTLE_PUBLIC_API_LIMIT` | resumo da chave de API (`x-api-key`), com o IP como alternativa |
+| `companyProfile` | `THROTTLE_TTL` / `THROTTLE_COMPANY_PROFILE_LIMIT` (60) | endereço IP |
+| `companyEvidences` | `THROTTLE_TTL` / `THROTTLE_COMPANY_EVIDENCES_LIMIT` (20) | endereço IP |
+| `companySearch` | `THROTTLE_TTL` / `THROTTLE_COMPANY_SEARCH_LIMIT` (60) | endereço IP |
+| `companyExport` | `THROTTLE_TTL` / `THROTTLE_COMPANY_EXPORT_LIMIT` (10) | endereço IP |
+
+- **Limite próprio das rotas de empresa (#335).** Nenhum teto vive no código das rotas: cada uma
+  declara `@RouteRateLimit(ThrottlerName.X)` e o valor vem da variável de ambiente validada. O
+  limite próprio **substitui** o geral na rota (o `default` é dispensado), como o antigo
+  `@Throttle({ default: ... })` fazia, então um teto acima de `THROTTLE_LIMIT` vale de fato; a
+  janela é a geral (`THROTTLE_TTL`). Cada limite só incide nas rotas que o declaram (`skipIf`).
+  `SkipRateLimit` continua isentando de todos, porque deriva a lista de `ThrottlerName`.
+- **Por que 60 no perfil.** A chamada em cache custa ~20 ms (seis chamadas medidas: 40 ms sem cache
+  e 24, 19, 26, 23 e 18 ms com cache), e 20 por minuto, um perfil a cada 3 s, estrangulava quem
+  compara fornecedores (429 já na 21ª chamada). Os 60 por minuto igualam o teto da API pública e
+  ainda protegem o caminho que coleta, que é a minoria (o cache do perfil dura 5 minutos). O
+  limite é por IP: vários usuários atrás do mesmo NAT dividem a cota, e o teto é a variável para
+  quem precisar de mais.
+- **Evidências ficam em 20** porque o NFSE04 (b) exige esse valor; só passou a vir da variável.
+- **Pesquisa: 60 por minuto.** Antes não tinha limite próprio (valia só o geral, 120), apesar de a
+  busca por nome varrer os perfis com expressão regular. Um valor abaixo do geral protege o banco
+  e ainda deixa uma busca por segundo, acima do ritmo de quem digita com *debounce*.
+- **Exportação: 10 por minuto**, o mesmo valor de antes, agora configurável e com requisito
+  (NFSE04, e).
 
 - **O `publicApi` só vale na API pública.** Incide apenas nos endpoints marcados com
   `@PublicApiRoute()` (que `@ApiKeyAuth()` já aplica); nos demais é dispensado (`skipIf`). Antes
@@ -814,7 +837,7 @@ alfanumérico; omita a barra de formatação na URL. CNPJ inválido responde 422
 ausência de sessão responde 401 antes de consultar fontes.
 Um CNPJ válido sem `company_profile` local responde 404 (`COMPANY_NOT_FOUND`)
 antes de qualquer leitura de evidências, gravação ou publicação de job. A rota
-tem limite próprio de 20 consultas por minuto por IP, além do limite global.
+tem limite próprio por IP (padrão 20 consultas por minuto, `THROTTLE_COMPANY_EVIDENCES_LIMIT`), no lugar do limite global.
 
 Cada evidência traz `source` (nome público atual do catálogo), `source_slug`,
 `source_reference` e `source_url`, além das datas de publicação/coleta/validade.
@@ -1406,8 +1429,9 @@ e não em `companies`, porque o módulo de empresas não depende da orquestraç�
   por 5 minutos (`ENVIRONMENTAL_PROFILE_CACHE_TTL_SECONDS`), e só juntas e com todos os ODS
   calculados; o recálculo do índice as apaga (`OdsScoringProcessor`). Com as duas em cache, a
   consulta não coleta nem recalcula. O cadastro segue no namespace `company-profile`.
-- **Limite.** A rota do painel tem 20 consultas por minuto por IP (como a de evidências), porque
-  consolidar pode disparar coletas externas; a pública conta por chave (NFSE04).
+- **Limite.** A rota do painel tem limite próprio por IP, padrão de 60 consultas por minuto
+  (`THROTTLE_COMPANY_PROFILE_LIMIT`, #335): consolidar pode disparar coletas externas, mas a chamada
+  em cache é barata. A pública conta por chave (NFSE04).
 - **Testes.** Os e2e que só exercitam cadastro, autenticação ou limite trocam a consolidação por
   uma que não coleta (`withoutEnvironmentalCollection`), para não baixar os dumps do IBAMA;
   `company-full-profile.e2e-spec.ts` cobre a composição real sobre o que está gravado.
@@ -1565,7 +1589,7 @@ ignorados, e o arquivo traz a lista inteira. A tradução dos critérios para o 
   `Content-Disposition: attachment; filename="empresas-bios-AAAA-MM-DD.xlsx"` e `Content-Length`. A
   planilha se chama `Empresas`, com o cabeçalho em negrito e fixo no topo, colunas com largura e
   índice e confiança com duas casas decimais (o valor gravado não é arredondado).
-- **Limite de requisições.** 10 exportações por minuto por IP (a pesquisa tem o limite global),
+- **Limite de requisições.** 10 exportações por minuto por IP (`THROTTLE_COMPANY_EXPORT_LIMIT`),
   porque cada chamada monta um arquivo.
 - **Só lê a base local.** Como a pesquisa, não chama fonte nem publica job. A rota fica em
   `/companies/export/xlsx` (e não em `/companies/export`) para nunca disputar o caminho com
