@@ -1,3 +1,4 @@
+import { OdsNotAvailableException } from '@modules/scoring/domain/dtos/errors/ods-not-available.errors.js';
 import { readXlsx } from '@test/support/xlsx-reader.js';
 import {
   ExportTooLargeException,
@@ -15,6 +16,7 @@ describe('ExportCompaniesUseCase', () => {
     search: vi.fn<CompanyProfileRepository['search']>(),
   };
   const listScores = { execute: vi.fn() };
+  const ensureActiveOds = { execute: vi.fn() };
   let useCase: ExportCompaniesUseCase;
 
   function item(cnpj: string, legalName: string): CompanySearchItem {
@@ -61,6 +63,7 @@ describe('ExportCompaniesUseCase', () => {
     useCase = new ExportCompaniesUseCase(
       repository as never,
       listScores as never,
+      ensureActiveOds as never,
     );
   });
 
@@ -82,6 +85,30 @@ describe('ExportCompaniesUseCase', () => {
       skip: 0,
       take: EXPORT_MAX_COMPANIES,
     });
+  });
+
+  it('confere o ODS escolhido antes de procurar', async () => {
+    await useCase.execute({ ods: 15 });
+
+    expect(ensureActiveOds.execute).toHaveBeenCalledWith(15);
+  });
+
+  it('ODS que o BIOS não calcula: 422 sem procurar nem montar planilha', async () => {
+    ensureActiveOds.execute.mockRejectedValue(
+      new OdsNotAvailableException(7, [13, 15]),
+    );
+
+    await expect(useCase.execute({ ods: 7 })).rejects.toBeInstanceOf(
+      OdsNotAvailableException,
+    );
+    expect(repository.search).not.toHaveBeenCalled();
+    expect(listScores.execute).not.toHaveBeenCalled();
+  });
+
+  it('sem ODS, não consulta o catálogo', async () => {
+    await useCase.execute({ uf: 'SP' });
+
+    expect(ensureActiveOds.execute).not.toHaveBeenCalled();
   });
 
   it('pede os índices das empresas da lista, e só delas', async () => {
