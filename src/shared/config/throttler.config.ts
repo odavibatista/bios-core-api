@@ -4,6 +4,7 @@ import type { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import type { ThrottlerOptions } from '@nestjs/throttler';
 import { IS_PUBLIC_API_ROUTE } from '../http/decorators/public-api-route.decorator.js';
+import { ROUTE_RATE_LIMIT } from '../http/decorators/route-rate-limit.decorator.js';
 import type { Environment } from './environment.config.js';
 
 /**
@@ -22,14 +23,30 @@ export const THROTTLER_KEY_PREFIX = 'bios:throttle';
  *
  *  - `default`: todo endpoint, contado por IP;
  *  - `publicApi`: só os endpoints marcados com `@PublicApiRoute()`, contados
- *    por chave de API (e somados ao `default`).
+ *    por chave de API (e somados ao `default`);
+ *  - os limites próprios das rotas de empresa (`ROUTE_THROTTLERS`): cada um só nas rotas
+ *    marcadas com `@RouteRateLimit()`, contados por IP, no lugar do `default`.
  */
 export const ThrottlerName = {
   DEFAULT: 'default',
   PUBLIC_API: 'publicApi',
+  COMPANY_PROFILE: 'companyProfile',
+  COMPANY_EVIDENCES: 'companyEvidences',
+  COMPANY_SEARCH: 'companySearch',
+  COMPANY_EXPORT: 'companyExport',
 } as const;
 
 export type ThrottlerName = (typeof ThrottlerName)[keyof typeof ThrottlerName];
+
+/** Limites próprios de rota e a variável de ambiente que dá o valor de cada um. */
+export const ROUTE_THROTTLERS = {
+  [ThrottlerName.COMPANY_PROFILE]: 'THROTTLE_COMPANY_PROFILE_LIMIT',
+  [ThrottlerName.COMPANY_EVIDENCES]: 'THROTTLE_COMPANY_EVIDENCES_LIMIT',
+  [ThrottlerName.COMPANY_SEARCH]: 'THROTTLE_COMPANY_SEARCH_LIMIT',
+  [ThrottlerName.COMPANY_EXPORT]: 'THROTTLE_COMPANY_EXPORT_LIMIT',
+} as const satisfies Partial<Record<ThrottlerName, keyof Environment>>;
+
+export type RouteThrottlerName = keyof typeof ROUTE_THROTTLERS;
 
 /** Chave de API informada na requisição, quando houver. */
 export function apiKeyOf(request: {
@@ -75,6 +92,14 @@ function isPublicApiRoute(context: ExecutionContext): boolean {
   );
 }
 
+/** Limite próprio declarado na rota, quando houver (`@RouteRateLimit()`). */
+function routeRateLimitOf(context: ExecutionContext): string | undefined {
+  return new Reflector().getAllAndOverride<string | undefined>(
+    ROUTE_RATE_LIMIT,
+    [context.getHandler(), context.getClass()],
+  );
+}
+
 /**
  * Limites a partir da configuração validada.
  *
@@ -102,5 +127,17 @@ export function buildThrottlers(
       getTracker: publicApiTrackerOf,
       skipIf: (context) => !isPublicApiRoute(context),
     },
+    ...(
+      Object.entries(ROUTE_THROTTLERS) as [
+        RouteThrottlerName,
+        (typeof ROUTE_THROTTLERS)[RouteThrottlerName],
+      ][]
+    ).map(([name, variable]): ThrottlerOptions => ({
+      name,
+      ttl:
+        configService.get('THROTTLE_TTL', { infer: true }).toSeconds() * 1_000,
+      limit: configService.get(variable, { infer: true }),
+      skipIf: (context) => routeRateLimitOf(context) !== name,
+    })),
   ];
 }

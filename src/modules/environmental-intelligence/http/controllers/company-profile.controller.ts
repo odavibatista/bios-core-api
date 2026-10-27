@@ -1,5 +1,6 @@
 import { Controller, Get, HttpStatus, Param } from '@nestjs/common';
-import { Throttle } from '@nestjs/throttler';
+import { ThrottlerName } from '@shared/config/throttler.config.js';
+import { RouteRateLimit } from '@shared/http/decorators/route-rate-limit.decorator.js';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -25,13 +26,13 @@ export class CompanyProfileController implements CompanyFullProfileControllerInt
   constructor(private readonly getFullProfile: GetCompanyFullProfileUseCase) {}
 
   @Get(':cnpj')
-  // Consolidar as fontes pode disparar coletas externas: mesmo limite da rota de evidências.
-  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  // Consolidar as fontes pode disparar coletas externas, mas a chamada em cache é barata: limite próprio (NFSE04).
+  @RouteRateLimit(ThrottlerName.COMPANY_PROFILE)
   @ApiOperation({
     operationId: 'getCompanyProfile',
     summary: 'Consulta o perfil completo de uma empresa pelo CNPJ',
     description:
-      'Compõe o cadastro (cache, banco ou provedores BrasilAPI, OpenCNPJ e Minha Receita), as evidências ambientais do IBAMA, da CGU e do GHG Protocol, agrupadas por categoria e com a referência da fonte original, e, por ODS, o índice de aderência, a confiança e a explicação do score, lado a lado e nunca combinados. Cada fonte degrada por conta própria: fonte fora do ar vira evidência `UNKNOWN`, nunca nota baixa. `ods_scores[].calculation_status = PENDING` indica índice ainda não calculado. Com os provedores cadastrais indisponíveis, serve o último cadastro guardado, se houver; sem ele, responde 503. Limite de 20 consultas por minuto por IP, além do limite global. Aceita CNPJ numérico e alfanumérico; os separadores `.` `-` são ignorados (a barra deve ser omitida, pois separa segmentos da URL).',
+      'Compõe o cadastro (cache, banco ou provedores BrasilAPI, OpenCNPJ e Minha Receita), as evidências ambientais do IBAMA, da CGU e do GHG Protocol, agrupadas por categoria e com a referência da fonte original, e, por ODS, o índice de aderência, a confiança e a explicação do score, lado a lado e nunca combinados. Cada fonte degrada por conta própria: fonte fora do ar vira evidência `UNKNOWN`, nunca nota baixa. `ods_scores[].calculation_status = PENDING` indica índice ainda não calculado. Com os provedores cadastrais indisponíveis, serve o último cadastro guardado, se houver; sem ele, responde 503. Limite próprio por IP (padrão: 60 consultas por minuto, `THROTTLE_COMPANY_PROFILE_LIMIT`), no lugar do limite global. Aceita CNPJ numérico e alfanumérico; os separadores `.` `-` são ignorados (a barra deve ser omitida, pois separa segmentos da URL).',
   })
   @ApiParam({
     name: 'cnpj',

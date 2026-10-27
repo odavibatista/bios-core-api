@@ -5,7 +5,8 @@ import {
   Query,
   StreamableFile,
 } from '@nestjs/common';
-import { Throttle } from '@nestjs/throttler';
+import { ThrottlerName } from '@shared/config/throttler.config.js';
+import { RouteRateLimit } from '@shared/http/decorators/route-rate-limit.decorator.js';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -33,13 +34,13 @@ export class CompaniesExportController implements CompaniesExportControllerInter
   ) {}
 
   @Get('xlsx')
-  // Gera um arquivo a cada chamada: limite menor que o da pesquisa, além do limite global.
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  // Gera um arquivo a cada chamada: limite próprio, menor que os da pesquisa e do perfil (NFSE04).
+  @RouteRateLimit(ThrottlerName.COMPANY_EXPORT)
   @ApiOperation({
     operationId: 'exportCompaniesXlsx',
     summary: 'Exporta em XLSX a lista da pesquisa de empresas',
     description:
-      'Aceita os mesmos critérios e a mesma ordenação de `GET /companies` (`name`, `uf`, `city`, `cnae`, `ods`, `min_score`, `min_confidence`, `order`), sem paginação: o arquivo traz a lista inteira, na ordem da pesquisa. Uma linha por empresa, com os dados cadastrais (CNPJ, razão social, nome fantasia, situação cadastral, UF, município e CNAE principal) e, em colunas separadas para cada ODS ativo, o índice e a confiança, vazios quando não calculados. Não leva dado pessoal nem de contato de indivíduo. Sem empresa que atenda aos critérios, responde 404 `NO_RESULTS_TO_EXPORT`; acima de 5000 empresas, 422 `EXPORT_TOO_LARGE`. Limite de 10 exportações por minuto por IP, além do limite global.',
+      'Aceita os mesmos critérios e a mesma ordenação de `GET /companies` (`name`, `uf`, `city`, `cnae`, `ods`, `min_score`, `min_confidence`, `order`), sem paginação: o arquivo traz a lista inteira, na ordem da pesquisa. Uma linha por empresa, com os dados cadastrais (CNPJ, razão social, nome fantasia, situação cadastral, UF, município e CNAE principal) e, em colunas separadas para cada ODS ativo, o índice e a confiança, vazios quando não calculados. Não leva dado pessoal nem de contato de indivíduo. Sem empresa que atenda aos critérios, responde 404 `NO_RESULTS_TO_EXPORT`; acima de 5000 empresas, 422 `EXPORT_TOO_LARGE`. Limite próprio por IP (padrão: 10 exportações por minuto, `THROTTLE_COMPANY_EXPORT_LIMIT`), no lugar do limite global.',
   })
   @ApiResponse({
     status: HttpStatus.OK,
