@@ -315,5 +315,16 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       expect(elapsed).toBeLessThan(2_000);
       expect(collectionRuns).toBe(1);
     });
+
+    it('aceita 60 consultas por minuto (limite próprio, #335) e recusa a seguinte com 429', async () => {
+      for (let attempt = 0; attempt < 60; attempt += 1) {
+        await getProfile().expect(200);
+      }
+
+      const response = await getProfile().expect(429);
+
+      expect(response.body).toMatchObject({ code: 'RATE_LIMIT_EXCEEDED' });
+      expect(Number(response.headers['retry-after'])).toBeGreaterThan(0);
+    });
   },
 );

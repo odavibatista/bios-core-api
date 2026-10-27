@@ -7,12 +7,14 @@ import { validateEnvironment } from '@shared/config/environment.config.js';
 import {
   API_KEY_HEADER,
   THROTTLER_KEY_PREFIX,
+  ThrottlerName,
 } from '@shared/config/throttler.config.js';
 import { ErrorResponseSchema } from '@shared/domain/dtos/errors/error-response.dto.js';
 import { AllExceptionsFilter } from '@shared/infra/filters/all-exceptions.filter.js';
 import { ThrottlerModule } from '@shared/infra/modules/throttler.module.js';
 import { HealthController } from '@shared/http/controllers/health.controller.js';
 import { PublicApiRoute } from '@shared/http/decorators/public-api-route.decorator.js';
+import { RouteRateLimit } from '@shared/http/decorators/route-rate-limit.decorator.js';
 import { SkipRateLimit } from '@shared/http/decorators/skip-rate-limit.decorator.js';
 import { CheckHealthUseCase } from '@shared/infra/usecases/health/check-health.usecase.js';
 import { Redis } from 'ioredis';
@@ -24,6 +26,9 @@ import { buildTestEnvironment } from '../support/environment.js';
 
 /** Limite curto: o estouro tem de acontecer em poucas requisições. */
 const LIMIT = 2;
+
+/** Limite próprio do perfil, de propósito acima do geral. */
+const PROFILE_LIMIT = 4;
 
 /** Endpoints de prova, nos três regimes possíveis de limite. */
 @Controller('prova')
@@ -69,6 +74,20 @@ class ProbeController {
   partiallyExempt(): { ok: true } {
     return { ok: true };
   }
+
+  /** Limite próprio maior que o geral: vale no lugar dele, e não somado. */
+  @Get('perfil')
+  @RouteRateLimit(ThrottlerName.COMPANY_PROFILE)
+  profile(): { ok: true } {
+    return { ok: true };
+  }
+
+  /** Outro limite próprio, menor, para provar que cada rota tem o seu. */
+  @Get('exportacao')
+  @RouteRateLimit(ThrottlerName.COMPANY_EXPORT)
+  exportation(): { ok: true } {
+    return { ok: true };
+  }
 }
 
 describe.runIf(inject('redisAvailable'))('Limite de requisições (e2e)', () => {
@@ -87,6 +106,8 @@ describe.runIf(inject('redisAvailable'))('Limite de requisições (e2e)', () => 
                   REDIS_URL: inject('testRedisUrl'),
                   THROTTLE_LIMIT: String(LIMIT),
                   THROTTLE_PUBLIC_API_LIMIT: String(LIMIT),
+                  THROTTLE_COMPANY_PROFILE_LIMIT: String(PROFILE_LIMIT),
+                  THROTTLE_COMPANY_EXPORT_LIMIT: '1',
                 }),
               ),
           ],
@@ -198,5 +219,36 @@ describe.runIf(inject('redisAvailable'))('Limite de requisições (e2e)', () => 
     for (let attempt = 0; attempt < LIMIT * 3; attempt += 1) {
       await get('/health').expect(200);
     }
+  });
+
+  describe('limite próprio da rota (variável de ambiente)', () => {
+    it('vale no lugar do geral: aceita o configurado, mesmo acima do limite geral, e recusa o seguinte', async () => {
+      for (let attempt = 0; attempt < PROFILE_LIMIT; attempt += 1) {
+        await get('/prova/perfil').expect(200);
+      }
+
+      const response = await get('/prova/perfil').expect(429);
+
+      expect(ErrorResponseSchema.parse(response.body)).toMatchObject({
+        statusCode: 429,
+        code: 'RATE_LIMIT_EXCEEDED',
+      });
+      expect(Number(response.headers['retry-after'])).toBeGreaterThan(0);
+    });
+
+    it('informa a cota configurada nos cabeçalhos', async () => {
+      const response = await get('/prova/exportacao');
+
+      expect(response.headers['x-ratelimit-limit-companyexport']).toBe('1');
+    });
+
+    it('cada rota tem a sua cota, e esgotar uma não atinge a outra', async () => {
+      await get('/prova/exportacao').expect(429);
+
+      // O perfil já esgotou a dele no teste anterior, mas o limite geral segue intacto
+      // para as rotas sem limite próprio.
+      await get('/prova/limitado').expect(429);
+      await get('/prova/isento').expect(200);
+    });
   });
 });

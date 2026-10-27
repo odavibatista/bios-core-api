@@ -94,6 +94,10 @@ describe('validateEnvironment', () => {
       QUEUE_SCHEDULES_SYNC_ON_BOOT: true,
       THROTTLE_LIMIT: 120,
       THROTTLE_PUBLIC_API_LIMIT: 60,
+      THROTTLE_COMPANY_PROFILE_LIMIT: 60,
+      THROTTLE_COMPANY_EVIDENCES_LIMIT: 20,
+      THROTTLE_COMPANY_SEARCH_LIMIT: 60,
+      THROTTLE_COMPANY_EXPORT_LIMIT: 10,
       DATA_RETENTION_SYNC_ON_BOOT: true,
     });
     expect(environment.CACHE_DEFAULT_TTL.toString()).toBe('1w');
@@ -248,14 +252,35 @@ describe('validateEnvironment', () => {
       },
     );
 
-    it.each(['THROTTLE_LIMIT', 'THROTTLE_PUBLIC_API_LIMIT'])(
-      'rejeita teto de %s abaixo de uma requisição',
-      (variable) => {
-        expect(() =>
-          validateEnvironment({ ...REQUIRED, [variable]: '0' }),
-        ).toThrow(new RegExp(variable));
-      },
-    );
+    it('lê o limite próprio de cada rota de empresa', () => {
+      const environment = validateEnvironment({
+        ...REQUIRED,
+        THROTTLE_COMPANY_PROFILE_LIMIT: '90',
+        THROTTLE_COMPANY_EVIDENCES_LIMIT: '25',
+        THROTTLE_COMPANY_SEARCH_LIMIT: '45',
+        THROTTLE_COMPANY_EXPORT_LIMIT: '5',
+      });
+
+      expect(environment).toMatchObject({
+        THROTTLE_COMPANY_PROFILE_LIMIT: 90,
+        THROTTLE_COMPANY_EVIDENCES_LIMIT: 25,
+        THROTTLE_COMPANY_SEARCH_LIMIT: 45,
+        THROTTLE_COMPANY_EXPORT_LIMIT: 5,
+      });
+    });
+
+    it.each([
+      'THROTTLE_LIMIT',
+      'THROTTLE_PUBLIC_API_LIMIT',
+      'THROTTLE_COMPANY_PROFILE_LIMIT',
+      'THROTTLE_COMPANY_EVIDENCES_LIMIT',
+      'THROTTLE_COMPANY_SEARCH_LIMIT',
+      'THROTTLE_COMPANY_EXPORT_LIMIT',
+    ])('rejeita teto de %s abaixo de uma requisição', (variable) => {
+      expect(() =>
+        validateEnvironment({ ...REQUIRED, [variable]: '0' }),
+      ).toThrow(new RegExp(variable));
+    });
   });
 
   describe('filas', () => {
