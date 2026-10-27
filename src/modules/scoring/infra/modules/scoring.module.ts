@@ -10,6 +10,9 @@ import { ListOdsScoreSummariesUseCase } from '../usecases/list-ods-score-summari
 import { GetCompanyOdsScoresUseCase } from '../usecases/get-company-ods-scores.usecase.js';
 import { GetScoreExplanationUseCase } from '../usecases/get-score-explanation.usecase.js';
 import { OdsScoringProcessor } from '../queue/ods-scoring.processor.js';
+import { ListOdsUseCase } from '../usecases/list-ods.usecase.js';
+import { EnsureActiveOdsUseCase } from '../usecases/ensure-active-ods.usecase.js';
+import { OdsController } from '../../http/controllers/ods.controller.js';
 import { ScoreExplanationController } from '../../http/controllers/score-explanation.controller.js';
 
 /**
@@ -20,13 +23,15 @@ import { ScoreExplanationController } from '../../http/controllers/score-explana
  */
 @Module({
   imports: [EvidencesModule],
-  controllers: [ScoreExplanationController],
+  controllers: [ScoreExplanationController, OdsController],
   providers: [
     { provide: OdsScoreRepository, useClass: PrismaOdsScoreRepository },
     CalculateCompanyOdsScoresUseCase,
     GetScoreExplanationUseCase,
     GetCompanyOdsScoresUseCase,
     ListOdsScoreSummariesUseCase,
+    ListOdsUseCase,
+    EnsureActiveOdsUseCase,
 
     /* Recálculo por fila (#80) */
     RequestScoreRecalculationUseCase,
@@ -38,6 +43,7 @@ import { ScoreExplanationController } from '../../http/controllers/score-explana
     CalculateCompanyOdsScoresUseCase,
     GetCompanyOdsScoresUseCase,
     ListOdsScoreSummariesUseCase,
+    EnsureActiveOdsUseCase,
     RequestScoreRecalculationUseCase,
     RequestScoreRecalculationBatchUseCase,
   ],

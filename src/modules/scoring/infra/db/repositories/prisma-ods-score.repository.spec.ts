@@ -45,6 +45,27 @@ describe('PrismaOdsScoreRepository', () => {
     });
   });
 
+  it('o catálogo traz título e descrição só dos ODS ativos, em ordem de número', async () => {
+    const id = faker.database.mongodbObjectId();
+    prisma.ods.findMany.mockResolvedValue([
+      { id_ods: id, ods_number: 13, title: 'Clima', description: 'Descrição' },
+    ]);
+
+    await expect(repo.findOdsCatalog()).resolves.toEqual([
+      { id, number: 13, title: 'Clima', description: 'Descrição' },
+    ]);
+    expect(prisma.ods.findMany).toHaveBeenCalledWith({
+      where: { is_active: true },
+      select: {
+        id_ods: true,
+        ods_number: true,
+        title: true,
+        description: true,
+      },
+      orderBy: { ods_number: 'asc' },
+    });
+  });
+
   describe('findSummariesByCnpjs', () => {
     it('lê só índice e confiança das empresas dadas, em todos os ODS', async () => {
       prisma.companyOdsScore.findMany.mockResolvedValue([

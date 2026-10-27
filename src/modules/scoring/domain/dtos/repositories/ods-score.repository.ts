@@ -5,6 +5,12 @@ export interface ActiveOds {
   number: number;
 }
 
+/** ODS ativo com os textos de apresentação (seletor do front, `GET /ods`). */
+export interface OdsCatalogEntry extends ActiveOds {
+  title: string;
+  description: string;
+}
+
 export interface ScoreProfileLocation {
   uf: string;
   city: string;
@@ -44,6 +50,8 @@ export interface OdsScoreSummary {
 /** Contrato da leitura dos ODS e da substituição atômica dos índices de uma empresa. */
 export abstract class OdsScoreRepository {
   abstract findActiveOds(): Promise<ActiveOds[]>;
+  /** ODS ativos com título e descrição, em ordem crescente de número. */
+  abstract findOdsCatalog(): Promise<OdsCatalogEntry[]>;
   abstract findByCnpjAndOdsNumber(
     cnpj: string,
     odsNumber: number,

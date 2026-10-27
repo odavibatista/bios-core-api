@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { EnsureActiveOdsUseCase } from '@modules/scoring/infra/usecases/ensure-active-ods.usecase.js';
 import {
   buildPaginationMeta,
   type PaginationQuery,
@@ -25,7 +26,8 @@ import type {
  * A razão social e o nome fantasia guardados já têm o CPF mascarado (INL02);
  * como a busca lê esses campos, digitar um CPF não encontra o titular.
  *
- * Lista vazia não é erro: a pesquisa respondeu, e nada casou.
+ * Lista vazia não é erro: a pesquisa respondeu, e nada casou. Já um `ods` que o BIOS não
+ * calcula (inexistente ou desativado) é recusado com 422 e a lista dos válidos (#332).
  */
 @Injectable()
 export class SearchCompaniesUseCase extends UseCase<
@@ -34,6 +36,7 @@ export class SearchCompaniesUseCase extends UseCase<
 > {
   constructor(
     private readonly companyProfileRepository: CompanyProfileRepository,
+    private readonly ensureActiveOds: EnsureActiveOdsUseCase,
   ) {
     super();
   }
@@ -43,6 +46,10 @@ export class SearchCompaniesUseCase extends UseCase<
     page_size,
     ...criteria
   }: SearchCompaniesQuery): Promise<SearchCompaniesResponse> {
+    if (criteria.ods !== undefined) {
+      await this.ensureActiveOds.execute(criteria.ods);
+    }
+
     const pagination = { page, page_size };
     const { items, total } = await this.companyProfileRepository.search(
       toSearchInput(criteria, toWindow(pagination)),
