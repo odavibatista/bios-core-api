@@ -6,10 +6,10 @@ import {
 } from '../../domain/dtos/errors/export-companies.errors.js';
 import type { CompanyProfileRepository } from '../../domain/dtos/repositories/company-profile.repository.js';
 import type { CompanySearchItem } from '../../domain/dtos/requests/search-companies.dto.js';
-import {
-  EXPORT_MAX_COMPANIES,
-  ExportCompaniesUseCase,
-} from './export-companies.usecase.js';
+import { ExportCompaniesUseCase } from './export-companies.usecase.js';
+
+/** Teto configurado nesta suíte (`EXPORT_MAX_COMPANIES`); o padrão de produção é 5000. */
+const EXPORT_MAX_COMPANIES = 40;
 
 describe('ExportCompaniesUseCase', () => {
   const repository = {
@@ -17,6 +17,7 @@ describe('ExportCompaniesUseCase', () => {
   };
   const listScores = { execute: vi.fn() };
   const ensureActiveOds = { execute: vi.fn() };
+  const config = { get: vi.fn() };
   let useCase: ExportCompaniesUseCase;
 
   function item(cnpj: string, legalName: string): CompanySearchItem {
@@ -33,6 +34,9 @@ describe('ExportCompaniesUseCase', () => {
   }
 
   beforeEach(() => {
+    config.get.mockImplementation((key: string) =>
+      key === 'EXPORT_MAX_COMPANIES' ? EXPORT_MAX_COMPANIES : undefined,
+    );
     repository.search.mockResolvedValue({
       items: [item('11222333000181', 'ACME'), item('00000000000191', 'BETA')],
       total: 2,
@@ -64,6 +68,7 @@ describe('ExportCompaniesUseCase', () => {
       repository as never,
       listScores as never,
       ensureActiveOds as never,
+      config as never,
     );
   });
 
@@ -166,6 +171,27 @@ describe('ExportCompaniesUseCase', () => {
       max: EXPORT_MAX_COMPANIES,
     });
     expect(listScores.execute).not.toHaveBeenCalled();
+  });
+
+  it('o teto vem da configuração: outro valor muda a janela pedida e o ponto da recusa', async () => {
+    config.get.mockImplementation((key: string) =>
+      key === 'EXPORT_MAX_COMPANIES' ? 7 : undefined,
+    );
+    repository.search.mockResolvedValue({
+      items: [item('11222333000181', 'ACME')],
+      total: 8,
+    });
+
+    const error = await useCase.execute({ uf: 'SP' }).catch((e: unknown) => e);
+
+    expect(repository.search).toHaveBeenCalledWith(
+      expect.objectContaining({ skip: 0, take: 7 }),
+    );
+    expect((error as ExportTooLargeException).details).toEqual({
+      total: 8,
+      max: 7,
+    });
+    expect((error as ExportTooLargeException).message).toContain('até 7');
   });
 
   it('no limite exato, exporta', async () => {

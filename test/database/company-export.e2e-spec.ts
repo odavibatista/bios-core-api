@@ -2,7 +2,6 @@ import type { INestApplication } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { CATALOG_SEEDERS } from '@app/database/catalog.seeders.js';
 import { SearchCompaniesResponseSchema } from '@modules/companies/domain/dtos/requests/search-companies.dto.js';
-import { EXPORT_MAX_COMPANIES } from '@modules/companies/infra/usecases/export-companies.usecase.js';
 import { ErrorResponseSchema } from '@shared/domain/dtos/errors/error-response.dto.js';
 import { PrismaService } from '@shared/infra/database/prisma.service.js';
 import request, { type Response } from 'supertest';
@@ -14,6 +13,9 @@ import { resetThrottleCounters } from '../support/throttle.js';
 import { readXlsx } from '../support/xlsx-reader.js';
 
 const REDIS_URL = inject('testRedisUrl');
+
+/** Teto padrão da exportação (`EXPORT_MAX_COMPANIES`), que o ambiente de teste não altera. */
+const EXPORT_MAX_COMPANIES = 5_000;
 const XLSX_TYPE =
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
@@ -229,6 +231,34 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
 
         expect(rows[1].slice(8)).toEqual([60, 0.2, -45, 0.8]);
       });
+
+      it('lista grande: cada empresa leva o próprio índice, também na fronteira dos blocos de leitura (#336)', async () => {
+        const total = 235;
+        const cnpjs: string[] = [];
+
+        for (let index = 0; index < total; index += 1) {
+          const cnpj = await saveCompany(
+            `EMPRESA ${String(index).padStart(3, '0')}`,
+          );
+
+          cnpjs.push(cnpj);
+          await saveScore(cnpj, 15, { score: index - 100, confidence: 0.5 });
+        }
+
+        const { rows } = await exported({ uf: 'SP' });
+
+        expect(rows).toHaveLength(total + 1);
+        for (const [index, cnpj] of cnpjs.entries()) {
+          const row = rows.find((candidate) => candidate[0] === cnpj);
+
+          expect(row?.slice(8), `empresa ${index}`).toEqual([
+            null,
+            null,
+            index - 100,
+            0.5,
+          ]);
+        }
+      }, 60_000);
 
       it('o que não foi calculado fica vazio, e o índice zero continua zero', async () => {
         const alfa = await saveCompany('ALFA');
