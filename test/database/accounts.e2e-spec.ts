@@ -15,8 +15,9 @@ import { buildPassword } from '../factories/shared/password.factory.js';
 import { faker } from '../support/faker.js';
 import { createDatabaseTestingApp } from '../support/database-testing-app.js';
 import { resetThrottleCounters } from '../support/throttle.js';
+import { testRedisUrl } from '../support/infrastructure.js';
 
-const REDIS_URL = inject('testRedisUrl');
+const REDIS_URL = testRedisUrl();
 
 /** Transporte dublê no lugar do SMTP: registra o que foi "enviado". */
 class RecordingMailProvider extends MailProvider {

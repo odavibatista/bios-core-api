@@ -16,8 +16,9 @@ import { buildKey } from '../factories/shared/encryption-key.factory.js';
 import { buildPassword } from '../factories/shared/password.factory.js';
 import { faker } from '../support/faker.js';
 import { resetThrottleCounters } from '../support/throttle.js';
+import { testRedisUrl } from '../support/infrastructure.js';
 
-const REDIS_URL = inject('testRedisUrl');
+const REDIS_URL = testRedisUrl();
 
 /** Chave 1 do ambiente de teste (vitest.config.e2e.ts). */
 const KEY_V1 = `${'e'.repeat(43)}=`;

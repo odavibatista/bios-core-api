@@ -19,8 +19,9 @@ import {
   queueScheduleFactory,
 } from '../factories/shared/queue-job.factory.js';
 import { buildTestEnvironment } from '../support/environment.js';
+import { testRedisUrl } from '../support/infrastructure.js';
 
-const REDIS_URL = inject('testRedisUrl');
+const REDIS_URL = testRedisUrl();
 
 /**
  * Infraestrutura de filas contra um Redis real: prova que publicar, aguardar a

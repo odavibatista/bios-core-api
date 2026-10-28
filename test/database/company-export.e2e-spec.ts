@@ -11,8 +11,9 @@ import { type OdsScoreValues, saveOdsScore } from '../support/ods-score.js';
 import { createTestAccount } from '../support/test-account.js';
 import { resetThrottleCounters } from '../support/throttle.js';
 import { readXlsx } from '../support/xlsx-reader.js';
+import { testRedisUrl } from '../support/infrastructure.js';
 
-const REDIS_URL = inject('testRedisUrl');
+const REDIS_URL = testRedisUrl();
 
 /** Teto padrão da exportação (`EXPORT_MAX_COMPANIES`), que o ambiente de teste não altera. */
 const EXPORT_MAX_COMPANIES = 5_000;

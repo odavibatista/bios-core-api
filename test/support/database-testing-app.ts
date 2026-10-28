@@ -14,8 +14,8 @@ export interface DatabaseTestingApp {
 }
 
 /**
- * Sobe o `AppModule` completo conectado ao banco descartável de testes
- * (DATABASE_URL definida em vitest.config.e2e.ts).
+ * Sobe o `AppModule` completo conectado ao banco descartável de testes do
+ * worker (DATABASE_URL definida em test/setup/worker-infrastructure.setup.ts).
  *
  * Nenhum provider é substituído por padrão. `configure` permite trocar apenas
  * o que sai do processo — ex.: o transporte de e-mail por um dublê que

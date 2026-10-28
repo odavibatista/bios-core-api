@@ -6,8 +6,9 @@ import request from 'supertest';
 import { inject } from 'vitest';
 import { createTestAccount } from '../support/test-account.js';
 import { resetThrottleCounters } from '../support/throttle.js';
+import { testRedisUrl } from '../support/infrastructure.js';
 
-const REDIS_URL = inject('testRedisUrl');
+const REDIS_URL = testRedisUrl();
 
 /** Teto configurado para esta suíte: pequeno, para o 422 acontecer com poucas empresas. */
 const CEILING = 3;
