@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { EnsureActiveOdsUseCase } from '@modules/scoring/infra/usecases/ensure-active-ods.usecase.js';
 import { ListOdsScoreSummariesUseCase } from '@modules/scoring/infra/usecases/list-ods-score-summaries.usecase.js';
+import type { Environment } from '@shared/config/environment.config.js';
 import { UseCase } from '@shared/domain/protocols/use-case.protocol.js';
 import {
   ExportTooLargeException,
@@ -14,9 +16,6 @@ import {
   type WorkbookCompany,
   type WorkbookOdsScore,
 } from '../export/companies-workbook.builder.js';
-
-/** Máximo de empresas em uma exportação. */
-export const EXPORT_MAX_COMPANIES = 5_000;
 
 /** Tipo de conteúdo de um arquivo XLSX. */
 export const XLSX_CONTENT_TYPE =
@@ -44,7 +43,7 @@ export interface CompaniesExport {
  *
  * @throws {OdsNotAvailableException} quando o `ods` não é calculado pelo BIOS (422).
  * @throws {NoResultsToExportException} quando nenhuma empresa atende aos critérios.
- * @throws {ExportTooLargeException} quando passam de `EXPORT_MAX_COMPANIES`.
+ * @throws {ExportTooLargeException} quando passam do teto `EXPORT_MAX_COMPANIES` (padrão 5000).
  */
 @Injectable()
 export class ExportCompaniesUseCase extends UseCase<
@@ -55,6 +54,7 @@ export class ExportCompaniesUseCase extends UseCase<
     private readonly companyProfileRepository: CompanyProfileRepository,
     private readonly listScores: ListOdsScoreSummariesUseCase,
     private readonly ensureActiveOds: EnsureActiveOdsUseCase,
+    private readonly configService: ConfigService<Environment, true>,
   ) {
     super();
   }
@@ -64,14 +64,17 @@ export class ExportCompaniesUseCase extends UseCase<
   ): Promise<CompaniesExport> {
     if (query.ods !== undefined) await this.ensureActiveOds.execute(query.ods);
 
+    const max = this.configService.get('EXPORT_MAX_COMPANIES', {
+      infer: true,
+    });
     const { items, total } = await this.companyProfileRepository.search(
-      toSearchInput(query, { skip: 0, take: EXPORT_MAX_COMPANIES }),
+      toSearchInput(query, { skip: 0, take: max }),
     );
 
     if (total === 0) throw new NoResultsToExportException();
 
-    if (total > EXPORT_MAX_COMPANIES) {
-      throw new ExportTooLargeException(total, EXPORT_MAX_COMPANIES);
+    if (total > max) {
+      throw new ExportTooLargeException(total, max);
     }
 
     const { odsNumbers, summaries } = await this.listScores.execute(

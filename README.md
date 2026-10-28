@@ -1582,9 +1582,30 @@ ignorados, e o arquivo traz a lista inteira. A tradução dos critérios para o 
   abrir no Excel. O CNPJ, inclusive o alfanumérico e o com zeros à esquerda, também é texto.
 - **Sem resultado, sem arquivo.** Nenhuma empresa atende aos critérios: `404 NO_RESULTS_TO_EXPORT`
   (o UC09 exige ao menos um resultado), e não uma planilha vazia.
-- **Limite de 5000 empresas.** Acima disso, `422 EXPORT_TOO_LARGE` com `details = { total, max }`: o
-  arquivo é montado em memória, e a base são as empresas já consultadas; refinar os critérios resolve.
-  Recusa a exportar em vez de truncar em silêncio.
+- **Teto de empresas: `EXPORT_MAX_COMPANIES` (padrão 5000, de 1 a 20000; #336).** Acima dele,
+  `422 EXPORT_TOO_LARGE` com `details = { total, max }`: o arquivo é montado em memória, e a base são
+  as empresas já consultadas; refinar os critérios resolve. Recusa a exportar em vez de truncar em
+  silêncio. O teto vem da configuração (NFSE04, h), como os demais limites operacionais.
+- **Custo medido ponta a ponta (#336).** HTTP, banco (Mongo 8.3.11 local), leitura dos índices de todos
+  os ODS ativos e montagem da planilha, dados sintéticos, 2 ODS, melhor de 3 execuções:
+
+  | Empresas | Critério | Tempo | Arquivo | Memória (RSS / heap) |
+  | --- | --- | --- | --- | --- |
+  | 5 000 | `uf` | 565 ms | 0,25 MB | +28 / +27 MB |
+  | 5 000 | `ods=15&order=desc` | 778 ms | 0,24 MB | +42 / +32 MB |
+  | 20 000 | `uf` | 2,2 s | 1,00 MB | +83 / +111 MB |
+  | 20 000 | `ods=15&order=desc` | 3,1 s | 0,91 MB | +81 / +117 MB |
+
+  O padrão continua 5000 por prudência com a concorrência: o limite de 10 exportações por minuto
+  por IP permite dez exportações simultâneas, e dez de 20 000 empresas somariam mais de 1 GB de
+  heap, contra ~300 MB com 5 000. Quem eleva o teto deve dimensionar a memória da instância. Gravar
+  o arquivo em fluxo (`toStream`) em vez de montar o buffer só se justifica acima de 20 000, que
+  o teto máximo não permite; fica como alternativa registrada.
+- **A leitura dos índices é em blocos de 100 (#336).** A medição achou o custo fora da planilha: o
+  `in` de 5 000 CNPJs no Prisma levou 5,7 s para 10 000 linhas (a mesma consulta direta no MongoDB,
+  170 ms), o que fazia a exportação de 5 000 empresas levar 6,4 s (8,0 s com `ods` ordenado). Em
+  blocos de 100, lidos em paralelo (`SUMMARY_CHUNK_SIZE`), a leitura caiu para ~130 ms e a
+  exportação para os números da tabela. A planilha em si sempre foi barata (372 ms para 5 000 linhas).
 - **Resposta.** `Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`,
   `Content-Disposition: attachment; filename="empresas-bios-AAAA-MM-DD.xlsx"` e `Content-Length`. A
   planilha se chama `Empresas`, com o cabeçalho em negrito e fixo no topo, colunas com largura e

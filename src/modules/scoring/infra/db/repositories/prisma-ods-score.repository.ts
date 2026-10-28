@@ -11,6 +11,13 @@ import {
   type ScoreProfileLocation,
 } from '../../../domain/dtos/repositories/ods-score.repository.js';
 
+/**
+ * Quantas empresas entram em cada consulta de resumos. O mecanismo de consultas do Prisma
+ * custa mais que o linear com o tamanho do `in`: 5 000 CNPJs levaram 5,7 s para 10 000 linhas
+ * (a mesma consulta direta no MongoDB, 170 ms), e blocos de 100 levaram ~120 ms em conjunto (#336).
+ */
+export const SUMMARY_CHUNK_SIZE = 100;
+
 @Injectable()
 export class PrismaOdsScoreRepository
   extends PrismaRepository
@@ -83,15 +90,27 @@ export class PrismaOdsScoreRepository
   ): Promise<OdsScoreSummary[]> {
     if (cnpjs.length === 0) return [];
 
-    const rows = await this.prisma.companyOdsScore.findMany({
-      where: { cnpj: { in: [...cnpjs] } },
-      select: {
-        cnpj: true,
-        ods_number: true,
-        score_value: true,
-        confidence_value: true,
-      },
-    });
+    const chunks: string[][] = [];
+
+    for (let start = 0; start < cnpjs.length; start += SUMMARY_CHUNK_SIZE) {
+      chunks.push(cnpjs.slice(start, start + SUMMARY_CHUNK_SIZE));
+    }
+
+    const rows = (
+      await Promise.all(
+        chunks.map((chunk) =>
+          this.prisma.companyOdsScore.findMany({
+            where: { cnpj: { in: chunk } },
+            select: {
+              cnpj: true,
+              ods_number: true,
+              score_value: true,
+              confidence_value: true,
+            },
+          }),
+        ),
+      )
+    ).flat();
 
     return rows.map((row) => ({
       cnpj: row.cnpj,

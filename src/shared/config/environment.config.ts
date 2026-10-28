@@ -182,6 +182,16 @@ export const environmentSchema = z.object({
   THROTTLE_COMPANY_SEARCH_LIMIT: z.coerce.number().int().min(1).default(60),
   THROTTLE_COMPANY_EXPORT_LIMIT: z.coerce.number().int().min(1).default(10),
 
+  /* Exportação da lista em XLSX (UC09, RF15, NFSE04 h): máximo de empresas em um arquivo. A
+     planilha é montada em memória; o maior valor medido (20 000 linhas, 2 ODS) levou ~1,3 s
+     e ~1 MB de arquivo, e é por isso o teto aceito. */
+  EXPORT_MAX_COMPANIES: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(20_000)
+    .default(5_000),
+
   /* Sessões (RF32, NFSE05) — access token curto; refresh token renovado a cada rotação.
      O access token é assinado com HMAC-SHA256 (HS256) por este segredo de 32 bytes:
      trocá-lo invalida os access tokens em circulação (vivem 15 minutos), mas não as
