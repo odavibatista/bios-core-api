@@ -52,7 +52,8 @@ npm run start:dev           # API em http://localhost:3000
 | `typecheck` | Verificação de tipos sem emitir arquivos |
 | `test` / `test:watch` / `test:cov` | Testes unitários (com limite de cobertura de 75%) |
 | `test:e2e` | Testes ponta a ponta (pipeline HTTP, banco real e filas no Redis) |
-| `verify` | Typecheck, testes com cobertura e e2e (o mesmo que roda no pre-push) |
+| `verify` | Typecheck, testes com cobertura e e2e: a suíte completa, a mesma do CI |
+| `verify:push` | O que roda no pre-push: typecheck, ESLint do projeto inteiro e só os testes unitários afetados pelo diff contra `origin/develop` |
 | `prisma:generate` / `prisma:validate` / `prisma:format` | Operações sobre o schema Prisma |
 | `keys:generate` | Gera as chaves de criptografia do `.env` (`-- --version N` para rotacionar) |
 | `db:push` | Sincroniza coleções e índices do MongoDB com o schema |
@@ -2049,7 +2050,36 @@ Instalados automaticamente pelo `npm install` (script `prepare`).
 | --- | --- | --- |
 | `pre-commit` | ESLint (`--max-warnings=0`), Prettier e testes relacionados (`vitest related`); `prisma format --check` e `prisma validate` quando há `.prisma` no commit | Apenas arquivos em stage (`lint-staged.config.mjs`) |
 | `commit-msg` | Conventional Commits com escopo restrito aos módulos e áreas do projeto | Mensagem do commit (`commitlint.config.mjs`) |
-| `pre-push` | `npm run verify`: typecheck, testes com cobertura mínima de 75% e e2e | Todos os commits ainda não publicados; dispensado quando o push não altera código, schema ou configuração |
+| `pre-push` | `scripts/verify-push.mjs`: typecheck, ESLint do projeto inteiro e só os testes unitários afetados pelos arquivos enviados (`vitest related`) | Todos os commits ainda não publicados; dispensado quando o push não altera código, schema ou configuração |
+
+#### Pre-push rápido (#367)
+
+O pre-push rodava `npm run verify` (typecheck, todos os unitários com cobertura e todos os e2e) e
+passou a custar cerca de **11 minutos** por push (só o e2e, 593 s na rodada da #333). Agora roda o
+que é barato e decisivo antes de publicar, e deixa a suíte completa para o CI:
+
+| Etapa | Onde roda | O que garante |
+| --- | --- | --- |
+| `pre-commit` | cada commit | ESLint, Prettier e testes afetados pelos arquivos em stage (NFSE09) |
+| `pre-push` | cada push com código | typecheck, **ESLint do projeto inteiro** e testes unitários afetados pelos arquivos de todos os commits enviados |
+| CI | toda PR e todo push para `develop`, `pre-prod` e `main` | lint, Prettier, typecheck, **todos** os unitários com cobertura mínima de 75% (NFPD03) e **todos** os e2e; é o check exigido pela proteção de branches (NFSE11) |
+
+- **Quais testes rodam.** `vitest related` segue o grafo de imports a partir dos arquivos enviados.
+  Mudança em `package.json`, `package-lock.json`, `tsconfig*.json`, configuração do Vitest ou
+  schema Prisma roda a suíte inteira de unitários (`forceRerunTriggers` em `vitest.config.ts`: o
+  grafo não enxerga esses arquivos). Sem base para comparar ou com mais de 200 arquivos, também
+  roda tudo, nunca nada.
+- **Por que os e2e saem do push.** Cada arquivo e2e sobe o `AppModule` inteiro; pelo grafo de
+  imports, qualquer mudança em `src` afeta todos eles, e um filtro por diff selecionaria a suíte
+  inteira de qualquer forma. Eles rodam no CI, e `npm run verify` os roda localmente.
+- **O lint entrou no push.** O pre-push antigo não rodava o ESLint, e o erro de tipos inseguros de
+  um e2e da #333 só apareceu no CI. O lint-staged do commit corrige o que pode, mas não substitui
+  o lint completo.
+- **Tempo medido** (Windows, mesma máquina): um arquivo de código alterado, **82 s** (typecheck,
+  ESLint e 2 arquivos de teste); schema Prisma, `tsconfig` ou mais de 200 arquivos, 113 a 116 s
+  (suíte inteira de unitários); nada de código, 54 s. Antes, ~11 min em qualquer caso.
+- **Uso manual.** `npm run verify:push` compara a branch com `origin/develop` (base comum), somando
+  o que ainda não foi commitado.
 
 ### CI (GitHub Actions)
 

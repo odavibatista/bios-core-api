@@ -28,6 +28,7 @@
     "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
     "test:contract": "vitest run --config ./vitest.config.contract.ts",
     "verify": "npm run typecheck && npm run test:cov && npm run test:e2e",
+    "verify:push": "node scripts/verify-push.mjs",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
     "prisma:format": "prisma format",
