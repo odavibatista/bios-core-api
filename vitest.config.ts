@@ -41,6 +41,17 @@ export default defineConfig({
     // Semente do Faker por arquivo, exibida quando um teste falha.
     setupFiles: ['test/setup/faker.setup.ts'],
     include: ['src/**/*.spec.ts'],
+    // Arquivos cuja mudança roda a suíte inteira, mesmo quando só os testes afetados são
+    // pedidos (`vitest related`, no pre-push): o grafo de imports não os enxerga. Os três
+    // primeiros são o padrão do Vitest, que esta lista substitui.
+    forceRerunTriggers: [
+      '**/package.json/**',
+      '**/vitest.config.*/**',
+      '**/vite.config.*/**',
+      '**/package-lock.json',
+      '**/tsconfig*.json',
+      '**/*.prisma',
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'json-summary', 'lcov'],
