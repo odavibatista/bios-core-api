@@ -311,6 +311,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
             'previous_content_hash',
             'refreshed_at',
             'registration_status',
+            'registration_status_unrecognized',
             'secondary_cnaes',
             'trade_name',
             'updated_at',

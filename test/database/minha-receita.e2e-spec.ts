@@ -113,6 +113,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
           legalName: 'ACME SERVICOS LTDA',
           tradeName: 'ACME',
           registrationStatus: 'ATIVA',
+          registrationStatusUnrecognized: null,
           companySize: 'DEMAIS',
           address: {
             street: 'AVENIDA PAULISTA',
