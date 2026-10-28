@@ -1430,6 +1430,13 @@ e não em `companies`, porque o módulo de empresas não depende da orquestraç�
   por 5 minutos (`ENVIRONMENTAL_PROFILE_CACHE_TTL_SECONDS`), e só juntas e com todos os ODS
   calculados; o recálculo do índice as apaga (`OdsScoringProcessor`). Com as duas em cache, a
   consulta não coleta nem recalcula. O cadastro segue no namespace `company-profile`.
+- **Mesmo retrato da rota de evidências (#334).** O retrato `company-evidences` mora na
+  consolidação (`GetCompanyEnvironmentalEvidencesUseCase`), que as duas rotas usam: com ele em
+  cache, `GET /companies/:cnpj/evidences` responde sem coletar nem recalcular, e o perfil e a rota
+  mostram as mesmas evidências até o próximo recálculo. A rota de evidências também grava o
+  retrato, mas só depois de esperar o recálculo terminar (`CALCULATED`), para o índice já refletir
+  o que foi guardado; recálculo fora do prazo, ou consulta sem espera (API pública), não grava. A
+  rota continua existindo: entrega as evidências com proveniência sem compor índice nem cadastro.
 - **Limite.** A rota do painel tem limite próprio por IP, padrão de 60 consultas por minuto
   (`THROTTLE_COMPANY_PROFILE_LIMIT`, #335): consolidar pode disparar coletas externas, mas a chamada
   em cache é barata. A pública conta por chave (NFSE04).
