@@ -23,8 +23,9 @@ import { createTestAccount } from '../support/test-account.js';
 import { resetCache } from '../support/cache.js';
 import { dereference } from '../support/openapi.js';
 import { resetThrottleCounters } from '../support/throttle.js';
+import { testRedisUrl } from '../support/infrastructure.js';
 
-const redisUrl = inject('testRedisUrl');
+const redisUrl = testRedisUrl();
 describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
   'RF09: referências pela rota autenticada com Mongo/Redis reais',
   () => {

@@ -1898,21 +1898,71 @@ Os testes desses arquivos continuam sendo executados; eles só não entram no c�
 A infraestrutura de teste é montada e desmontada pelo setup global
 (`test/setup/infrastructure.global-setup.ts`) a cada execução de `npm run test:e2e`:
 
-1. sincroniza coleções e índices com o schema Prisma (`prisma db push`);
-2. limpa o banco de teste do Redis (`FLUSHDB`), para que jobs de uma execução anterior não
+1. sincroniza coleções e índices de cada banco de worker com o schema Prisma (`prisma db push`,
+   em paralelo);
+2. limpa o banco de cada worker no Redis (`FLUSHDB`), para que jobs de uma execução anterior não
    interfiram na seguinte;
-3. disponibiliza a infraestrutura às suítes, que preparam o banco com `PrismaService.reset()`
+3. cria vazia a pasta temporária de cada worker;
+4. disponibiliza a infraestrutura às suítes, que preparam o banco com `PrismaService.reset()`
    e `PrismaService.seed(seeders)`;
-4. remove o banco inteiro ao final (`dropDatabase`).
+5. remove os bancos (`dropDatabase`) e as pastas ao final.
 
-Os endereços padrão são `bios_test` no MongoDB e o banco `1` no Redis do
-`docker-compose.yml`; outros podem ser informados em `E2E_DATABASE_URL` e `E2E_REDIS_URL`.
-Cada um tem garantias de descarte: `seed` e `reset` só executam com `NODE_ENV=test` **e** em
-banco com sufixo `_test` (fora disso lançam `UnsafeDatabaseOperationException`); no Redis, o
-setup recusa o banco `0`, que é o de uso geral, e recusa limpar um banco que contenha chave
-fora dos prefixos do projeto (`bios:`, `bull:`) — o que protege de outro Redis ocupando a
-porta 6379 na mesma máquina. As suítes de `test/database/` rodam em série, pois compartilham
-o banco.
+Os endereços base são `bios_test` no MongoDB e o banco `1` no Redis do `docker-compose.yml`;
+outros podem ser informados em `E2E_DATABASE_URL` e `E2E_REDIS_URL`. Cada um tem garantias de
+descarte: `seed` e `reset` só executam com `NODE_ENV=test` **e** em banco com sufixo `_test`
+(fora disso lançam `UnsafeDatabaseOperationException`); no Redis, o setup recusa o banco `0`,
+que é o de uso geral, e recusa limpar um banco que contenha chave fora dos prefixos do projeto
+(`bios:`, `bull:`) — o que protege de outro Redis ocupando a porta 6379 na mesma máquina.
+
+#### E2E em paralelo (#368)
+
+Os arquivos e2e rodam em paralelo, e cada worker do Vitest tem a própria infraestrutura. Dentro
+de um worker os arquivos continuam um de cada vez, então cada arquivo segue sozinho no seu banco
+e na sua fila, como na execução em série:
+
+| Recurso | Worker 1 | Worker 2 | Worker *n* |
+| --- | --- | --- | --- |
+| MongoDB | `bios_w1_test` | `bios_w2_test` | `bios_w<n>_test` (o sufixo `_test` continua no fim) |
+| Redis | banco `1` | banco `2` | índice da `E2E_REDIS_URL` + *n* − 1, até o `15` |
+| Pasta temporária | `<tmp>/bios-e2e/w1` | `<tmp>/bios-e2e/w2` | `<tmp>/bios-e2e/w<n>` |
+
+- **Número de workers:** `E2E_WORKERS` (padrão 4, limitado aos núcleos da máquina; o CI fixa 4,
+  um por vCPU do runner). `E2E_WORKERS=1` volta à execução em série.
+- **Como as suítes chegam à infraestrutura do worker:**
+  - `test/setup/worker-infrastructure.setup.ts` aponta `DATABASE_URL`, `REDIS_URL` e
+    `TMPDIR`/`TEMP`/`TMP` do processo para os recursos do worker antes de cada arquivo;
+  - as suítes que montam a configuração à mão usam `testDatabaseUrl()`, `testRedisUrl()` e
+    `testDatabaseName()` (`test/support/infrastructure.ts`), e não um `inject` comum a todos os
+    workers;
+  - `buildTestEnvironment()` já devolve o banco e o Redis do worker;
+  - o `env` de `vitest.config.e2e.ts` traz endereços inexistentes (`*.invalid`) para banco e
+    Redis: se o setup do worker não os trocar, a aplicação falha ao conectar, em vez de ler o
+    `.env` de desenvolvimento ou dividir os recursos de outro worker.
+- **Isolamento testado:** `test/integration/worker-infrastructure.e2e-spec.ts` confere que o
+  processo, o `os.tmpdir()` e o `buildTestEnvironment()` apontam para os recursos do próprio
+  worker, que eles são distintos entre workers, e as regras de nome e de `E2E_WORKERS`.
+- **Estado global, revisado:**
+  - filas e agendamentos do BullMQ, cache e contadores do throttler ficam no Redis, então cada
+    worker tem os seus;
+  - os servidores falsos das fontes e o próprio app ouvem em porta livre (`listen(0)`);
+  - as suítes que conferem se um adapter apagou a pasta temporária leem a pasta do próprio
+    worker, sem ver as de outro.
+- **Tempo medido** (Windows, 12 núcleos lógicos; 58 arquivos e 915 testes, mais a suíte de
+  isolamento nas duas últimas rodadas, com 59 e 928; todos passando em todas as rodadas):
+
+  | Execução | Tempo |
+  | --- | --- |
+  | Em série (antes) | 642 s |
+  | 2 workers | 314 s |
+  | **4 workers (padrão)** | **187 a 206 s** (cinco rodadas) |
+  | 6 workers | 197 s |
+  | 8 workers | 211 s |
+
+  Acima de 4 workers o ganho para porque o piso é um arquivo só:
+  `company-search-equivalence.e2e-spec.ts` leva ~175 s sozinho (os demais, no máximo 29 s), e
+  os outros 57 arquivos cabem nos workers restantes enquanto ele roda. Mais workers só aumentam
+  a disputa de CPU na importação do `AppModule`. Reduzir abaixo disso exige dividir aquele
+  arquivo.
 
 **Aviso de vazamento de ouvintes (#259).** O Node emite `MaxListenersExceededWarning` quando mais de 10
 ouvintes se acumulam num emissor. Nos e2e vinha de requisições simultâneas via supertest (`Promise.all`
@@ -2048,7 +2098,7 @@ Instalados automaticamente pelo `npm install` (script `prepare`).
 
 | Hook | Verificação | Escopo |
 | --- | --- | --- |
-| `pre-commit` | ESLint (`--max-warnings=0`), Prettier e testes relacionados (`vitest related`); `prisma format --check` e `prisma validate` quando há `.prisma` no commit | Apenas arquivos em stage (`lint-staged.config.mjs`) |
+| `pre-commit` | ESLint (`--max-warnings=0`), Prettier e testes relacionados (`vitest related`); `prisma format --check` e `prisma validate` quando há `.prisma` no commit | Apenas arquivos em stage (`lint-staged.config.mjs`), em lotes de até 6000 caracteres: o limite padrão do Windows (8191) não conta as aspas dos caminhos com espaço, e um commit com dezenas de arquivos estourava a linha de comando |
 | `commit-msg` | Conventional Commits com escopo restrito aos módulos e áreas do projeto | Mensagem do commit (`commitlint.config.mjs`) |
 | `pre-push` | `scripts/verify-push.mjs`: typecheck, ESLint do projeto inteiro e só os testes unitários afetados pelos arquivos enviados (`vitest related`) | Todos os commits ainda não publicados; dispensado quando o push não altera código, schema ou configuração |
 

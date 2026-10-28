@@ -32,8 +32,9 @@ import {
 import { createDatabaseTestingApp } from '../support/database-testing-app.js';
 import { resetSourceRateLimits } from '../support/source-rate-limit.js';
 import { buildZip } from '../support/zip.js';
+import { testRedisUrl } from '../support/infrastructure.js';
 
-const REDIS_URL = inject('testRedisUrl');
+const REDIS_URL = testRedisUrl();
 const context = { trigger: RequestTrigger.SCHEDULED_JOB };
 const AUTO_PATH = `/${IBAMA_RESOURCES.AUTO_INFRACAO.segments.join('/')}`;
 const EMBARGO_PATH = `/${IBAMA_RESOURCES.TERMO_EMBARGO.segments.join('/')}`;

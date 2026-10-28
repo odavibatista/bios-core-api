@@ -20,8 +20,9 @@ import { mailDispatchRequestFactory } from '../factories/mailing/email-dispatch.
 import { buildTokenContext } from '../factories/mailing/email-template.factory.js';
 import { buildTestEnvironment } from '../support/environment.js';
 import { faker } from '../support/faker.js';
+import { testRedisUrl } from '../support/infrastructure.js';
 
-const REDIS_URL = inject('testRedisUrl');
+const REDIS_URL = testRedisUrl();
 
 /**
  * Transporte dublê no lugar do SMTP: registra o que foi "enviado" e permite

@@ -16,8 +16,9 @@ import { resetCache } from '../support/cache.js';
 import { faker } from '../support/faker.js';
 import { createTestAccount } from '../support/test-account.js';
 import { resetThrottleCounters } from '../support/throttle.js';
+import { testRedisUrl } from '../support/infrastructure.js';
 
-const REDIS_URL = inject('testRedisUrl');
+const REDIS_URL = testRedisUrl();
 
 /** Registro do que o "serviço de ingestão" simulado recebeu e como responde. */
 interface IngestionStub {

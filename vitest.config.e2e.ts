@@ -1,19 +1,26 @@
 import { defineConfig } from 'vitest/config';
+import { e2eWorkersInfrastructure } from './test/setup/e2e-workers.js';
 
 /**
- * Banco descartável dos testes e2e. O sufixo `_test` é obrigatório: o setup
- * global e o `PrismaService` recusam preparar ou apagar qualquer outro banco.
+ * Infraestrutura descartável de cada worker (#368): os arquivos rodam em paralelo,
+ * e cada worker tem banco MongoDB, banco Redis e pasta temporária próprios.
+ *
+ *  - E2E_DATABASE_URL: base dos nomes dos bancos (`bios_test` → `bios_w1_test`,
+ *    `bios_w2_test`…). O sufixo `_test` é obrigatório: o setup global e o
+ *    `PrismaService` recusam preparar ou apagar qualquer outro banco.
+ *  - E2E_REDIS_URL: índice do primeiro worker; os seguintes usam os próximos.
+ *    O índice 0 é recusado: o setup global limpa o banco inteiro, e o 0 é o de
+ *    uso geral.
+ *  - E2E_WORKERS: número de workers (padrão: 4, limitado aos núcleos da máquina;
+ *    1 volta à execução em série).
  */
-const TEST_DATABASE_URL =
-  process.env.E2E_DATABASE_URL ??
-  'mongodb://localhost:27017/bios_test?directConnection=true';
-
-/**
- * Redis descartável dos testes e2e. O índice do banco é obrigatório e diferente
- * de 0: o setup global limpa o banco inteiro e recusa fazê-lo no banco de uso
- * geral.
- */
-const TEST_REDIS_URL = process.env.E2E_REDIS_URL ?? 'redis://localhost:6379/1';
+const INFRASTRUCTURE = e2eWorkersInfrastructure({
+  workers: process.env.E2E_WORKERS,
+  databaseUrl:
+    process.env.E2E_DATABASE_URL ??
+    'mongodb://localhost:27017/bios_test?directConnection=true',
+  redisUrl: process.env.E2E_REDIS_URL ?? 'redis://localhost:6379/1',
+});
 
 /**
  * Configuração dos testes e2e (HTTP ponta a ponta sobre o AppModule).
@@ -40,20 +47,29 @@ export default defineConfig({
       'test/setup/faker.setup.ts',
       // Reprova o arquivo que emitir MaxListenersExceededWarning (#259).
       'test/setup/listener-leak.setup.ts',
+      // DATABASE_URL, REDIS_URL e pasta temporária do worker (#368).
+      'test/setup/worker-infrastructure.setup.ts',
     ],
-    // As suítes compartilham o mesmo banco: execução em série.
-    fileParallelism: false,
+    // Um arquivo por worker de cada vez; arquivos em workers diferentes não dividem banco,
+    // fila nem pasta temporária.
+    maxWorkers: INFRASTRUCTURE.workers,
+    fileParallelism: INFRASTRUCTURE.workers > 1,
     testTimeout: 15_000,
     hookTimeout: 30_000,
     provide: {
-      testDatabaseUrl: TEST_DATABASE_URL,
-      testRedisUrl: TEST_REDIS_URL,
+      testDatabaseUrls: INFRASTRUCTURE.databaseUrls,
+      testRedisUrls: INFRASTRUCTURE.redisUrls,
+      testTemporaryDirectories: INFRASTRUCTURE.temporaryDirectories,
     },
     env: {
       NODE_ENV: 'test',
       CGU_API_KEY: 'token-exclusivo-dos-testes-locais',
-      DATABASE_URL: TEST_DATABASE_URL,
-      REDIS_URL: TEST_REDIS_URL,
+      // O setup do worker troca pelos dele. Se não trocar, a aplicação falha ao conectar,
+      // em vez de ler os endereços de desenvolvimento do `.env` ou de dividir os de um
+      // worker com os outros.
+      DATABASE_URL:
+        'mongodb://worker-sem-infraestrutura.invalid:27017/bios_unassigned_test',
+      REDIS_URL: 'redis://worker-sem-infraestrutura.invalid:6379/1',
       DATA_RETENTION_SYNC_ON_BOOT: 'false',
       // Sem agendamento no boot: as suítes registram o que precisam testar.
       QUEUE_SCHEDULES_SYNC_ON_BOOT: 'false',

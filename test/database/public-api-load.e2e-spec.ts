@@ -12,8 +12,9 @@ import { buildDistinctCnpjs } from '../support/cnpj.js';
 import { createDatabaseTestingApp } from '../support/database-testing-app.js';
 import { createTestAccount } from '../support/test-account.js';
 import { resetThrottleCounters } from '../support/throttle.js';
+import { testRedisUrl } from '../support/infrastructure.js';
 
-const REDIS_URL = inject('testRedisUrl');
+const REDIS_URL = testRedisUrl();
 
 /** Quantos CNPJs distintos a rajada do integrador consulta. */
 const BURST = 8;

@@ -11,8 +11,9 @@ import {
   type TestAccount,
 } from '../support/test-account.js';
 import { resetThrottleCounters } from '../support/throttle.js';
+import { testDatabaseName, testRedisUrl } from '../support/infrastructure.js';
 
-const REDIS_URL = inject('testRedisUrl');
+const REDIS_URL = testRedisUrl();
 const collections = [
   'users',
   'user_sessions',
@@ -35,7 +36,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
     const run = (...argv: string[]) =>
       runPromoteAccount(argv, {
         client: prisma,
-        databaseName: 'bios_test',
+        databaseName: testDatabaseName(),
         blindIndex: (value) => encryption.blindIndex(value),
         write: (line) => lines.push(line),
       });

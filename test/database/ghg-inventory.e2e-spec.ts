@@ -39,7 +39,8 @@ import { faker } from '../support/faker.js';
 import { createDatabaseTestingApp } from '../support/database-testing-app.js';
 import { resetCache } from '../support/cache.js';
 import { resetSourceRateLimits } from '../support/source-rate-limit.js';
-const redisUrl = inject('testRedisUrl');
+import { testRedisUrl } from '../support/infrastructure.js';
+const redisUrl = testRedisUrl();
 describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
   'GHG com fila, HTTP, PDF, Mongo e Redis reais',
   () => {

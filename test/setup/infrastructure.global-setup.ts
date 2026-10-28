@@ -1,4 +1,7 @@
-import { execSync } from 'node:child_process';
+import { exec } from 'node:child_process';
+import { mkdir, rm, rmdir } from 'node:fs/promises';
+import { dirname } from 'node:path';
+import { promisify } from 'node:util';
 import { PrismaClient } from '@prisma/client';
 import { Redis } from 'ioredis';
 import type { TestProject } from 'vitest/node';
@@ -7,17 +10,22 @@ import {
   DISPOSABLE_DATABASE_SUFFIX,
   isDisposableDatabase,
 } from '../../src/shared/infra/database/database-name.js';
+import { redisDatabaseOf } from './e2e-workers.js';
 
 const PING_TIMEOUT_MS = 3_000;
 
+const execAsync = promisify(exec);
+
 /**
  * Prepara a infraestrutura dos testes e2e antes de todas as suítes e a desmonta
- * ao final.
+ * ao final. Cada worker tem a sua (#368; ver `e2e-workers.ts`), e todas são
+ * preparadas aqui:
  *
- *  - MongoDB: sincroniza coleções e índices com o schema Prisma (`db push`) e
- *    remove o banco inteiro (`dropDatabase`) na desmontagem.
- *  - Redis: limpa o banco de teste (`FLUSHDB`), para que jobs de uma execução
- *    anterior não interfiram na seguinte.
+ *  - MongoDB: sincroniza coleções e índices de cada banco com o schema Prisma
+ *    (`db push`, em paralelo) e remove os bancos (`dropDatabase`) na desmontagem.
+ *  - Redis: limpa o banco de cada worker (`FLUSHDB`), para que jobs de uma
+ *    execução anterior não interfiram na seguinte.
+ *  - Pastas temporárias: criadas vazias e removidas na desmontagem.
  *
  * Sem infraestrutura acessível: no CI a execução falha; localmente as suítes
  * que dependem de banco ou de fila são ignoradas com aviso, e as demais seguem
@@ -25,49 +33,67 @@ const PING_TIMEOUT_MS = 3_000;
  */
 export default async function setupTestInfrastructure(
   project: TestProject,
-): Promise<(() => Promise<void>) | undefined> {
-  const { testDatabaseUrl, testRedisUrl } = project.getProvidedContext();
+): Promise<() => Promise<void>> {
+  const { testDatabaseUrls, testRedisUrls, testTemporaryDirectories } =
+    project.getProvidedContext();
 
-  await prepareRedis(project, testRedisUrl);
+  await prepareRedis(project, testRedisUrls);
+  await prepareTemporaryDirectories(testTemporaryDirectories);
+  const dropDatabases = await prepareDatabases(project, testDatabaseUrls);
 
-  return prepareDatabase(project, testDatabaseUrl);
+  return async () => {
+    await removeTemporaryDirectories(testTemporaryDirectories);
+    // A pasta que agrupa as dos workers; continua se outra execução ainda a usa.
+    await rmdir(dirname(testTemporaryDirectories[0])).catch(() => undefined);
+    await dropDatabases?.();
+  };
 }
 
-async function prepareDatabase(
+async function prepareDatabases(
   project: TestProject,
-  url: string,
+  urls: string[],
 ): Promise<(() => Promise<void>) | undefined> {
-  const databaseName = databaseNameOf(url);
+  for (const url of urls) {
+    const databaseName = databaseNameOf(url);
 
-  if (!isDisposableDatabase(databaseName)) {
-    throw new Error(
-      `Banco de teste "${databaseName}" sem o sufixo "${DISPOSABLE_DATABASE_SUFFIX}": ` +
-        'execução abortada para não apagar dados reais.',
-    );
+    if (!isDisposableDatabase(databaseName)) {
+      throw new Error(
+        `Banco de teste "${databaseName}" sem o sufixo "${DISPOSABLE_DATABASE_SUFFIX}": ` +
+          'execução abortada para não apagar dados reais.',
+      );
+    }
   }
 
-  const client = new PrismaClient({ datasourceUrl: url });
+  const clients = urls.map((url) => new PrismaClient({ datasourceUrl: url }));
+  const disconnect = () =>
+    Promise.all(clients.map((client) => client.$disconnect()));
 
-  if (!(await isDatabaseReachable(client))) {
-    await client.$disconnect();
+  // Os bancos estão no mesmo servidor: um ping responde por todos.
+  if (!(await isDatabaseReachable(clients[0]))) {
+    await disconnect();
     warn(
       project,
       'databaseAvailable',
-      `MongoDB de teste indisponível em ${new URL(url).host}.`,
+      `MongoDB de teste indisponível em ${new URL(urls[0]).host}.`,
       'banco',
     );
     return undefined;
   }
 
-  execSync('npx prisma db push --skip-generate --accept-data-loss', {
-    env: { ...process.env, DATABASE_URL: url },
-    stdio: 'pipe',
-  });
+  await Promise.all(
+    urls.map((url) =>
+      execAsync('npx prisma db push --skip-generate --accept-data-loss', {
+        env: { ...process.env, DATABASE_URL: url },
+      }),
+    ),
+  );
   project.provide('databaseAvailable', true);
 
   return async () => {
-    await client.$runCommandRaw({ dropDatabase: 1 });
-    await client.$disconnect();
+    await Promise.all(
+      clients.map((client) => client.$runCommandRaw({ dropDatabase: 1 })),
+    );
+    await disconnect();
   };
 }
 
@@ -75,14 +101,37 @@ async function prepareDatabase(
  * O índice do banco Redis é a garantia de descarte: o banco 0 é o de uso geral
  * (desenvolvimento), e limpá-lo apagaria filas reais.
  */
-async function prepareRedis(project: TestProject, url: string): Promise<void> {
-  if (databaseIndexOf(url) === 0) {
-    throw new Error(
-      `Redis de teste "${url}" aponta para o banco 0: execução abortada para ` +
-        'não apagar filas reais. Use outro índice (ex.: redis://localhost:6379/1).',
-    );
+async function prepareRedis(
+  project: TestProject,
+  urls: string[],
+): Promise<void> {
+  for (const url of urls) {
+    if (redisDatabaseOf(url) === 0) {
+      throw new Error(
+        `Redis de teste "${url}" aponta para o banco 0: execução abortada para ` +
+          'não apagar filas reais. Use outro índice (ex.: redis://localhost:6379/1).',
+      );
+    }
   }
 
+  for (const url of urls) {
+    if (!(await flushOwnDatabase(url))) {
+      // Os bancos estão no mesmo servidor: se um não responde, nenhum responde.
+      warn(
+        project,
+        'redisAvailable',
+        `Redis de teste indisponível em ${new URL(url).host}.`,
+        'fila',
+      );
+      return;
+    }
+  }
+
+  project.provide('redisAvailable', true);
+}
+
+/** Limpa o banco Redis; `false` quando o servidor não responde. */
+async function flushOwnDatabase(url: string): Promise<boolean> {
   const client = new Redis(url, {
     lazyConnect: true,
     maxRetriesPerRequest: 1,
@@ -98,20 +147,31 @@ async function prepareRedis(project: TestProject, url: string): Promise<void> {
     connected = true;
     await assertOwnDatabase(client, url);
     await client.flushdb();
-    project.provide('redisAvailable', true);
+    return true;
   } catch (error) {
     // Conectou e recusou: é problema de configuração, não de indisponibilidade.
     if (connected) throw error;
 
-    warn(
-      project,
-      'redisAvailable',
-      `Redis de teste indisponível em ${new URL(url).host}.`,
-      'fila',
-    );
+    return false;
   } finally {
     client.disconnect();
   }
+}
+
+/** Começa vazia: o que sobrou de uma execução interrompida não conta como resíduo. */
+async function prepareTemporaryDirectories(directories: string[]) {
+  await removeTemporaryDirectories(directories);
+  await Promise.all(
+    directories.map((directory) => mkdir(directory, { recursive: true })),
+  );
+}
+
+async function removeTemporaryDirectories(directories: string[]) {
+  await Promise.all(
+    directories.map((directory) =>
+      rm(directory, { recursive: true, force: true }),
+    ),
+  );
 }
 
 /** Prefixos das chaves gravadas pelo BIOS: cache próprio e filas do BullMQ. */
@@ -137,11 +197,6 @@ async function assertOwnDatabase(client: Redis, url: string): Promise<void> {
         'aponte E2E_REDIS_URL para um banco exclusivo.',
     );
   }
-}
-
-/** Índice do banco Redis na URL (`redis://host:porta/índice`); 0 quando omitido. */
-function databaseIndexOf(url: string): number {
-  return Number(new URL(url).pathname.replace('/', '') || 0);
 }
 
 function warn(

@@ -14,8 +14,9 @@ import { QueueModule } from '@shared/infra/modules/queue.module.js';
 import { inject } from 'vitest';
 import { buildTestEnvironment } from '../support/environment.js';
 import { faker } from '../support/faker.js';
+import { testRedisUrl } from '../support/infrastructure.js';
 
-const REDIS_URL = inject('testRedisUrl');
+const REDIS_URL = testRedisUrl();
 
 /**
  * Tokens de uso único contra o banco real: a invalidação do link anterior e o
