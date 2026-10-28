@@ -55,6 +55,26 @@ export function parseCnpj(text: string): string | null {
   return cnpj.endsWith(`${first}${second}`) ? cnpj : null;
 }
 
+/**
+ * CNPJ válido a partir das 12 primeiras posições (raiz e ordem): calcula e acrescenta os
+ * dois dígitos verificadores.
+ *
+ * Serve aos dados sintéticos dos endpoints isca (RF21): um CNPJ inventado, mas que passa em
+ * qualquer validação, como um real passaria.
+ *
+ * @throws {Error} se a base não tiver 12 posições alfanuméricas maiúsculas.
+ */
+export function cnpjWithCheckDigits(base: string): string {
+  if (!/^[0-9A-Z]{12}$/.test(base)) {
+    throw new Error('A base do CNPJ tem 12 posições alfanuméricas.');
+  }
+
+  const first = checkDigit(base, FIRST_CHECK_WEIGHTS);
+  const second = checkDigit(`${base}${first}`, SECOND_CHECK_WEIGHTS);
+
+  return `${base}${first}${second}`;
+}
+
 /** CNPJ canônico com a máscara de exibição (`11.222.333/0001-81`). */
 export function formatCnpj(cnpj: string): string {
   return cnpj.replace(/^(.{2})(.{3})(.{3})(.{4})(\d{2})$/, '$1.$2.$3/$4-$5');

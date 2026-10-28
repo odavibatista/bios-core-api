@@ -1,5 +1,30 @@
 import { faker } from '@test/support/faker.js';
-import { formatCnpj, parseCnpj } from './cnpj.js';
+import { cnpjWithCheckDigits, formatCnpj, parseCnpj } from './cnpj.js';
+
+describe('cnpjWithCheckDigits (dados sintéticos, RF21)', () => {
+  it.each([
+    ['112223330001', '11222333000181'],
+    ['330001670001', '33000167000101'],
+    ['12ABC34501DE', '12ABC34501DE35'],
+  ])('completa %s com os dígitos verificadores: %s', (base, expected) => {
+    expect(cnpjWithCheckDigits(base)).toBe(expected);
+  });
+
+  it('todo CNPJ gerado passa na validação', () => {
+    for (let index = 0; index < 50; index += 1) {
+      const cnpj = cnpjWithCheckDigits(`${faker.string.numeric(8)}0001`);
+
+      expect(parseCnpj(cnpj)).toBe(cnpj);
+    }
+  });
+
+  it.each(['11222333000', '1122233300011', '11222333000a', ''])(
+    'recusa a base %j, que não tem 12 posições alfanuméricas maiúsculas',
+    (base) => {
+      expect(() => cnpjWithCheckDigits(base)).toThrow(/12 posições/);
+    },
+  );
+});
 
 /** CNPJs numéricos reais, de domínio público. */
 const VALID_NUMERIC = [

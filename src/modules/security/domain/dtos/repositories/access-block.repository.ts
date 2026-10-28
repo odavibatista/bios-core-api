@@ -56,4 +56,10 @@ export abstract class AccessBlockRepository {
   abstract findLastLoginBlockStart(
     target: AccessBlockTarget,
   ): Promise<Date | null>;
+
+  /**
+   * IPs com bloqueio sem prazo (honeypot, RF21), sem repetição: os que são recusados em
+   * qualquer rota.
+   */
+  abstract findPermanentlyBlockedIps(): Promise<string[]>;
 }
