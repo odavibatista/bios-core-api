@@ -140,9 +140,12 @@ jobs:
 
       # O teste do documento OpenAPI grava o documento neste caminho; ele sai como artefato
       # logo abaixo, para o front gerar o cliente sem subir a API.
+      # Os arquivos rodam em paralelo, um banco MongoDB e um banco Redis por worker (#368);
+      # 4 workers, um por vCPU do runner.
       - name: Testes e2e (pipeline HTTP e banco real)
         run: npm run test:e2e
         env:
+          E2E_WORKERS: '4'
           OPENAPI_EXPORT_PATH: openapi/openapi.json
 
       - name: Resumo de cobertura

@@ -3,8 +3,9 @@ import { Redis } from 'ioredis';
 import { inject } from 'vitest';
 import { faker } from '../support/faker.js';
 import { resetSourceRateLimits } from '../support/source-rate-limit.js';
+import { testRedisUrl } from '../support/infrastructure.js';
 
-const REDIS_URL = inject('testRedisUrl');
+const REDIS_URL = testRedisUrl();
 
 /**
  * Limite de requisições às fontes contra Redis real (NFPD01): o teto vale por

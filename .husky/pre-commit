@@ -13,4 +13,8 @@ fi
 
 # Demais arquivos em stage (ver lint-staged.config.mjs). Lotes em série: o lint
 # type-aware em paralelo esgota memória em commits grandes.
-npx --no -- lint-staged --concurrent false
+#
+# Lotes de até 6000 caracteres: o padrão no Windows (8191, o limite do cmd.exe) não
+# conta as aspas de cada caminho com espaço nem o que o `eslint.cmd` acrescenta ao
+# repassar a linha, e um commit com dezenas de arquivos estoura o limite.
+npx --no -- lint-staged --concurrent false --max-arg-length 6000

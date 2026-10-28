@@ -9,8 +9,9 @@ import { inject } from 'vitest';
 import { ibgeCnaeSubclassFactory } from '../factories/data-sources/ibge-cnae.factory.js';
 import { createDatabaseTestingApp } from '../support/database-testing-app.js';
 import { resetSourceRateLimits } from '../support/source-rate-limit.js';
+import { testRedisUrl } from '../support/infrastructure.js';
 
-const REDIS_URL = inject('testRedisUrl');
+const REDIS_URL = testRedisUrl();
 const CODE = '6201501';
 const context = { trigger: RequestTrigger.ON_DEMAND_JOB };
 

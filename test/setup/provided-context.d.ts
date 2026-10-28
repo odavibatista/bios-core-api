@@ -1,15 +1,20 @@
 import 'vitest';
 
 declare module 'vitest' {
-  /** Valores compartilhados entre o setup global e as suítes e2e (`inject`). */
+  /**
+   * Valores compartilhados entre o setup global e as suítes e2e (`inject`). As listas têm
+   * um item por worker; as suítes usam os helpers de `test/support/infrastructure.ts`.
+   */
   export interface ProvidedContext {
-    /** Connection string do banco descartável dos testes e2e. */
-    testDatabaseUrl: string;
+    /** Connection strings dos bancos descartáveis, uma por worker. */
+    testDatabaseUrls: string[];
     /** Indica se o banco de teste está acessível; suítes com banco são ignoradas quando falso. */
     databaseAvailable: boolean;
-    /** URL do Redis de teste. */
-    testRedisUrl: string;
+    /** URLs dos bancos Redis de teste, uma por worker. */
+    testRedisUrls: string[];
     /** Indica se o Redis está acessível; suítes com fila são ignoradas quando falso. */
     redisAvailable: boolean;
+    /** Pastas temporárias, uma por worker. */
+    testTemporaryDirectories: string[];
   }
 }

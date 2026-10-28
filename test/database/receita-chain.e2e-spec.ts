@@ -10,8 +10,9 @@ import { openCnpjFactory } from '../factories/data-sources/opencnpj-cnpj.factory
 import { receitaOpenDataCnpjFactory } from '../factories/data-sources/receita-open-data-cnpj.factory.js';
 import { createDatabaseTestingApp } from '../support/database-testing-app.js';
 import { resetSourceRateLimits } from '../support/source-rate-limit.js';
+import { testRedisUrl } from '../support/infrastructure.js';
 
-const REDIS_URL = inject('testRedisUrl');
+const REDIS_URL = testRedisUrl();
 const CNPJ = '11222333000181';
 const context = { trigger: RequestTrigger.ON_DEMAND_JOB };
 

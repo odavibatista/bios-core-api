@@ -11,8 +11,9 @@ import {
   cacheKeyFactory,
 } from '../factories/shared/cache-entry.factory.js';
 import { buildTestEnvironment } from '../support/environment.js';
+import { testRedisUrl } from '../support/infrastructure.js';
 
-const REDIS_URL = inject('testRedisUrl');
+const REDIS_URL = testRedisUrl();
 
 /** Limite de resposta de um perfil em cache (NFDE02). */
 const RESPONSE_BUDGET_MS = 2_000;

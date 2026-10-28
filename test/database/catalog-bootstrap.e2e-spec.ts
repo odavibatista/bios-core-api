@@ -7,6 +7,7 @@ import { SEED_BLOCKED_EMAIL_DOMAINS } from '@modules/security/infra/db/seeders/b
 import type { PrismaService } from '@shared/infra/database/prisma.service.js';
 import { inject } from 'vitest';
 import { createDatabaseTestingApp } from '../support/database-testing-app.js';
+import { testDatabaseName } from '../support/infrastructure.js';
 
 /**
  * Comando `catalog:bootstrap` contra o MongoDB real (#329): um banco novo, sem nenhum
@@ -22,7 +23,7 @@ describe.runIf(inject('databaseAvailable'))(
     const run = (...argv: string[]) =>
       runCatalogBootstrap(argv, {
         client: prisma,
-        databaseName: 'bios_test',
+        databaseName: testDatabaseName(),
         seeders: CATALOG_SEEDERS,
         write: (line) => lines.push(line),
       });

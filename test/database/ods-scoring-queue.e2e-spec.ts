@@ -24,8 +24,9 @@ import { inject } from 'vitest';
 import { createDatabaseTestingApp } from '../support/database-testing-app.js';
 import { resetCache } from '../support/cache.js';
 import { buildDistinctCnpjs } from '../support/cnpj.js';
+import { testRedisUrl } from '../support/infrastructure.js';
 
-const redisUrl = inject('testRedisUrl');
+const redisUrl = testRedisUrl();
 const collections = [
   'company_ods_scores',
   'evidence_normalized',

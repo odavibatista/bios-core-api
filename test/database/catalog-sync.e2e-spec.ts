@@ -6,6 +6,7 @@ import { DATA_SOURCES } from '@modules/data-sources/infra/db/seeders/data-source
 import type { PrismaService } from '@shared/infra/database/prisma.service.js';
 import { inject } from 'vitest';
 import { createDatabaseTestingApp } from '../support/database-testing-app.js';
+import { testDatabaseName } from '../support/infrastructure.js';
 
 /**
  * Comando `catalog:sync` contra o MongoDB real (#256): um banco criado antes dos
@@ -28,7 +29,7 @@ describe.runIf(inject('databaseAvailable'))(
     const run = (...argv: string[]) =>
       runCatalogSync(argv, {
         client: prisma,
-        databaseName: 'bios_test',
+        databaseName: testDatabaseName(),
         catalog: new DataSourceCatalogSync(),
         write: (line) => lines.push(line),
       });

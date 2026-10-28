@@ -24,8 +24,9 @@ import { faker } from '../support/faker.js';
 import { createDatabaseTestingApp } from '../support/database-testing-app.js';
 import { resetCache } from '../support/cache.js';
 import { resetSourceRateLimits } from '../support/source-rate-limit.js';
+import { testRedisUrl } from '../support/infrastructure.js';
 
-const redisUrl = inject('testRedisUrl');
+const redisUrl = testRedisUrl();
 const context = { trigger: RequestTrigger.USER_QUERY };
 
 describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
