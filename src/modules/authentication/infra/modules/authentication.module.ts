@@ -8,6 +8,7 @@ import { UserSessionRepository } from '../../domain/dtos/repositories/user-sessi
 import { AccessTokenProvider } from '../../domain/providers/access-token.provider.js';
 import { AuthController } from '../../http/controllers/auth.controller.js';
 import { AccessTokenGuard } from '../../http/guards/access-token.guard.js';
+import { RoleGuard } from '../../http/guards/role.guard.js';
 import { PrismaLoginAttemptRepository } from '../db/repositories/prisma-login-attempt.repository.js';
 import { PrismaUserSessionRepository } from '../db/repositories/prisma-user-session.repository.js';
 import { JwtAccessTokenProvider } from '../providers/jwt-access-token.provider.js';
@@ -57,6 +58,9 @@ import { SendSuspiciousLoginAlertUseCase } from '../usecases/send-suspicious-log
 
     /* Autenticação exigida em toda rota que não seja `@Public()` */
     { provide: APP_GUARD, useClass: AccessTokenGuard },
+
+    /* Papel exigido pelo `@Roles()` da rota; depois da autenticação, que dá o papel */
+    { provide: APP_GUARD, useClass: RoleGuard },
   ],
 })
 export class AuthenticationModule {}
