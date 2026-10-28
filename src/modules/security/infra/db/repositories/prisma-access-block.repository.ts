@@ -103,4 +103,16 @@ export class PrismaAccessBlockRepository
 
     return block?.created_at ?? null;
   }
+
+  async findPermanentlyBlockedIps(): Promise<string[]> {
+    const blocks = await this.prisma.accessBlock.findMany({
+      where: {
+        scope: AccessBlockScope.IP,
+        OR: [{ blocked_until: null }, { blocked_until: { isSet: false } }],
+      },
+      select: { ip: true },
+    });
+
+    return [...new Set(blocks.flatMap(({ ip }) => (ip === null ? [] : [ip])))];
+  }
 }
