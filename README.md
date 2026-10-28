@@ -551,6 +551,12 @@ Toda rota exige sessão, exceto as marcadas com `@Public()` (UC03, NFSE05).
   consultar o banco **nunca libera** a requisição.
 - **Mesma resposta para toda recusa** (`401 NOT_AUTHENTICATED`): token ausente, malformado,
   adulterado, expirado ou de sessão encerrada.
+- **Papel por rota (`@Roles()`, #86).** O `RoleGuard`, também global e registrado logo depois do de
+  autenticação, aplica o `@Roles(UserRole.ADMIN)` do método ou do controller (o do método prevalece).
+  Lê o papel que o access token traz; a promoção e o rebaixamento encerram as sessões da conta, então
+  o token não carrega papel antigo. Sem sessão continua `401`; sessão de outro papel recebe
+  `403 INSUFFICIENT_ROLE`. Rota com `@Roles()` sem usuário autenticado (por engano, também `@Public()`)
+  responde `401`: o guard fecha por padrão. Rota sem `@Roles()` não tem restrição de papel.
 - **Limite antes da autenticação.** O guard de limite de requisições roda primeiro, então
   requisições com token falso tomam 429 sem chegar ao banco.
 - **`POST /auth/logout`** encerra o dispositivo atual: revoga a família de rotação da sessão
@@ -622,6 +628,31 @@ exigem sessão, exceto a confirmação da troca de e-mail.
   (`user_id` anulado); os registros de e-mails enviados a ele (que guardam o hash do
   destinatário) são **apagados**. Não há remoção lógica. O access token usado deixa de valer
   na requisição seguinte, porque a sessão sumiu.
+
+### Blacklist de domínios pelo administrador (UC13, RF29, #86)
+
+Exclusivo de `ADMIN` (`[P12]`, `@Roles(UserRole.ADMIN)` no controller): sem sessão, `401`; sessão
+de `USER`, `403 INSUFFICIENT_ROLE`; chave de API não autentica aqui.
+
+| Rota | O que faz |
+| --- | --- |
+| `GET /admin/blocked-email-domains?page=&page_size=` | Página dos domínios bloqueados agora, em ordem alfabética (padrão 20, máximo 100), com `origin` `SEED` (carga inicial) ou `ADMIN` |
+| `POST /admin/blocked-email-domains` `{ "domain": "mailinator.com" }` | Valida o formato (só o domínio, sem `@`), grava em minúsculas com `origin=ADMIN` e o administrador responsável (`created_by_user_id`, não exposto); `201` |
+| `DELETE /admin/blocked-email-domains/:id` | Remoção lógica (`deleted_at`); `204` |
+
+- **Efeito imediato, sem deploy.** O cadastro e a troca de e-mail consultam o banco a cada vez
+  (`CheckEmailDomainAllowedUseCase`, sem cache): a requisição seguinte já usa a lista nova.
+- **Contas existentes não são afetadas** (regra 3): a blacklist só é consultada ao cadastrar ou
+  trocar e-mail, e uma conta do domínio recém-bloqueado continua entrando.
+- **Reincluir restaura.** Um domínio removido volta no mesmo registro (sem duplicar), em nome do
+  administrador que o reincluiu (`origin=ADMIN`, mesmo que tenha vindo da carga inicial). A data
+  exibida é a da primeira inclusão.
+- **Erros (fluxo 4.1):** domínio inválido, `422`; já bloqueado, `409
+  BLOCKED_EMAIL_DOMAIN_ALREADY_EXISTS` (inclusões simultâneas do mesmo domínio: uma grava, as outras
+  recebem `409`); identificador inexistente, malformado ou já removido, `404
+  BLOCKED_EMAIL_DOMAIN_NOT_FOUND`.
+- **Sem interface no MVP para quem é administrador:** a promoção é pelo `account:promote`
+  (seção "Carga inicial de um banco novo e primeiro administrador").
 
 ### Retenção de dados (índices TTL)
 
