@@ -3,7 +3,10 @@ import type {
   SearchCompaniesInput,
   SearchOdsCriteria,
 } from '../../../domain/dtos/repositories/company-profile.repository.js';
-import { wholeCityName } from './company-search.pipeline.js';
+import {
+  registrationStatusExpression,
+  wholeCityName,
+} from './company-search.pipeline.js';
 
 /**
  * Pesquisa a partir dos índices (#328).
@@ -104,7 +107,9 @@ function scoredItemProjection(odsNumber: number): Record<string, unknown> {
     cnpj: 1,
     legal_name: '$profile.legal_name',
     trade_name: { $ifNull: ['$profile.trade_name', null] },
-    registration_status: '$profile.registration_status',
+    registration_status: registrationStatusExpression(
+      '$profile.registration_status',
+    ),
     city: '$profile.address.city',
     uf: '$profile.address.uf',
     main_cnae: {

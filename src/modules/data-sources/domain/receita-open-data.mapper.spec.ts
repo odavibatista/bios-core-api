@@ -22,6 +22,7 @@ describe('toCadastralRecord (formato dos dados abertos da Receita)', () => {
         legalName: 'ACME SERVICOS LTDA',
         tradeName: 'ACME',
         registrationStatus: 'ATIVA',
+        registrationStatusUnrecognized: null,
         companySize: 'DEMAIS',
         address: {
           street: 'AVENIDA PAULISTA',
@@ -75,6 +76,7 @@ describe('toCadastralRecord (formato dos dados abertos da Receita)', () => {
         'legalName',
         'mainCnae',
         'registrationStatus',
+        'registrationStatusUnrecognized',
         'secondaryCnaes',
         'tradeName',
       ]);
@@ -147,6 +149,18 @@ describe('toCadastralRecord (formato dos dados abertos da Receita)', () => {
       expect(
         map({ descricao_situacao_cadastral: null, situacao_cadastral: 3 }),
       ).toMatchObject({ registrationStatus: 'SUSPENSA' });
+    });
+
+    it('situação fora do conjunto não recusa o cadastro: NAO_RECONHECIDA, com o texto do provedor (#338)', () => {
+      expect(
+        map({
+          descricao_situacao_cadastral: 'EM LIQUIDACAO',
+          situacao_cadastral: 99,
+        }),
+      ).toMatchObject({
+        registrationStatus: 'NAO_RECONHECIDA',
+        registrationStatusUnrecognized: 'EM LIQUIDACAO',
+      });
     });
   });
 

@@ -1,5 +1,24 @@
 import type { Prisma } from '@prisma/client';
+import {
+  REGISTRATION_STATUSES,
+  UNRECOGNIZED_REGISTRATION_STATUS,
+} from '@modules/data-sources/domain/cadastral-normalizers.js';
 import type { SearchCompaniesInput } from '../../../domain/dtos/repositories/company-profile.repository.js';
+
+/**
+ * Situação cadastral no conjunto fechado (#338), a partir do campo guardado: cadastros
+ * gravados antes dele guardam a descrição do provedor, e a que não for conhecida sai como
+ * `NAO_RECONHECIDA` (a mesma regra de `storedRegistrationStatus`, na leitura do perfil).
+ */
+export function registrationStatusExpression(field: string): unknown {
+  return {
+    $cond: [
+      { $in: [field, [...REGISTRATION_STATUSES]] },
+      field,
+      UNRECOGNIZED_REGISTRATION_STATUS,
+    ],
+  };
+}
 
 /** Campos de nome em que a busca procura. */
 const NAME_FIELDS = ['legal_name', 'trade_name'] as const;
@@ -239,7 +258,7 @@ function profileItemProjection(
     cnpj: 1,
     legal_name: 1,
     trade_name: { $ifNull: ['$trade_name', null] },
-    registration_status: 1,
+    registration_status: registrationStatusExpression('$registration_status'),
     city: '$address.city',
     uf: '$address.uf',
     main_cnae: {

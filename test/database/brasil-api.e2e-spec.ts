@@ -113,6 +113,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
           legalName: 'ACME SERVICOS LTDA',
           tradeName: 'ACME',
           registrationStatus: 'ATIVA',
+          registrationStatusUnrecognized: null,
           companySize: 'DEMAIS',
           address: {
             street: 'AVENIDA PAULISTA',
@@ -133,6 +134,28 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
             expect.objectContaining({ code: '6202300' }),
             expect.objectContaining({ code: '6311900' }),
           ],
+        },
+      });
+    });
+
+    it('situação fora do conjunto da Receita não descarta o cadastro: NAO_RECONHECIDA, com o texto (#338)', async () => {
+      handler = () => ({
+        status: 200,
+        body: JSON.stringify(
+          receitaOpenDataCnpjFactory.build({
+            descricao_situacao_cadastral: 'EM LIQUIDACAO',
+            situacao_cadastral: 99,
+          }),
+        ),
+      });
+
+      const result = await dataSource.fetch(CNPJ, context);
+
+      expect(result).toMatchObject({
+        status: 'FOUND',
+        data: {
+          registrationStatus: 'NAO_RECONHECIDA',
+          registrationStatusUnrecognized: 'EM LIQUIDACAO',
         },
       });
     });

@@ -57,12 +57,19 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
     /** Grava (ou atualiza) o cadastro como o serviço de ingestão gravaria. */
     async function writeProfile(
       cnpj: string,
-      overrides: { legal_name?: string; refreshed_at?: Date } = {},
+      overrides: {
+        legal_name?: string;
+        refreshed_at?: Date;
+        registration_status?: string;
+        registration_status_unrecognized?: string;
+      } = {},
     ): Promise<void> {
       const data = {
         legal_name: overrides.legal_name ?? faker.company.name(),
         trade_name: faker.company.name(),
-        registration_status: 'ATIVA',
+        registration_status: overrides.registration_status ?? 'ATIVA',
+        registration_status_unrecognized:
+          overrides.registration_status_unrecognized ?? null,
         company_size: 'DEMAIS',
         address: {
           street: 'Avenida Paulista',
@@ -290,6 +297,29 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
             identifier: CNPJ,
           }),
         ).resolves.toMatchObject({ legal_name: 'Empresa Guardada S.A.' });
+      });
+
+      it('situação cadastral em conjunto fechado (#338): a guardada fora dele sai como NAO_RECONHECIDA, com o texto', async () => {
+        const text = faker.lorem.words(2).toUpperCase();
+        await writeProfile(CNPJ, { registration_status: text });
+
+        const response = await getCompany(CNPJ).expect(200);
+
+        expect(response.body).toMatchObject({
+          registration_status: 'NAO_RECONHECIDA',
+          registration_status_unrecognized: text,
+        });
+      });
+
+      it('situação reconhecida sai sem texto do provedor', async () => {
+        await writeProfile(CNPJ);
+
+        const response = await getCompany(CNPJ).expect(200);
+
+        expect(response.body).toMatchObject({
+          registration_status: 'ATIVA',
+          registration_status_unrecognized: null,
+        });
       });
     });
 

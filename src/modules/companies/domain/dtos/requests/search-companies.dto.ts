@@ -7,6 +7,7 @@ import {
   extractNameTerms,
   hasSignificantTerm,
 } from '../../company-name-terms.js';
+import { RegistrationStatusSchema } from './company-profile.dto.js';
 
 /** Tamanho máximo do texto digitado na busca por nome. */
 const MAX_NAME_LENGTH = 100;
@@ -202,7 +203,7 @@ export const CompanySearchItemSchema = z
     cnpj: z.string().describe('CNPJ, sem pontuação'),
     legal_name: z.string().describe('Razão social'),
     trade_name: z.string().nullable().describe('Nome fantasia'),
-    registration_status: z.string().describe('Situação cadastral'),
+    registration_status: RegistrationStatusSchema,
     city: z.string().describe('Município'),
     uf: z.string().describe('Unidade da federação (sigla)'),
     main_cnae: z

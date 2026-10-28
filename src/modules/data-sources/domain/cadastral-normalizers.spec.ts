@@ -8,6 +8,8 @@ import {
   normalizeRegistrationStatus,
   normalizeUf,
   normalizeZipcode,
+  REGISTRATION_STATUSES,
+  storedRegistrationStatus,
 } from './cadastral-normalizers.js';
 
 describe('normalizadores cadastrais', () => {
@@ -151,13 +153,44 @@ describe('normalizadores cadastrais', () => {
     );
   });
 
-  describe('normalizeRegistrationStatus', () => {
-    it('usa a descrição, em maiúsculas', () => {
-      expect(normalizeRegistrationStatus(' Ativa ')).toBe('ATIVA');
-    });
+  describe('normalizeRegistrationStatus (conjunto fechado, #338)', () => {
+    const recognized = (status: string) => ({ status, unrecognized: null });
+
+    it.each([
+      // BrasilAPI e Minha Receita: descrição em maiúsculas, com o código ao lado.
+      ['ATIVA', 2, 'ATIVA'],
+      ['BAIXADA', 8, 'BAIXADA'],
+      ['INAPTA', 4, 'INAPTA'],
+      ['SUSPENSA', 3, 'SUSPENSA'],
+      ['NULA', 1, 'NULA'],
+      // OpenCNPJ: só a descrição, com a primeira letra maiúscula.
+      ['Ativa', undefined, 'ATIVA'],
+      ['Baixada', undefined, 'BAIXADA'],
+      ['Inapta', undefined, 'INAPTA'],
+      ['Suspensa', undefined, 'SUSPENSA'],
+      ['Nula', undefined, 'NULA'],
+    ] as const)(
+      'grafia conhecida dos provedores: %j (código %j) é %s',
+      (description, code, expected) => {
+        expect(normalizeRegistrationStatus(description, code)).toEqual(
+          recognized(expected),
+        );
+      },
+    );
+
+    it.each([' ativa ', 'ATIVA.', 'Áti-va'])(
+      'compara só as letras, sem caixa, acento ou pontuação: %j',
+      (description) => {
+        expect(normalizeRegistrationStatus(description)).toEqual(
+          recognized('ATIVA'),
+        );
+      },
+    );
 
     it('a descrição prevalece sobre o código', () => {
-      expect(normalizeRegistrationStatus('BAIXADA', 2)).toBe('BAIXADA');
+      expect(normalizeRegistrationStatus('BAIXADA', 2)).toEqual(
+        recognized('BAIXADA'),
+      );
     });
 
     it.each([
@@ -165,24 +198,87 @@ describe('normalizadores cadastrais', () => {
       [2, 'ATIVA'],
       ['3', 'SUSPENSA'],
       [4, 'INAPTA'],
-      [8, 'BAIXADA'],
+      ['08', 'BAIXADA'],
     ])(
       'traduz o código %j para %s quando não há descrição',
       (code, expected) => {
-        expect(normalizeRegistrationStatus(null, code)).toBe(expected);
-        expect(normalizeRegistrationStatus('', code)).toBe(expected);
+        expect(normalizeRegistrationStatus(null, code)).toEqual(
+          recognized(expected),
+        );
+        expect(normalizeRegistrationStatus('', code)).toEqual(
+          recognized(expected),
+        );
       },
     );
 
-    it.each([[99], ['x'], [null], [undefined]])(
-      'devolve null para o código desconhecido %j',
+    it('código no lugar da descrição também é traduzido', () => {
+      expect(normalizeRegistrationStatus('02')).toEqual(recognized('ATIVA'));
+    });
+
+    it('descrição desconhecida com código conhecido: vale o código', () => {
+      expect(normalizeRegistrationStatus('Situação especial', 2)).toEqual(
+        recognized('ATIVA'),
+      );
+    });
+
+    it('situação desconhecida não derruba o cadastro nem se perde: NAO_RECONHECIDA, com o texto do provedor', () => {
+      expect(normalizeRegistrationStatus('  Em liquidação ')).toEqual({
+        status: 'NAO_RECONHECIDA',
+        unrecognized: 'Em liquidação',
+      });
+    });
+
+    it.each([[99], ['x']])(
+      'código desconhecido sem descrição também é preservado: %j',
       (code) => {
-        expect(normalizeRegistrationStatus(null, code)).toBeNull();
+        expect(normalizeRegistrationStatus(null, code)).toEqual({
+          status: 'NAO_RECONHECIDA',
+          unrecognized: String(code),
+        });
       },
     );
 
-    it('devolve null sem descrição nem código', () => {
-      expect(normalizeRegistrationStatus(undefined)).toBeNull();
+    it.each([[null], [undefined], ['   ']])(
+      'devolve null quando o provedor não informa situação alguma (%j)',
+      (code) => {
+        expect(normalizeRegistrationStatus(undefined, code)).toBeNull();
+        expect(normalizeRegistrationStatus('', code)).toBeNull();
+      },
+    );
+
+    it('o conjunto declarado tem as cinco situações da Receita e a não reconhecida', () => {
+      expect([...REGISTRATION_STATUSES].sort()).toEqual(
+        [
+          'ATIVA',
+          'BAIXADA',
+          'INAPTA',
+          'NAO_RECONHECIDA',
+          'NULA',
+          'SUSPENSA',
+        ].sort(),
+      );
+    });
+  });
+
+  describe('storedRegistrationStatus', () => {
+    it.each(REGISTRATION_STATUSES)('situação do conjunto: %s', (status) => {
+      expect(storedRegistrationStatus(status, null)).toEqual({
+        status,
+        unrecognized: null,
+      });
+    });
+
+    it('NAO_RECONHECIDA gravada mantém o texto do provedor', () => {
+      expect(
+        storedRegistrationStatus('NAO_RECONHECIDA', 'Em liquidação'),
+      ).toEqual({ status: 'NAO_RECONHECIDA', unrecognized: 'Em liquidação' });
+    });
+
+    it('descrição gravada antes do conjunto fechado vira NAO_RECONHECIDA, sem perder o texto', () => {
+      expect(storedRegistrationStatus('EM LIQUIDACAO', null)).toEqual({
+        status: 'NAO_RECONHECIDA',
+        unrecognized: 'EM LIQUIDACAO',
+      });
     });
   });
 
