@@ -12,8 +12,9 @@ import { createDatabaseTestingApp } from '../support/database-testing-app.js';
 import { type OdsScoreValues, saveOdsScore } from '../support/ods-score.js';
 import { createTestAccount } from '../support/test-account.js';
 import { resetThrottleCounters } from '../support/throttle.js';
+import { testRedisUrl } from '../support/infrastructure.js';
 
-const REDIS_URL = inject('testRedisUrl');
+const REDIS_URL = testRedisUrl();
 
 /**
  * Pesquisa de empresas ponta a ponta (UC06, fluxo 1.1; UC08; RF04, RF13): HTTP, guard e

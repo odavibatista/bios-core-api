@@ -20,8 +20,9 @@ import { resetSourceRateLimits } from '../support/source-rate-limit.js';
 import { withoutEnvironmentalCollection } from '../support/without-environmental-collection.js';
 import { createTestAccount } from '../support/test-account.js';
 import { resetThrottleCounters } from '../support/throttle.js';
+import { testRedisUrl } from '../support/infrastructure.js';
 
-const REDIS_URL = inject('testRedisUrl');
+const REDIS_URL = testRedisUrl();
 const CNPJ = '11222333000181';
 const OTHER_CNPJ = '00000000000191';
 const SEVEN_DAYS_MS = 7 * 86_400_000;

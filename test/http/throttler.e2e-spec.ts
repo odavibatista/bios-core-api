@@ -23,6 +23,7 @@ import { inject } from 'vitest';
 import { healthCheckResponseFactory } from '../factories/shared/health-check-response.factory.js';
 import { faker } from '../support/faker.js';
 import { buildTestEnvironment } from '../support/environment.js';
+import { testRedisUrl } from '../support/infrastructure.js';
 
 /** Limite curto: o estouro tem de acontecer em poucas requisições. */
 const LIMIT = 2;
@@ -103,7 +104,7 @@ describe.runIf(inject('redisAvailable'))('Limite de requisições (e2e)', () => 
             () =>
               validateEnvironment(
                 buildTestEnvironment({
-                  REDIS_URL: inject('testRedisUrl'),
+                  REDIS_URL: testRedisUrl(),
                   THROTTLE_LIMIT: String(LIMIT),
                   THROTTLE_PUBLIC_API_LIMIT: String(LIMIT),
                   THROTTLE_COMPANY_PROFILE_LIMIT: String(PROFILE_LIMIT),
@@ -189,7 +190,7 @@ describe.runIf(inject('redisAvailable'))('Limite de requisições (e2e)', () => 
     const key = faker.string.alphanumeric(40);
     await get('/prova/publico', key).expect(200);
 
-    const redis = new Redis(inject('testRedisUrl'));
+    const redis = new Redis(testRedisUrl());
     try {
       const names = await redis.keys(`${THROTTLER_KEY_PREFIX}*`);
 

@@ -19,6 +19,7 @@ import {
 import { buildCnpj } from '../factories/companies/company-profile.factory.js';
 import { createDatabaseTestingApp } from '../support/database-testing-app.js';
 import { buildTestEnvironmentWithout } from '../support/environment.js';
+import { testDatabaseUrl, testRedisUrl } from '../support/infrastructure.js';
 
 describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
   'CGU sem credencial com AppModule, Mongo e Redis reais',
@@ -28,8 +29,8 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
     beforeAll(async () => {
       const environment = validateEnvironment({
         ...buildTestEnvironmentWithout('CGU_API_KEY'),
-        DATABASE_URL: inject('testDatabaseUrl'),
-        REDIS_URL: inject('testRedisUrl'),
+        DATABASE_URL: testDatabaseUrl(),
+        REDIS_URL: testRedisUrl(),
         DATA_RETENTION_SYNC_ON_BOOT: 'false',
         QUEUE_SCHEDULES_SYNC_ON_BOOT: 'false',
       });

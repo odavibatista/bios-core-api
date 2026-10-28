@@ -15,8 +15,9 @@ import {
   type TestAccount,
 } from '../support/test-account.js';
 import { resetThrottleCounters } from '../support/throttle.js';
+import { testRedisUrl } from '../support/infrastructure.js';
 
-const REDIS_URL = inject('testRedisUrl');
+const REDIS_URL = testRedisUrl();
 
 const API_KEY_FORMAT = /^bios_[A-Za-z0-9]{8}_[A-Za-z0-9_-]{43}$/;
 

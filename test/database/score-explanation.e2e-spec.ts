@@ -12,6 +12,7 @@ import { createDatabaseTestingApp } from '../support/database-testing-app.js';
 import { dereference } from '../support/openapi.js';
 import { createTestAccount } from '../support/test-account.js';
 import { resetThrottleCounters } from '../support/throttle.js';
+import { testRedisUrl } from '../support/infrastructure.js';
 
 const CNPJ = '11222333000181';
 const collections = [
@@ -53,7 +54,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
     beforeEach(async () => {
       await prisma.reset(collections);
       await prisma.seed(CATALOG_SEEDERS);
-      await resetThrottleCounters(inject('testRedisUrl'));
+      await resetThrottleCounters(testRedisUrl());
       const account = await createTestAccount(app);
       const login = await request(app.getHttpServer())
         .post('/auth/login')

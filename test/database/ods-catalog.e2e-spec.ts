@@ -9,8 +9,9 @@ import { createDatabaseTestingApp } from '../support/database-testing-app.js';
 import { saveOdsScore } from '../support/ods-score.js';
 import { createTestAccount } from '../support/test-account.js';
 import { resetThrottleCounters } from '../support/throttle.js';
+import { testRedisUrl } from '../support/infrastructure.js';
 
-const REDIS_URL = inject('testRedisUrl');
+const REDIS_URL = testRedisUrl();
 
 /**
  * Catálogo de ODS e validação do `ods` na pesquisa e na exportação (#332, RF10, RF13, RF14),

@@ -17,8 +17,9 @@ import { inject } from 'vitest';
 import { createDatabaseTestingApp } from '../support/database-testing-app.js';
 import { faker } from '../support/faker.js';
 import { resetSourceRateLimits } from '../support/source-rate-limit.js';
+import { testRedisUrl } from '../support/infrastructure.js';
 
-const REDIS_URL = inject('testRedisUrl');
+const REDIS_URL = testRedisUrl();
 const CNPJ = '11222333000181';
 
 /** O que o servidor simulado da fonte recebeu. */
