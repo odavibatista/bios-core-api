@@ -98,6 +98,7 @@ describe('validateEnvironment', () => {
       THROTTLE_COMPANY_EVIDENCES_LIMIT: 20,
       THROTTLE_COMPANY_SEARCH_LIMIT: 60,
       THROTTLE_COMPANY_EXPORT_LIMIT: 10,
+      EXPORT_MAX_COMPANIES: 5_000,
       DATA_RETENTION_SYNC_ON_BOOT: true,
     });
     expect(environment.CACHE_DEFAULT_TTL.toString()).toBe('1w');
@@ -281,6 +282,34 @@ describe('validateEnvironment', () => {
         validateEnvironment({ ...REQUIRED, [variable]: '0' }),
       ).toThrow(new RegExp(variable));
     });
+  });
+
+  describe('exportação', () => {
+    it('lê o teto de empresas da exportação', () => {
+      expect(
+        validateEnvironment({ ...REQUIRED, EXPORT_MAX_COMPANIES: '12000' })
+          .EXPORT_MAX_COMPANIES,
+      ).toBe(12_000);
+    });
+
+    it.each(['1', '20000'])(
+      'aceita o teto %s, nos extremos da faixa',
+      (value) => {
+        expect(
+          validateEnvironment({ ...REQUIRED, EXPORT_MAX_COMPANIES: value })
+            .EXPORT_MAX_COMPANIES,
+        ).toBe(Number(value));
+      },
+    );
+
+    it.each(['0', '20001', '-5', '1.5', 'muitas'])(
+      'rejeita o teto %s',
+      (value) => {
+        expect(() =>
+          validateEnvironment({ ...REQUIRED, EXPORT_MAX_COMPANIES: value }),
+        ).toThrow(/EXPORT_MAX_COMPANIES/);
+      },
+    );
   });
 
   describe('filas', () => {

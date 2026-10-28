@@ -110,6 +110,45 @@ describe('PrismaOdsScoreRepository', () => {
       });
     });
 
+    it('divide as empresas em blocos e junta as linhas, na ordem dos blocos', async () => {
+      const cnpjs = Array.from({ length: 205 }, (_, i) =>
+        String(i).padStart(14, '0'),
+      );
+      prisma.companyOdsScore.findMany.mockImplementation(
+        ({ where }: { where: { cnpj: { in: string[] } } }) =>
+          Promise.resolve(
+            where.cnpj.in.map((cnpj) => ({
+              cnpj,
+              ods_number: 15,
+              score_value: 1,
+              confidence_value: 0.5,
+            })),
+          ),
+      );
+
+      const summaries = await repo.findSummariesByCnpjs(cnpjs);
+
+      expect(prisma.companyOdsScore.findMany).toHaveBeenCalledTimes(3);
+      const sizes = prisma.companyOdsScore.findMany.mock.calls.map(
+        (call) =>
+          (call[0] as { where: { cnpj: { in: string[] } } }).where.cnpj.in
+            .length,
+      );
+      expect(sizes).toEqual([100, 100, 5]);
+      expect(summaries.map(({ cnpj }) => cnpj)).toEqual(cnpjs);
+    });
+
+    it('um bloco exato faz uma consulta só', async () => {
+      const cnpjs = Array.from({ length: 100 }, (_, i) =>
+        String(i).padStart(14, '0'),
+      );
+      prisma.companyOdsScore.findMany.mockResolvedValue([]);
+
+      await repo.findSummariesByCnpjs(cnpjs);
+
+      expect(prisma.companyOdsScore.findMany).toHaveBeenCalledTimes(1);
+    });
+
     it('sem empresas, nem consulta o banco', async () => {
       await expect(repo.findSummariesByCnpjs([])).resolves.toEqual([]);
       expect(prisma.companyOdsScore.findMany).not.toHaveBeenCalled();
