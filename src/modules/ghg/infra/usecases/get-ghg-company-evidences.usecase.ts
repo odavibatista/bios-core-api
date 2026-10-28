@@ -16,6 +16,15 @@ import { DependencyUnavailableException } from '@shared/domain/errors/dependency
 import { GHG_SLUG } from '../../domain/ghg-inventory.js';
 import { FETCH_GHG_INVENTORY_JOB, ghgJobId } from '../../domain/ghg-job.dto.js';
 
+/** Como a coleta sob demanda se comporta diante da fonte (#333). */
+export interface GhgCollectionOptions {
+  /**
+   * Espera o job terminar, no prazo da fila (padrão). Falso: serve o que está guardado,
+   * publica a atualização e volta sem esperar (API pública).
+   */
+  wait?: boolean;
+}
+
 /** Consulta local e espera limitada pela fila; nenhuma chamada remota no produtor. */
 @Injectable()
 export class GetGhgCompanyEvidencesUseCase extends UseCase<
@@ -30,7 +39,10 @@ export class GetGhgCompanyEvidencesUseCase extends UseCase<
   ) {
     super();
   }
-  override async execute(input: string): Promise<StoredEvidence[]> {
+  override async execute(
+    input: string,
+    { wait = true }: GhgCollectionOptions = {},
+  ): Promise<StoredEvidence[]> {
     const cnpj = parseCnpj(input);
     if (!cnpj)
       throw new InvalidEvidenceError('CNPJ inválido para consultar GHG.');
@@ -52,12 +64,24 @@ export class GetGhgCompanyEvidencesUseCase extends UseCase<
     const config = await this.source.execute(GHG_SLUG);
     if (!config?.isEnabled) return pending;
     try {
+      const jobId = ghgJobId(cnpj, new Date());
+
+      if (!wait) {
+        await this.queue.enqueue(
+          QueueName.GHG_INVENTORY,
+          FETCH_GHG_INVENTORY_JOB,
+          { cnpj },
+          { jobId },
+        );
+        return pending;
+      }
+
       await this.queue.enqueueAndWait(
         QueueName.GHG_INVENTORY,
         FETCH_GHG_INVENTORY_JOB,
         { cnpj },
         {
-          jobId: ghgJobId(cnpj, new Date()),
+          jobId,
           timeoutMs: config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
         },
       );

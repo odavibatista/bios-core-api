@@ -9,6 +9,7 @@ import {
 import {
   ENVIRONMENTAL_PROFILE_CACHE_TTL_SECONDS,
   GetCompanyFullProfileUseCase,
+  PENDING_REFRESH_WINDOW_MS,
 } from './get-company-full-profile.usecase.js';
 
 describe('GetCompanyFullProfileUseCase', () => {
@@ -84,7 +85,7 @@ describe('GetCompanyFullProfileUseCase', () => {
 
     await useCase.execute('11.222.333/0001-81');
 
-    expect(evidences.execute).toHaveBeenCalledWith(CNPJ);
+    expect(evidences.execute).toHaveBeenCalledWith(CNPJ, { wait: true });
     expect(scores.execute).toHaveBeenCalledWith(CNPJ);
   });
 
@@ -133,6 +134,133 @@ describe('GetCompanyFullProfileUseCase', () => {
     expect(result.ods_scores[0]?.calculation_status).toBe('PENDING');
     expect(cache.set).not.toHaveBeenCalled();
   }, 5_000);
+
+  describe('sem espera das fontes (API pública, #333)', () => {
+    const evidencesOf = (
+      stored: Parameters<typeof storedEvidenceFactory.build>[0][],
+    ) =>
+      groupCompanyEvidences(
+        CNPJ,
+        stored.map((item) =>
+          storedEvidenceFactory.build({ cnpj: CNPJ, ...item }),
+        ),
+      );
+
+    it('pede as evidências sem espera, e o painel continua esperando', async () => {
+      arrange();
+
+      await useCase.execute(CNPJ, { waitForCollection: false });
+      expect(evidences.execute).toHaveBeenLastCalledWith(CNPJ, { wait: false });
+
+      await useCase.execute(CNPJ);
+      expect(evidences.execute).toHaveBeenLastCalledWith(CNPJ, { wait: true });
+    });
+
+    it('marcador UNKNOWN recém-gravado vale como atualização em andamento (PENDING)', async () => {
+      arrange();
+      evidences.execute.mockResolvedValue(
+        evidencesOf([
+          { sourceSlug: 'CGU_CEIS', state: 'UNKNOWN', collectedAt: new Date() },
+        ]),
+      );
+
+      const result = await useCase.execute(CNPJ, { waitForCollection: false });
+
+      expect(result.provenance.sources).toContainEqual({
+        source_slug: 'CGU_CEIS',
+        origin: 'PENDING',
+        evidence_state: 'UNKNOWN',
+      });
+      expect(result.provenance.retry_after_seconds).toBe(30);
+    });
+
+    it('UNKNOWN antigo já não é atualização em andamento: a fonte está indisponível', async () => {
+      arrange();
+      evidences.execute.mockResolvedValue(
+        evidencesOf([
+          {
+            sourceSlug: 'CGU_CEIS',
+            state: 'UNKNOWN',
+            collectedAt: new Date(
+              Date.now() - PENDING_REFRESH_WINDOW_MS - 5_000,
+            ),
+          },
+        ]),
+      );
+
+      const result = await useCase.execute(CNPJ, { waitForCollection: false });
+
+      expect(result.provenance.sources).toContainEqual({
+        source_slug: 'CGU_CEIS',
+        origin: 'UNAVAILABLE',
+        evidence_state: 'UNKNOWN',
+      });
+    });
+
+    it('fonte sem nenhum registro vale como pendente, e não como indisponível', async () => {
+      arrange();
+
+      const result = await useCase.execute(CNPJ, { waitForCollection: false });
+
+      expect(
+        result.provenance.sources.every(({ origin }) => origin === 'PENDING'),
+      ).toBe(true);
+    });
+
+    it('índice calculado antes da última coleta vale como pendente e não vai ao cache', async () => {
+      const calculatedAt = new Date(Date.now() - 60_000).toISOString();
+      arrange([
+        calculatedOdsScoreFactory.build({ calculated_at: calculatedAt }),
+      ]);
+      evidences.execute.mockResolvedValue(
+        evidencesOf([{ sourceSlug: 'IBAMA', collectedAt: new Date() }]),
+      );
+
+      const result = await useCase.execute(CNPJ, { waitForCollection: false });
+
+      expect(result.provenance.scores_pending).toBe(true);
+      expect(result.provenance.retry_after_seconds).toBe(30);
+      expect(cache.set).not.toHaveBeenCalled();
+    });
+
+    it('índice calculado depois da última coleta é o retrato atual: vai ao cache', async () => {
+      arrange([
+        calculatedOdsScoreFactory.build({
+          calculated_at: new Date(Date.now() + 1_000).toISOString(),
+        }),
+      ]);
+      evidences.execute.mockResolvedValue(
+        evidencesOf(
+          ['IBAMA', 'CGU_CEIS', 'CGU_CNEP', 'GHG_PROTOCOL'].map(
+            (sourceSlug) => ({
+              sourceSlug,
+              collectedAt: new Date(Date.now() - 10_000),
+            }),
+          ),
+        ),
+      );
+
+      const result = await useCase.execute(CNPJ, { waitForCollection: false });
+
+      expect(result.provenance.scores_pending).toBe(false);
+      expect(cache.set).toHaveBeenCalledTimes(2);
+    });
+
+    it('no modo com espera, índice anterior à coleta não é tratado como pendente', async () => {
+      arrange([
+        calculatedOdsScoreFactory.build({
+          calculated_at: new Date(Date.now() - 60_000).toISOString(),
+        }),
+      ]);
+      evidences.execute.mockResolvedValue(
+        evidencesOf([{ sourceSlug: 'IBAMA', collectedAt: new Date() }]),
+      );
+
+      const result = await useCase.execute(CNPJ);
+
+      expect(result.provenance.scores_pending).toBe(false);
+    });
+  });
 
   it('a falha do cadastro (inválido, inexistente ou indisponível) impede qualquer coleta ambiental', async () => {
     profile.execute.mockRejectedValue(new Error('não encontrada'));

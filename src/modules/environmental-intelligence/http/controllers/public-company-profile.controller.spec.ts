@@ -27,14 +27,16 @@ describe('PublicCompanyProfileController', () => {
     controller = moduleRef.get(PublicCompanyProfileController);
   });
 
-  it('executa a mesma consulta do painel e devolve o perfil completo', async () => {
+  it('devolve o perfil completo, sem esperar as fontes externas (#333)', async () => {
     const profile = companyFullProfileResponseFactory.build();
     const cnpj = buildCnpj();
     getFullProfile.execute.mockResolvedValue(profile);
 
     await expect(controller.getCompanyProfile(cnpj)).resolves.toBe(profile);
 
-    expect(getFullProfile.execute).toHaveBeenCalledWith(cnpj);
+    expect(getFullProfile.execute).toHaveBeenCalledWith(cnpj, {
+      waitForCollection: false,
+    });
   });
 
   it('propaga a recusa do caso de uso', async () => {
