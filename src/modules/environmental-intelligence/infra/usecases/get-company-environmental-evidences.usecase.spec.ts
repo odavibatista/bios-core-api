@@ -44,6 +44,30 @@ describe('UC07 fontes independentes', () => {
     }).compile();
     useCase = module.get(GetCompanyEnvironmentalEvidencesUseCase);
   });
+  describe('sem espera (API pública, #333)', () => {
+    it('não espera as coletas nem o recálculo: repassa wait=false a cada etapa', async () => {
+      await useCase.execute(cnpj, { wait: false });
+
+      expect(cgu.execute).toHaveBeenCalledWith(cnpj, { wait: false });
+      expect(ghg.execute).toHaveBeenCalledWith(cnpj, { wait: false });
+      expect(scores.execute).toHaveBeenCalledExactlyOnceWith({
+        cnpj,
+        wait: false,
+      });
+    });
+
+    it('por padrão espera, como o painel e a rota de evidências', async () => {
+      await useCase.execute(cnpj);
+
+      expect(cgu.execute).toHaveBeenCalledWith(cnpj, { wait: true });
+      expect(ghg.execute).toHaveBeenCalledWith(cnpj, { wait: true });
+      expect(scores.execute).toHaveBeenCalledExactlyOnceWith({
+        cnpj,
+        wait: true,
+      });
+    });
+  });
+
   describe('recálculo do índice (UC15, diagrama 3)', () => {
     it('com as fontes consolidadas, pede o recálculo e espera, antes de reler o estado', async () => {
       const order: string[] = [];
@@ -103,8 +127,8 @@ describe('UC07 fontes independentes', () => {
     const pending = useCase.execute(cnpj);
     await Promise.resolve();
     await Promise.resolve();
-    expect(cgu.execute).toHaveBeenCalledWith(cnpj);
-    expect(ghg.execute).toHaveBeenCalledWith(cnpj);
+    expect(cgu.execute).toHaveBeenCalledWith(cnpj, { wait: true });
+    expect(ghg.execute).toHaveBeenCalledWith(cnpj, { wait: true });
     expect(list.execute).not.toHaveBeenCalled();
     resolve();
     const result = await pending;

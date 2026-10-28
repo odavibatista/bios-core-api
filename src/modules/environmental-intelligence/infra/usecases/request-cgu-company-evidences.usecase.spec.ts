@@ -15,7 +15,7 @@ import { RecordEvidenceCollectionUseCase } from '@modules/evidences/infra/usecas
 describe('produtor CGU', () => {
   const list = { execute: vi.fn() },
     collection = { execute: vi.fn() },
-    queue = { enqueueAndWait: vi.fn() };
+    queue = { enqueueAndWait: vi.fn(), enqueue: vi.fn() };
   const config = { get: vi.fn() };
   const cnpj = buildCnpj();
   let useCase: RequestCguCompanyEvidencesUseCase;
@@ -121,6 +121,64 @@ describe('produtor CGU', () => {
     ]);
     await useCase.execute(cnpj);
     expect(queue.enqueueAndWait).toHaveBeenCalledOnce();
+  });
+  describe('sem espera (API pública, #333)', () => {
+    it('marca a fonte pendente, publica o job sem esperá-lo e devolve o que está guardado', async () => {
+      const placeholder = [
+        row('CGU_CEIS', EvidenceState.UNKNOWN),
+        row('CGU_CNEP', EvidenceState.UNKNOWN),
+      ];
+      list.execute.mockResolvedValueOnce([]).mockResolvedValue(placeholder);
+      queue.enqueue.mockImplementation(() => {
+        expect(collection.execute).toHaveBeenCalledTimes(2);
+      });
+
+      expect(await useCase.execute(cnpj, { wait: false })).toEqual(placeholder);
+
+      expect(queue.enqueue).toHaveBeenCalledExactlyOnceWith(
+        QueueName.ENVIRONMENTAL_EVIDENCES,
+        FETCH_CGU_EVIDENCES_JOB,
+        { cnpj },
+        { jobId: expect.stringMatching(new RegExp(`^cgu-${cnpj}-[0-9]+$`)) },
+      );
+      expect(queue.enqueueAndWait).not.toHaveBeenCalled();
+    });
+
+    it('com as duas fontes válidas, não publica nada', async () => {
+      const rows = [row('CGU_CEIS'), row('CGU_CNEP')];
+      list.execute.mockResolvedValue(rows);
+
+      expect(await useCase.execute(cnpj, { wait: false })).toEqual(rows);
+
+      expect(queue.enqueue).not.toHaveBeenCalled();
+      expect(queue.enqueueAndWait).not.toHaveBeenCalled();
+    });
+
+    it('fila fora do ar degrada: devolve o guardado e não derruba a consulta', async () => {
+      const a = row('CGU_CEIS', EvidenceState.OUTDATED);
+      list.execute.mockResolvedValue([a]);
+      queue.enqueue.mockRejectedValue(
+        new DependencyUnavailableException('redis'),
+      );
+
+      expect(await useCase.execute(cnpj, { wait: false })).toEqual([a]);
+    });
+
+    it('erro inesperado da fila não é mascarado', async () => {
+      queue.enqueue.mockRejectedValue(new Error('inesperado'));
+
+      await expect(useCase.execute(cnpj, { wait: false })).rejects.toThrow(
+        'inesperado',
+      );
+    });
+
+    it('sem chave da CGU, não publica job nem no modo sem espera', async () => {
+      config.get.mockReturnValue(undefined);
+
+      await useCase.execute(cnpj, { wait: false });
+
+      expect(queue.enqueue).not.toHaveBeenCalled();
+    });
   });
   it('propaga erro inesperado para isolamento da orquestracao', async () => {
     queue.enqueueAndWait.mockRejectedValue(new Error('inesperado'));

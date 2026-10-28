@@ -17,7 +17,16 @@ import {
 import type { StoredEvidence } from '@modules/evidences/domain/dtos/repositories/evidence.repository.js';
 import { ListCompanyEvidencesUseCase } from '@modules/evidences/infra/usecases/list-company-evidences.usecase.js';
 import { RecordEvidenceCollectionUseCase } from '@modules/evidences/infra/usecases/record-evidence-collection.usecase.js';
-/** Produtor sem HTTP: prepara UNKNOWN, publica uma vez e espera no limite global. */
+/** Como a coleta sob demanda se comporta diante da fonte (#333). */
+export interface EvidenceCollectionOptions {
+  /**
+   * Espera o job terminar, no prazo da fila (padrão: o painel e a rota de evidências). Falso:
+   * serve o que está guardado, publica a atualização e volta sem esperar (API pública).
+   */
+  wait?: boolean;
+}
+
+/** Produtor sem HTTP: prepara UNKNOWN, publica uma vez e espera no limite global (ou não, com `wait: false`). */
 @Injectable()
 export class RequestCguCompanyEvidencesUseCase extends UseCase<
   string,
@@ -32,7 +41,10 @@ export class RequestCguCompanyEvidencesUseCase extends UseCase<
   ) {
     super();
   }
-  override async execute(input: string): Promise<StoredEvidence[]> {
+  override async execute(
+    input: string,
+    { wait = true }: EvidenceCollectionOptions = {},
+  ): Promise<StoredEvidence[]> {
     const { cnpj } = CguJobSchema.parse({ cnpj: input });
     const local = await this.local(cnpj);
     const fresh = (slug: string) => {
@@ -62,11 +74,23 @@ export class RequestCguCompanyEvidencesUseCase extends UseCase<
       return pending;
     }
     try {
+      const jobId = cguJobId(cnpj, new Date());
+
+      if (!wait) {
+        await this.queue.enqueue(
+          QueueName.ENVIRONMENTAL_EVIDENCES,
+          FETCH_CGU_EVIDENCES_JOB,
+          { cnpj },
+          { jobId },
+        );
+        return pending;
+      }
+
       await this.queue.enqueueAndWait(
         QueueName.ENVIRONMENTAL_EVIDENCES,
         FETCH_CGU_EVIDENCES_JOB,
         { cnpj },
-        { jobId: cguJobId(cnpj, new Date()) },
+        { jobId },
       );
       return await this.local(cnpj);
     } catch (error) {
