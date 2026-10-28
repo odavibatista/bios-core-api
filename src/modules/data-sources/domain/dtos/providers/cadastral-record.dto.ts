@@ -1,3 +1,5 @@
+import type { RegistrationStatus } from '../../cadastral-normalizers.js';
+
 /** Atividade econômica (CNAE). */
 export interface CadastralCnae {
   /** Código de 7 dígitos, sem máscara. */
@@ -37,8 +39,11 @@ export interface CadastralRecord {
   legalName: string;
   tradeName: string | null;
 
-  /** Situação cadastral na Receita, em maiúsculas (ex.: `ATIVA`, `BAIXADA`). */
-  registrationStatus: string;
+  /** Situação cadastral na Receita, no conjunto fechado do BIOS (ex.: `ATIVA`, `BAIXADA`). */
+  registrationStatus: RegistrationStatus;
+
+  /** Texto do provedor quando a situação é `NAO_RECONHECIDA`; `null` nas demais. */
+  registrationStatusUnrecognized: string | null;
 
   /** Porte, em maiúsculas (ex.: `DEMAIS`, `MICRO EMPRESA`). */
   companySize: string | null;

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { CadastralRecord } from '@modules/data-sources/domain/dtos/providers/cadastral-record.dto.js';
 import { computeCadastralContentHash } from './cadastral-content-hash.js';
 
@@ -9,6 +10,7 @@ function buildRecord(
     legalName: 'ACME LTDA',
     tradeName: 'ACME',
     registrationStatus: 'ATIVA',
+    registrationStatusUnrecognized: null,
     companySize: 'DEMAIS',
     address: {
       street: 'AVENIDA PAULISTA',
@@ -49,7 +51,14 @@ describe('computeCadastralContentHash', () => {
       ['a razão social', { legalName: 'ACME SA' }],
       ['o nome fantasia', { tradeName: 'OUTRA' }],
       ['a ausência do nome fantasia', { tradeName: null }],
-      ['a situação cadastral', { registrationStatus: 'BAIXADA' }],
+      ['a situação cadastral', { registrationStatus: 'BAIXADA' as const }],
+      [
+        'uma situação fora do conjunto',
+        {
+          registrationStatus: 'NAO_RECONHECIDA' as const,
+          registrationStatusUnrecognized: 'EM LIQUIDACAO',
+        },
+      ],
       ['o porte', { companySize: 'MICRO EMPRESA' }],
       [
         'o CNAE principal',
@@ -110,6 +119,55 @@ describe('computeCadastralContentHash', () => {
           secondaryCnaes: [...record.secondaryCnaes].reverse(),
         }),
       ).toBe(base);
+    });
+  });
+
+  describe('situação cadastral em conjunto fechado (#338)', () => {
+    it('situações não reconhecidas diferentes dão hashes diferentes', () => {
+      const unrecognized = (text: string) =>
+        computeCadastralContentHash(
+          buildRecord({
+            registrationStatus: 'NAO_RECONHECIDA',
+            registrationStatusUnrecognized: text,
+          }),
+        );
+
+      expect(unrecognized('EM LIQUIDACAO')).not.toBe(
+        unrecognized('EM RECUPERACAO'),
+      );
+    });
+
+    it('cadastro com situação reconhecida mantém o hash de antes do conjunto fechado', () => {
+      const record = buildRecord();
+      const { address } = record;
+      // Serialização anterior ao #338: a situação entrava como texto, na mesma posição.
+      const before = createHash('sha256')
+        .update(
+          JSON.stringify([
+            record.cnpj,
+            record.legalName,
+            record.tradeName,
+            'ATIVA',
+            record.companySize,
+            [
+              address.street,
+              address.number,
+              address.complement,
+              address.neighborhood,
+              address.city,
+              address.uf,
+              address.zipcode,
+            ],
+            [record.mainCnae.code, record.mainCnae.description],
+            [
+              ['6202300', 'OUTRA'],
+              ['6311900', 'DADOS'],
+            ],
+          ]),
+        )
+        .digest('hex');
+
+      expect(computeCadastralContentHash(record)).toBe(before);
     });
   });
 

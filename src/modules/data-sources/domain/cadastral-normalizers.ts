@@ -101,10 +101,45 @@ export function normalizeUf(value: RawValue): string | null {
 }
 
 /**
- * Situação cadastral a partir do código da Receita, para o provedor que só
- * informa o número.
+ * Situações cadastrais que o BIOS expõe (#338): as cinco da Receita Federal e
+ * `NAO_RECONHECIDA`, para a que o provedor informa e não está entre elas.
  */
-const REGISTRATION_STATUS_BY_CODE: Readonly<Record<number, string>> = {
+export const REGISTRATION_STATUSES = [
+  'ATIVA',
+  'SUSPENSA',
+  'INAPTA',
+  'BAIXADA',
+  'NULA',
+  'NAO_RECONHECIDA',
+] as const;
+
+export type RegistrationStatus = (typeof REGISTRATION_STATUSES)[number];
+
+/** Situação informada pelo provedor que não está no conjunto da Receita. */
+export const UNRECOGNIZED_REGISTRATION_STATUS = 'NAO_RECONHECIDA';
+
+/** Situação cadastral no conjunto do BIOS, com o texto do provedor quando não casou. */
+export interface NormalizedRegistrationStatus {
+  status: RegistrationStatus;
+  /** Texto do provedor, só quando a situação é `NAO_RECONHECIDA`. */
+  unrecognized: string | null;
+}
+
+/** Situações da Receita pelas letras da descrição (sem acento, caixa ou pontuação). */
+const REGISTRATION_STATUS_BY_LETTERS: Readonly<
+  Record<string, RegistrationStatus>
+> = {
+  ATIVA: 'ATIVA',
+  SUSPENSA: 'SUSPENSA',
+  INAPTA: 'INAPTA',
+  BAIXADA: 'BAIXADA',
+  NULA: 'NULA',
+};
+
+/** Situações da Receita pelo código numérico (`situacao_cadastral`). */
+const REGISTRATION_STATUS_BY_CODE: Readonly<
+  Record<number, RegistrationStatus>
+> = {
   1: 'NULA',
   2: 'ATIVA',
   3: 'SUSPENSA',
@@ -113,20 +148,66 @@ const REGISTRATION_STATUS_BY_CODE: Readonly<Record<number, string>> = {
 };
 
 /**
- * Situação cadastral em maiúsculas: a descrição, quando vem; do contrário, a
- * traduzida do código. `null` quando nenhuma das duas permite saber.
+ * Situação cadastral no conjunto fechado do BIOS (#338).
+ *
+ * Os provedores escrevem a mesma situação de jeitos diferentes (`ATIVA`, `Ativa`,
+ * o código `2`); sem unificar, o front não teria um conjunto conhecido para
+ * traduzir, filtrar ou colorir, e trocar de provedor mudaria o cadastro. Vale a
+ * descrição, comparada só pelas letras; do contrário, o código da Receita (que
+ * também pode vir no lugar da descrição).
+ *
+ * Situação informada que não casa com nenhuma das cinco **não derruba o
+ * cadastro nem é perdida**: vira `NAO_RECONHECIDA`, com o texto do provedor em
+ * `unrecognized`. `null` só quando o provedor não informa situação alguma.
  */
 export function normalizeRegistrationStatus(
   description: RawValue,
   code?: RawValue,
-): string | null {
-  const text = cleanUpperText(description);
+): NormalizedRegistrationStatus | null {
+  const text = cleanText(description);
+  const codeText = cleanText(code);
+  const recognized =
+    statusByText(text) ??
+    (codeText === null ? undefined : statusByText(codeText));
 
-  if (text !== null) return text;
+  if (recognized) return { status: recognized, unrecognized: null };
 
-  const numeric = Number(cleanText(code));
+  const informed = text ?? codeText;
 
-  return REGISTRATION_STATUS_BY_CODE[numeric] ?? null;
+  return informed === null
+    ? null
+    : { status: UNRECOGNIZED_REGISTRATION_STATUS, unrecognized: informed };
+}
+
+function statusByText(text: string | null): RegistrationStatus | undefined {
+  if (text === null) return undefined;
+
+  if (/^\d+$/.test(text)) return REGISTRATION_STATUS_BY_CODE[Number(text)];
+
+  const letters = text
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[^A-Z]/g, '');
+
+  return REGISTRATION_STATUS_BY_LETTERS[letters];
+}
+
+/**
+ * Situação de um cadastro já gravado, no conjunto fechado.
+ *
+ * Cadastros gravados antes do conjunto fechado guardam a descrição do provedor
+ * como veio; a que não for uma das situações conhecidas é lida como
+ * `NAO_RECONHECIDA`, com o texto guardado, em vez de quebrar a resposta.
+ */
+export function storedRegistrationStatus(
+  stored: string,
+  unrecognized: string | null,
+): NormalizedRegistrationStatus {
+  const known = REGISTRATION_STATUSES.find((status) => status === stored);
+
+  return known
+    ? { status: known, unrecognized }
+    : { status: UNRECOGNIZED_REGISTRATION_STATUS, unrecognized: stored };
 }
 
 /**

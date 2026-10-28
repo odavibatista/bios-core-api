@@ -1,6 +1,9 @@
 import { extractNameTerms } from '../../../domain/company-name-terms.js';
 import type { SearchCompaniesInput } from '../../../domain/dtos/repositories/company-profile.repository.js';
-import { buildCompanySearchPipeline } from './company-search.pipeline.js';
+import {
+  buildCompanySearchPipeline,
+  registrationStatusExpression,
+} from './company-search.pipeline.js';
 
 interface RegexCondition {
   $regex: string;
@@ -534,6 +537,36 @@ describe('buildCompanySearchPipeline', () => {
           'uf',
         ].sort(),
       );
+    });
+
+    it('a situação cadastral sai no conjunto fechado (#338)', () => {
+      expect(projectOf({ nameTerms: ['AMBEV'] }).registration_status).toEqual(
+        registrationStatusExpression('$registration_status'),
+      );
+    });
+  });
+
+  describe('registrationStatusExpression (#338)', () => {
+    it('mantém a situação do conjunto e troca as demais por NAO_RECONHECIDA', () => {
+      expect(registrationStatusExpression('$campo')).toEqual({
+        $cond: [
+          {
+            $in: [
+              '$campo',
+              [
+                'ATIVA',
+                'SUSPENSA',
+                'INAPTA',
+                'BAIXADA',
+                'NULA',
+                'NAO_RECONHECIDA',
+              ],
+            ],
+          },
+          '$campo',
+          'NAO_RECONHECIDA',
+        ],
+      });
     });
   });
 });

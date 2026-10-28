@@ -22,8 +22,12 @@ model CompanyProfile {
   /// Nome fantasia.
   trade_name String?
 
-  /// Situação cadastral na Receita Federal.
+  /// Situação cadastral na Receita Federal, no conjunto fechado do BIOS: `ATIVA`, `SUSPENSA`,
+  /// `INAPTA`, `BAIXADA`, `NULA` ou `NAO_RECONHECIDA`.
   registration_status String
+
+  /// Situação informada pelo provedor, como veio, quando não está no conjunto (`NAO_RECONHECIDA`).
+  registration_status_unrecognized String?
 
   /// Porte da empresa.
   company_size String?
