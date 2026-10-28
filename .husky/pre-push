@@ -1,6 +1,11 @@
-# Verificação completa antes de publicar commits (typecheck, testes com
-# cobertura mínima de 75% e e2e), executada apenas quando o push contém
-# mudanças que podem afetar o comportamento da API.
+# Verificação rápida antes de publicar commits (#367): verificação de tipos,
+# ESLint do projeto inteiro e somente os testes unitários afetados pelos
+# arquivos enviados (ver scripts/verify-push.mjs). A suíte completa com
+# cobertura mínima de 75% (NFPD03) e os e2e rodam no CI, em toda pull request,
+# e protegem o merge (NFSE11); `npm run verify` roda tudo localmente.
+#
+# Executada apenas quando o push contém mudanças que podem afetar o
+# comportamento da API.
 #
 # A faixa analisada é a de TODOS os commits enviados que ainda não existem em
 # nenhum branch remoto — não apenas o último commit.
@@ -22,4 +27,4 @@ if ! printf '%s\n' "$changed_files" | grep -Eq "$RELEVANT"; then
   exit 0
 fi
 
-npm run verify
+printf '%s\n' "$changed_files" | node scripts/verify-push.mjs --stdin
