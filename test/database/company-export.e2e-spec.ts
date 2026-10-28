@@ -123,6 +123,9 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
 
     beforeEach(async () => {
       sequence = 0;
+      // Começa limpo: outro arquivo do mesmo worker pode ter deixado perfis ou índices, e
+      // aqui as planilhas são conferidas linha a linha.
+      await prisma.reset(['company_profile', 'company_ods_scores']);
       await resetThrottleCounters(REDIS_URL);
     });
 

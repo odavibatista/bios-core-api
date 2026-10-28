@@ -11,7 +11,10 @@ import { IBAMA_DATASET_URLS } from '@modules/ibama/domain/ibama-evidence.mapper.
 import { RequestScoreRecalculationUseCase } from '@modules/scoring/infra/usecases/request-score-recalculation.usecase.js';
 import { PrismaService } from '@shared/infra/database/prisma.service.js';
 import { resetCache } from '../support/cache.js';
-import { createDatabaseTestingApp } from '../support/database-testing-app.js';
+import {
+  createDatabaseTestingApp,
+  waitForScoringQueue,
+} from '../support/database-testing-app.js';
 import { createTestAccount } from '../support/test-account.js';
 import { resetThrottleCounters } from '../support/throttle.js';
 import { faker } from '../support/faker.js';
@@ -129,6 +132,9 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
     });
 
     afterAll(async () => {
+      // Recálculo ainda na fila gravaria o índice depois da limpeza, e o arquivo seguinte do
+      // mesmo worker o encontraria.
+      await waitForScoringQueue(app);
       await prisma.reset(collections);
       await resetCache(REDIS_URL);
       await app.close();

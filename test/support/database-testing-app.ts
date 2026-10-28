@@ -51,21 +51,34 @@ function drainScoringQueueBeforeClose(app: INestApplication): void {
   const close = app.close.bind(app);
 
   app.close = async (): Promise<void> => {
-    const scoring = app
-      .get<QueueRegistry>(QUEUE_REGISTRY)
-      .get(QueueName.ODS_SCORING);
-    const deadline = Date.now() + 10_000;
-
-    while (scoring && Date.now() < deadline) {
-      const { waiting, active, delayed } = await scoring.getJobCounts(
-        'waiting',
-        'active',
-        'delayed',
-      );
-      if (waiting + active + delayed === 0) break;
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
+    await waitForScoringQueue(app);
 
     return close();
   };
+}
+
+/**
+ * Espera a fila de scoring esvaziar (até 10 s).
+ *
+ * Quem limpa `company_ods_scores` ao terminar precisa chamar isto **antes** da limpeza: um
+ * recálculo ainda na fila gravaria o índice depois dela, e o arquivo seguinte do mesmo
+ * worker (que divide o banco) encontraria um índice que não criou.
+ */
+export async function waitForScoringQueue(
+  app: INestApplication,
+): Promise<void> {
+  const scoring = app
+    .get<QueueRegistry>(QUEUE_REGISTRY)
+    .get(QueueName.ODS_SCORING);
+  const deadline = Date.now() + 10_000;
+
+  while (scoring && Date.now() < deadline) {
+    const { waiting, active, delayed } = await scoring.getJobCounts(
+      'waiting',
+      'active',
+      'delayed',
+    );
+    if (waiting + active + delayed === 0) break;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
 }
