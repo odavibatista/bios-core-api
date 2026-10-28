@@ -3,7 +3,6 @@ import { ConfigService } from '@nestjs/config';
 import { EvidenceState } from '@prisma/client';
 import { z } from 'zod';
 import { GetCompanyProfileUseCase } from '@modules/companies/infra/usecases/get-company-profile.usecase.js';
-import { CompanyEnvironmentalEvidencesResponseSchema } from '@modules/evidences/domain/dtos/requests/company-evidences.dto.js';
 import {
   ENVIRONMENTAL_SOURCE_SLUGS,
   groupCompanyEvidences,
@@ -26,16 +25,12 @@ import {
   type CompanyFullProfileResponse,
 } from '../../domain/dtos/requests/company-full-profile.dto.js';
 import { CompanyDataUnavailableException } from '@modules/companies/domain/dtos/errors/company-data-unavailable.exception.js';
-import { GetCompanyEnvironmentalEvidencesUseCase } from './get-company-environmental-evidences.usecase.js';
-
-/**
- * Validade, em segundos, das partes ambientais guardadas em cache.
- *
- * Curta de propósito: o cache é apagado quando o índice da empresa é recalculado
- * (`OdsScoringProcessor`), mas a validade das evidências também passa com o tempo,
- * sem job algum, e o prazo limita por quanto tempo uma leitura pode envelhecer.
- */
-export const ENVIRONMENTAL_PROFILE_CACHE_TTL_SECONDS = 300;
+import {
+  companyEvidencesCacheKey,
+  ENVIRONMENTAL_PROFILE_CACHE_TTL_SECONDS,
+  EvidencesCacheSchema,
+  GetCompanyEnvironmentalEvidencesUseCase,
+} from './get-company-environmental-evidences.usecase.js';
 
 /**
  * Por quanto tempo, no modo sem espera, um `UNKNOWN` recém-gravado ainda é tratado como
@@ -57,9 +52,7 @@ export interface FullProfileOptions {
 const isCalculated = ({ calculation_status }: CompanyOdsScore): boolean =>
   calculation_status === 'CALCULATED';
 
-/** Partes ambientais do perfil, guardadas e apagadas juntas. */
-const EvidencesCacheSchema =
-  CompanyEnvironmentalEvidencesResponseSchema.shape.categories;
+/** Notas guardadas com as evidências e apagadas junto com elas pelo recálculo. */
 const ScoresCacheSchema = z.array(CompanyOdsScoreSchema);
 
 const TIMEOUT = Symbol('profile-timeout');
@@ -149,7 +142,9 @@ function provenance(
  *  3. **Índices por ODS**: lê os retratos gravados, com a explicação de cada um.
  *
  * **Cache.** As etapas 2 e 3 só rodam quando as duas partes não estão em cache
- * (`company-evidences` e `company-scores`, apagadas juntas pelo recálculo do índice). Só
+ * (`company-evidences` e `company-scores`, apagadas juntas pelo recálculo do índice). O
+ * retrato das evidências é o mesmo da rota de evidências (#334): a consolidação também o lê
+ * e o grava, então o perfil e aquela rota mostram as mesmas evidências na janela. Só
  * se guarda perfil com todos os índices calculados: ODS pendente (recálculo atrasado ou
  * falho) é refeito na consulta seguinte, em vez de congelar a lacuna. Evidência `UNKNOWN`
  * não impede o cache: a janela de reconsulta dela é das próprias fontes (15 minutos), e o
@@ -191,10 +186,7 @@ export class GetCompanyFullProfileUseCase extends UseCase<
       budget - 750,
     );
     if (profile === TIMEOUT) throw new CompanyDataUnavailableException();
-    const evidencesKey: CacheKey = {
-      namespace: CacheNamespace.COMPANY_EVIDENCES,
-      identifier: profile.cnpj,
-    };
+    const evidencesKey = companyEvidencesCacheKey(profile.cnpj);
     const scoresKey: CacheKey = {
       namespace: CacheNamespace.COMPANY_SCORES,
       identifier: profile.cnpj,
