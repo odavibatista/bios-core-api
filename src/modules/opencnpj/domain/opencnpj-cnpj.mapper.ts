@@ -99,7 +99,8 @@ export function toCadastralRecord(
     cnpj: expectedCnpj,
     legalName,
     tradeName: cleanText(raw.nome_fantasia),
-    registrationStatus,
+    registrationStatus: registrationStatus.status,
+    registrationStatusUnrecognized: registrationStatus.unrecognized,
     companySize: normalizeCompanySize(raw.porte_empresa),
     address: {
       street: joinStreet(raw.tipo_logradouro, raw.logradouro),

@@ -30,6 +30,7 @@ export const companyProfileResponseFactory =
     legal_name: faker.company.name(),
     trade_name: faker.company.name(),
     registration_status: 'ATIVA',
+    registration_status_unrecognized: null,
     company_size: 'DEMAIS',
     address: {
       street: faker.location.street(),

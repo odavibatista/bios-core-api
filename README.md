@@ -730,6 +730,22 @@ telefones nunca são lidos) e rejeição de resposta de outro CNPJ. Diferenças 
 - **Porte unificado.** `normalizeCompanySize` escreve o porte do mesmo jeito para qualquer
   provedor (`Demais` → `DEMAIS`, `Microempresa` → `MICRO EMPRESA`, `EPP` → `EMPRESA DE PEQUENO
   PORTE`), para trocar de provedor não alterar o cadastro nem o hash de conteúdo.
+- **Situação cadastral em conjunto fechado (#338).** `normalizeRegistrationStatus` leva a situação
+  de qualquer provedor ao conjunto `ATIVA`, `SUSPENSA`, `INAPTA`, `BAIXADA`, `NULA` ou
+  `NAO_RECONHECIDA`, declarado como enum no OpenAPI (`RegistrationStatus`) para o front traduzir,
+  filtrar e colorir:
+  - a descrição é comparada só pelas letras, sem caixa, acento ou pontuação (`ATIVA`, `Ativa`);
+    o código da Receita (`situacao_cadastral`: 1, 2, 3, 4 e 8) vale quando a descrição falta, não
+    casa ou vem no lugar dela;
+  - situação informada fora das cinco **não descarta o cadastro nem se perde**: vira
+    `NAO_RECONHECIDA`, com o texto do provedor em `registration_status_unrecognized` (no perfil e
+    no banco); só a ausência de situação continua recusando a resposta;
+  - cadastros gravados antes do conjunto fechado são lidos pela mesma regra (perfil e pesquisa):
+    a descrição antiga fora do conjunto sai como `NAO_RECONHECIDA`, com o texto guardado;
+  - o hash de conteúdo das situações reconhecidas é o mesmo de antes; a não reconhecida entra pelo
+    texto do provedor.
+  - Um filtro de situação na pesquisa ficou de fora: a HU23 pede CNAE, UF, município e mínimos por
+    ODS, e não situação.
 
 `MinhaReceitaDataSource` (`minha-receita/`, slug `MINHA_RECEITA`, prioridade 3, fallback
 final) fecha a cadeia. A BrasilAPI e o Minha Receita servem os mesmos dados da Receita **no

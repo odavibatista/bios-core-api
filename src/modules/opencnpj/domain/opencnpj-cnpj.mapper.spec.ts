@@ -19,6 +19,7 @@ describe('toCadastralRecord (OpenCNPJ)', () => {
         legalName: 'ACME SERVICOS LTDA',
         tradeName: 'ACME',
         registrationStatus: 'ATIVA',
+        registrationStatusUnrecognized: null,
         companySize: 'DEMAIS',
         address: {
           street: 'AVENIDA PAULISTA',
@@ -78,6 +79,7 @@ describe('toCadastralRecord (OpenCNPJ)', () => {
         'legalName',
         'mainCnae',
         'registrationStatus',
+        'registrationStatusUnrecognized',
         'secondaryCnaes',
         'tradeName',
       ]);
@@ -156,6 +158,13 @@ describe('toCadastralRecord (OpenCNPJ)', () => {
       });
       expect(map({ porte_empresa: 'Empresa de Pequeno Porte' })).toMatchObject({
         companySize: 'EMPRESA DE PEQUENO PORTE',
+      });
+    });
+
+    it('situação fora do conjunto não recusa o cadastro: NAO_RECONHECIDA, com o texto do provedor (#338)', () => {
+      expect(map({ situacao_cadastral: 'Em liquidação' })).toMatchObject({
+        registrationStatus: 'NAO_RECONHECIDA',
+        registrationStatusUnrecognized: 'Em liquidação',
       });
     });
 

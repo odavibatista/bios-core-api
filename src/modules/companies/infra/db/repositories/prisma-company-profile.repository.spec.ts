@@ -117,11 +117,46 @@ describe('PrismaCompanyProfileRepository', () => {
       legal_name: document.legal_name,
       trade_name: document.trade_name,
       registration_status: 'ATIVA',
+      registration_status_unrecognized: null,
       company_size: 'DEMAIS',
       address: document.address,
       main_cnae: document.main_cnae,
       secondary_cnaes: document.secondary_cnaes,
       refreshed_at: document.refreshed_at.toISOString(),
+    });
+  });
+
+  describe('situação cadastral em conjunto fechado (#338)', () => {
+    it('situação fora do conjunto, gravada antes dele, sai como NAO_RECONHECIDA com o texto guardado', async () => {
+      findUnique.mockResolvedValue(
+        buildDocument({ registration_status: 'EM LIQUIDACAO' }),
+      );
+
+      const stored = await repository.findByCnpj(buildCnpj());
+
+      expect(stored?.profile).toMatchObject({
+        registration_status: 'NAO_RECONHECIDA',
+        registration_status_unrecognized: 'EM LIQUIDACAO',
+      });
+      expect(
+        CompanyProfileResponseSchema.safeParse(stored?.profile).success,
+      ).toBe(true);
+    });
+
+    it('NAO_RECONHECIDA gravada devolve o texto do provedor', async () => {
+      findUnique.mockResolvedValue(
+        buildDocument({
+          registration_status: 'NAO_RECONHECIDA',
+          registration_status_unrecognized: 'Em liquidação',
+        }),
+      );
+
+      const stored = await repository.findByCnpj(buildCnpj());
+
+      expect(stored?.profile).toMatchObject({
+        registration_status: 'NAO_RECONHECIDA',
+        registration_status_unrecognized: 'Em liquidação',
+      });
     });
   });
 
@@ -602,7 +637,8 @@ describe('PrismaCompanyProfileRepository', () => {
       cnpj: '11222333000181',
       legalName: 'ACME LTDA',
       tradeName: null,
-      registrationStatus: 'ATIVA',
+      registrationStatus: 'ATIVA' as const,
+      registrationStatusUnrecognized: null,
       companySize: null,
       address: {
         street: 'AVENIDA PAULISTA',
@@ -645,6 +681,7 @@ describe('PrismaCompanyProfileRepository', () => {
         legal_name: 'ACME LTDA',
         trade_name: null,
         registration_status: 'ATIVA',
+        registration_status_unrecognized: null,
         company_size: null,
         address: {
           street: 'AVENIDA PAULISTA',
@@ -670,6 +707,25 @@ describe('PrismaCompanyProfileRepository', () => {
       });
     });
 
+    it('grava a situação não reconhecida com o texto do provedor (#338)', async () => {
+      await repository.save({
+        ...input,
+        record: {
+          ...record,
+          registrationStatus: 'NAO_RECONHECIDA',
+          registrationStatusUnrecognized: 'Em liquidação',
+        },
+      });
+
+      const [{ update }] = upsert.mock.calls[0] as [
+        { update: Record<string, unknown> },
+      ];
+      expect(update).toMatchObject({
+        registration_status: 'NAO_RECONHECIDA',
+        registration_status_unrecognized: 'Em liquidação',
+      });
+    });
+
     it('um campo que deixou de existir na fonte é gravado como null, e não omitido', async () => {
       await repository.save({ ...input, previousContentHash: null });
 
@@ -678,6 +734,7 @@ describe('PrismaCompanyProfileRepository', () => {
       ];
       expect(update).toHaveProperty('trade_name', null);
       expect(update).toHaveProperty('company_size', null);
+      expect(update).toHaveProperty('registration_status_unrecognized', null);
       expect(update).toHaveProperty('previous_content_hash', null);
     });
 

@@ -8,6 +8,7 @@ import {
   scoredMatch,
   type ScoredSearchInput,
 } from './company-scored-search.pipeline.js';
+import { registrationStatusExpression } from './company-search.pipeline.js';
 
 type Stage = Record<string, unknown>;
 
@@ -282,6 +283,9 @@ describe('pesquisa a partir dos índices', () => {
         confidence_value: { $ifNull: ['$confidence_value', null] },
       });
       expect(project.$project.legal_name).toBe('$profile.legal_name');
+      expect(project.$project.registration_status).toEqual(
+        registrationStatusExpression('$profile.registration_status'),
+      );
     });
   });
 
