@@ -730,6 +730,22 @@ telefones nunca são lidos) e rejeição de resposta de outro CNPJ. Diferenças 
 - **Porte unificado.** `normalizeCompanySize` escreve o porte do mesmo jeito para qualquer
   provedor (`Demais` → `DEMAIS`, `Microempresa` → `MICRO EMPRESA`, `EPP` → `EMPRESA DE PEQUENO
   PORTE`), para trocar de provedor não alterar o cadastro nem o hash de conteúdo.
+- **Situação cadastral em conjunto fechado (#338).** `normalizeRegistrationStatus` leva a situação
+  de qualquer provedor ao conjunto `ATIVA`, `SUSPENSA`, `INAPTA`, `BAIXADA`, `NULA` ou
+  `NAO_RECONHECIDA`, declarado como enum no OpenAPI (`RegistrationStatus`) para o front traduzir,
+  filtrar e colorir:
+  - a descrição é comparada só pelas letras, sem caixa, acento ou pontuação (`ATIVA`, `Ativa`);
+    o código da Receita (`situacao_cadastral`: 1, 2, 3, 4 e 8) vale quando a descrição falta, não
+    casa ou vem no lugar dela;
+  - situação informada fora das cinco **não descarta o cadastro nem se perde**: vira
+    `NAO_RECONHECIDA`, com o texto do provedor em `registration_status_unrecognized` (no perfil e
+    no banco); só a ausência de situação continua recusando a resposta;
+  - cadastros gravados antes do conjunto fechado são lidos pela mesma regra (perfil e pesquisa):
+    a descrição antiga fora do conjunto sai como `NAO_RECONHECIDA`, com o texto guardado;
+  - o hash de conteúdo das situações reconhecidas é o mesmo de antes; a não reconhecida entra pelo
+    texto do provedor.
+  - Um filtro de situação na pesquisa ficou de fora: a HU23 pede CNAE, UF, município e mínimos por
+    ODS, e não situação.
 
 `MinhaReceitaDataSource` (`minha-receita/`, slug `MINHA_RECEITA`, prioridade 3, fallback
 final) fecha a cadeia. A BrasilAPI e o Minha Receita servem os mesmos dados da Receita **no
@@ -1430,6 +1446,13 @@ e não em `companies`, porque o módulo de empresas não depende da orquestraç�
   por 5 minutos (`ENVIRONMENTAL_PROFILE_CACHE_TTL_SECONDS`), e só juntas e com todos os ODS
   calculados; o recálculo do índice as apaga (`OdsScoringProcessor`). Com as duas em cache, a
   consulta não coleta nem recalcula. O cadastro segue no namespace `company-profile`.
+- **Mesmo retrato da rota de evidências (#334).** O retrato `company-evidences` mora na
+  consolidação (`GetCompanyEnvironmentalEvidencesUseCase`), que as duas rotas usam: com ele em
+  cache, `GET /companies/:cnpj/evidences` responde sem coletar nem recalcular, e o perfil e a rota
+  mostram as mesmas evidências até o próximo recálculo. A rota de evidências também grava o
+  retrato, mas só depois de esperar o recálculo terminar (`CALCULATED`), para o índice já refletir
+  o que foi guardado; recálculo fora do prazo, ou consulta sem espera (API pública), não grava. A
+  rota continua existindo: entrega as evidências com proveniência sem compor índice nem cadastro.
 - **Limite.** A rota do painel tem limite próprio por IP, padrão de 60 consultas por minuto
   (`THROTTLE_COMPANY_PROFILE_LIMIT`, #335): consolidar pode disparar coletas externas, mas a chamada
   em cache é barata. A pública conta por chave (NFSE04).

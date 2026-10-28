@@ -19,6 +19,7 @@ function buildRecord(legalName: string): CadastralRecord {
     legalName,
     tradeName: null,
     registrationStatus: 'ATIVA',
+    registrationStatusUnrecognized: null,
     companySize: 'DEMAIS',
     address: {
       street: null,

@@ -1,4 +1,17 @@
 import { z } from 'zod';
+import { REGISTRATION_STATUSES } from '@modules/data-sources/domain/cadastral-normalizers.js';
+
+/**
+ * Situação cadastral na Receita Federal, em conjunto fechado (#338): as cinco da Receita e
+ * `NAO_RECONHECIDA`, quando o provedor informa outra (o texto dele vem em
+ * `registration_status_unrecognized`).
+ */
+export const RegistrationStatusSchema = z
+  .enum(REGISTRATION_STATUSES)
+  .describe(
+    'Situação cadastral na Receita Federal: uma das cinco da Receita ou, quando o provedor informa outra, o valor de situação não reconhecida (o texto do provedor vem em registration_status_unrecognized)',
+  )
+  .meta({ id: 'RegistrationStatus' });
 
 /** Atividade econômica (CNAE) com a descrição textual (RF06). */
 const CnaeSchema = z
@@ -35,7 +48,13 @@ export const CompanyProfileResponseSchema = z
     cnpj: z.string().describe('CNPJ, sem pontuação'),
     legal_name: z.string().describe('Razão social'),
     trade_name: z.string().nullable().describe('Nome fantasia'),
-    registration_status: z.string().describe('Situação cadastral'),
+    registration_status: RegistrationStatusSchema,
+    registration_status_unrecognized: z
+      .string()
+      .nullable()
+      .describe(
+        'Situação informada pelo provedor, como veio, quando ela não é uma das cinco da Receita; null nas demais',
+      ),
     company_size: z.string().nullable().describe('Porte'),
     address: CompanyAddressSchema,
     main_cnae: CnaeSchema.describe('CNAE principal'),

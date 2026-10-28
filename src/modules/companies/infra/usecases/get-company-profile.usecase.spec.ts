@@ -391,6 +391,7 @@ describe('GetCompanyProfileUseCase', () => {
       'main_cnae',
       'refreshed_at',
       'registration_status',
+      'registration_status_unrecognized',
       'secondary_cnaes',
       'trade_name',
     ]);

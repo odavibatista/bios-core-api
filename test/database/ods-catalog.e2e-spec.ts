@@ -49,6 +49,9 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
     });
 
     beforeEach(async () => {
+      // Começa limpo, sem depender de quem rodou antes no mesmo worker: outro arquivo pode
+      // ter deixado o perfil ou o índice desta empresa (o índice é único por CNPJ e ODS).
+      await prisma.reset(['company_profile', 'company_ods_scores']);
       await resetThrottleCounters(REDIS_URL);
       await setActive(13, true);
       await setActive(15, true);

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
+import { storedRegistrationStatus } from '@modules/data-sources/domain/cadastral-normalizers.js';
 import { PrismaRepository } from '@shared/infra/database/prisma.repository.js';
 import { PrismaService } from '@shared/infra/database/prisma.service.js';
 import { z } from 'zod';
@@ -65,6 +66,11 @@ export class PrismaCompanyProfileRepository
 
     if (!company) return null;
 
+    const registration = storedRegistrationStatus(
+      company.registration_status,
+      company.registration_status_unrecognized ?? null,
+    );
+
     return {
       cadastralSourceSlug: company.cadastral_source.slug,
       refreshedAt: company.refreshed_at,
@@ -74,7 +80,8 @@ export class PrismaCompanyProfileRepository
         cnpj: company.cnpj,
         legal_name: company.legal_name,
         trade_name: company.trade_name ?? null,
-        registration_status: company.registration_status,
+        registration_status: registration.status,
+        registration_status_unrecognized: registration.unrecognized,
         company_size: company.company_size ?? null,
         address: {
           street: company.address.street ?? null,
@@ -258,6 +265,7 @@ export class PrismaCompanyProfileRepository
       legal_name: record.legalName,
       trade_name: record.tradeName,
       registration_status: record.registrationStatus,
+      registration_status_unrecognized: record.registrationStatusUnrecognized,
       company_size: record.companySize,
       address: {
         street: address.street,

@@ -6,8 +6,8 @@ import {
   calculatedOdsScoreFactory,
   pendingOdsScoreFactory,
 } from '@test/factories/companies/company-full-profile.factory.js';
+import { ENVIRONMENTAL_PROFILE_CACHE_TTL_SECONDS } from './get-company-environmental-evidences.usecase.js';
 import {
-  ENVIRONMENTAL_PROFILE_CACHE_TTL_SECONDS,
   GetCompanyFullProfileUseCase,
   PENDING_REFRESH_WINDOW_MS,
 } from './get-company-full-profile.usecase.js';

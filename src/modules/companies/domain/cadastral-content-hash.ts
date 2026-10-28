@@ -21,7 +21,10 @@ export function computeCadastralContentHash(record: CadastralRecord): string {
     record.cnpj,
     record.legalName,
     record.tradeName,
-    record.registrationStatus,
+    // A situação não reconhecida entra pelo texto do provedor: duas situações
+    // desconhecidas diferentes não podem dar o mesmo hash. As reconhecidas entram
+    // como antes, e os hashes já gravados continuam valendo.
+    record.registrationStatusUnrecognized ?? record.registrationStatus,
     record.companySize,
     [
       address.street,

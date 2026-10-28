@@ -9,6 +9,7 @@ import { Queue } from 'bullmq';
 import request from 'supertest';
 import { inject } from 'vitest';
 import { createDatabaseTestingApp } from '../support/database-testing-app.js';
+import { faker } from '../support/faker.js';
 import { type OdsScoreValues, saveOdsScore } from '../support/ods-score.js';
 import { createTestAccount } from '../support/test-account.js';
 import { resetThrottleCounters } from '../support/throttle.js';
@@ -40,12 +41,14 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         uf = 'SP',
         cnae = '6201501',
         secondaryCnaes = [],
+        registrationStatus = 'ATIVA',
       }: {
         tradeName?: string;
         city?: string;
         uf?: string;
         cnae?: string;
         secondaryCnaes?: string[];
+        registrationStatus?: string;
       } = {},
     ): Promise<string> {
       sequence += 1;
@@ -56,7 +59,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
           cnpj,
           legal_name: legalName,
           ...(tradeName === undefined ? {} : { trade_name: tradeName }),
-          registration_status: 'ATIVA',
+          registration_status: registrationStatus,
           address: { city, uf },
           main_cnae: { code: cnae, description: 'DESENVOLVIMENTO' },
           secondary_cnaes: secondaryCnaes.map((code) => ({
@@ -114,6 +117,9 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
 
     beforeEach(async () => {
       sequence = 0;
+      // Começa limpo: outro arquivo do mesmo worker pode ter deixado perfis ou índices, e
+      // aqui as listas e os totais são conferidos por inteiro.
+      await prisma.reset(['company_profile', 'company_ods_scores']);
       await resetThrottleCounters(REDIS_URL);
     });
 
@@ -263,6 +269,24 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
             main_cnae: { code: '6201501', description: 'DESENVOLVIMENTO' },
             ods_score: null,
           },
+        ]);
+      });
+
+      it('situação cadastral em conjunto fechado (#338): a guardada fora dele sai como NAO_RECONHECIDA, nos dois caminhos da pesquisa', async () => {
+        const cnpj = await saveCompany('ACME LTDA', {
+          registrationStatus: faker.lorem.words(2).toUpperCase(),
+        });
+        await saveScore(cnpj, 15, { score: 10, confidence: 0.5 });
+
+        const statuses = async (query: Record<string, string | number>) =>
+          SearchCompaniesResponseSchema.parse(
+            (await search(query).expect(200)).body,
+          ).data.map((company) => company.registration_status);
+
+        // Pelo nome, a pesquisa parte do perfil; pela ordem do índice, dos índices.
+        expect(await statuses({ name: 'acme' })).toEqual(['NAO_RECONHECIDA']);
+        expect(await statuses({ ods: 15, order: 'desc' })).toEqual([
+          'NAO_RECONHECIDA',
         ]);
       });
 

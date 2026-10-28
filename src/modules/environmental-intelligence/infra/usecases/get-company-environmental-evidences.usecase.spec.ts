@@ -5,7 +5,13 @@ import { buildCnpj } from '@test/factories/companies/company-profile.factory.js'
 import { RequestCguCompanyEvidencesUseCase } from './request-cgu-company-evidences.usecase.js';
 import { ListCompanyEvidencesUseCase } from '@modules/evidences/infra/usecases/list-company-evidences.usecase.js';
 import { RecordEvidenceCollectionUseCase } from '@modules/evidences/infra/usecases/record-evidence-collection.usecase.js';
-import { GetCompanyEnvironmentalEvidencesUseCase } from './get-company-environmental-evidences.usecase.js';
+import { groupCompanyEvidences } from '@modules/evidences/domain/company-environmental-evidences.dto.js';
+import { CacheNamespace } from '@shared/domain/dtos/providers/cache-key.dto.js';
+import { CacheProvider } from '@shared/domain/providers/cache.provider.js';
+import {
+  ENVIRONMENTAL_PROFILE_CACHE_TTL_SECONDS,
+  GetCompanyEnvironmentalEvidencesUseCase,
+} from './get-company-environmental-evidences.usecase.js';
 import { Test } from '@nestjs/testing';
 import { RequestScoreRecalculationUseCase } from '@modules/scoring/infra/usecases/request-score-recalculation.usecase.js';
 import { CompanyProfileRepository } from '@modules/companies/domain/dtos/repositories/company-profile.repository.js';
@@ -21,6 +27,10 @@ describe('UC07 fontes independentes', () => {
     },
     scores = {
       execute: vi.fn<RequestScoreRecalculationUseCase['execute']>(),
+    },
+    cache = {
+      get: vi.fn<CacheProvider['get']>(),
+      set: vi.fn<CacheProvider['set']>(),
     };
   const cnpj = buildCnpj();
   let useCase: GetCompanyEnvironmentalEvidencesUseCase;
@@ -30,6 +40,8 @@ describe('UC07 fontes independentes', () => {
     for (const mock of [ibama, cgu, ghg]) mock.execute.mockResolvedValue([]);
     list.execute.mockResolvedValue([storedEvidenceFactory.build({ cnpj })]);
     scores.execute.mockResolvedValue('CALCULATED');
+    cache.get.mockResolvedValue(undefined);
+    cache.set.mockResolvedValue(undefined);
     const module = await Test.createTestingModule({
       providers: [
         GetCompanyEnvironmentalEvidencesUseCase,
@@ -40,6 +52,7 @@ describe('UC07 fontes independentes', () => {
         { provide: ListCompanyEvidencesUseCase, useValue: list },
         { provide: RecordEvidenceCollectionUseCase, useValue: collection },
         { provide: RequestScoreRecalculationUseCase, useValue: scores },
+        { provide: CacheProvider, useValue: cache },
       ],
     }).compile();
     useCase = module.get(GetCompanyEnvironmentalEvidencesUseCase);
@@ -116,6 +129,73 @@ describe('UC07 fontes independentes', () => {
     });
   });
 
+  describe('retrato em cache, o mesmo do perfil completo (#334)', () => {
+    const key = {
+      namespace: CacheNamespace.COMPANY_EVIDENCES,
+      identifier: cnpj,
+    };
+
+    it('com o retrato em cache, devolve-o sem coletar, recalcular nem reler o banco', async () => {
+      const { categories } = groupCompanyEvidences(cnpj, [
+        storedEvidenceFactory.build({ cnpj }),
+      ]);
+      cache.get.mockResolvedValue(categories);
+
+      await expect(useCase.execute(cnpj)).resolves.toEqual({
+        cnpj,
+        categories,
+      });
+
+      expect(cache.get).toHaveBeenCalledExactlyOnceWith(key);
+      for (const source of [ibama, cgu, ghg])
+        expect(source.execute).not.toHaveBeenCalled();
+      expect(scores.execute).not.toHaveBeenCalled();
+      expect(list.execute).not.toHaveBeenCalled();
+      expect(cache.set).not.toHaveBeenCalled();
+    });
+
+    it('cache fora do formato conta como ausência: coleta normalmente', async () => {
+      cache.get.mockResolvedValue({ inesperado: true });
+
+      await useCase.execute(cnpj);
+
+      expect(ibama.execute).toHaveBeenCalledOnce();
+      expect(list.execute).toHaveBeenCalledOnce();
+    });
+
+    it('guarda o retrato que o índice já reflete (recálculo CALCULATED), pelo prazo do perfil', async () => {
+      const result = await useCase.execute(cnpj);
+
+      expect(cache.set).toHaveBeenCalledExactlyOnceWith(
+        key,
+        result.categories,
+        ENVIRONMENTAL_PROFILE_CACHE_TTL_SECONDS,
+      );
+    });
+
+    it.each([
+      ['recálculo fora do prazo', 'DEGRADED', true],
+      ['sem espera (API pública)', 'REQUESTED', false],
+    ] as const)(
+      'não guarda o retrato quando o índice pode não refleti-lo: %s',
+      async (_, outcome, wait) => {
+        scores.execute.mockResolvedValue(outcome);
+
+        await useCase.execute(cnpj, { wait });
+
+        expect(cache.set).not.toHaveBeenCalled();
+      },
+    );
+
+    it('CNPJ sem perfil cadastral responde 404 antes de consultar o cache', async () => {
+      profiles.findByCnpj.mockResolvedValue(null);
+
+      await expect(useCase.execute(cnpj)).rejects.toBeInstanceOf(
+        CompanyNotFoundException,
+      );
+      expect(cache.get).not.toHaveBeenCalled();
+    });
+  });
   it('inicia todas as fontes antes de esperar e rele o estado persistido', async () => {
     let resolve!: () => void;
     ibama.execute.mockImplementation(
