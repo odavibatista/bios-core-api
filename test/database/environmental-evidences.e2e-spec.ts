@@ -5,6 +5,8 @@ import { inject } from 'vitest';
 import type { Queue } from 'bullmq';
 import { CATALOG_SEEDERS } from '@app/database/catalog.seeders.js';
 import { GetCompanyEnvironmentalEvidencesUseCase } from '@modules/environmental-intelligence/infra/usecases/get-company-environmental-evidences.usecase.js';
+import { GetCompanyFullProfileUseCase } from '@modules/environmental-intelligence/infra/usecases/get-company-full-profile.usecase.js';
+import { RequestScoreRecalculationUseCase } from '@modules/scoring/infra/usecases/request-score-recalculation.usecase.js';
 import { RecordEvidenceCollectionUseCase } from '@modules/evidences/infra/usecases/record-evidence-collection.usecase.js';
 import type { CompanyEnvironmentalEvidencesResponse } from '@modules/evidences/domain/company-environmental-evidences.dto.js';
 import { QueueName } from '@shared/domain/dtos/providers/queue-job.dto.js';
@@ -327,6 +329,57 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       expect(calls).toHaveLength(count);
       expect(await queues[0].getCompletedCount()).toBe(1);
       expect(await queues[1].getCompletedCount()).toBe(1);
+    });
+    it('perfil completo e rota de evidencias mostram o mesmo retrato ate o recalculo (#334)', async () => {
+      const profile = app.get(GetCompanyFullProfileUseCase);
+      const recalculation = app.get(RequestScoreRecalculationUseCase, {
+        strict: false,
+      });
+      const before = await profile.execute(inventory.cnpj);
+      // Evidencia nova gravada fora da consulta (como uma ingestao em segundo plano),
+      // antes de o recalculo do indice apagar o retrato guardado.
+      const reference = faker.string.alphanumeric(12);
+      await record.execute({
+        cnpj: inventory.cnpj,
+        sourceSlug: 'IBAMA',
+        result: {
+          status: 'COLLECTED',
+          findings: [{ reference, url: 'https://dadosabertos.ibama.gov.br/' }],
+        },
+      });
+
+      const evidences = await run();
+
+      expect(evidences.categories).toEqual(before.evidences);
+      expect(JSON.stringify(evidences)).not.toContain(reference);
+
+      await recalculation.execute({ cnpj: inventory.cnpj, wait: true });
+      const [after, refreshed] = [
+        await run(),
+        await profile.execute(inventory.cnpj),
+      ];
+
+      expect(JSON.stringify(after)).toContain(reference);
+      expect(refreshed.evidences).toEqual(after.categories);
+    });
+    it('rota de evidencias consultada antes: o perfil mostra o mesmo retrato (#334)', async () => {
+      const evidences = await run();
+      const reference = faker.string.alphanumeric(12);
+      await record.execute({
+        cnpj: inventory.cnpj,
+        sourceSlug: 'IBAMA',
+        result: {
+          status: 'COLLECTED',
+          findings: [{ reference, url: 'https://dadosabertos.ibama.gov.br/' }],
+        },
+      });
+
+      const profile = await app
+        .get(GetCompanyFullProfileUseCase)
+        .execute(inventory.cnpj);
+
+      expect(profile.evidences).toEqual(evidences.categories);
+      expect(JSON.stringify(profile)).not.toContain(reference);
     });
     it('cache sanitizado recomp?e evidencias sem duplicar bruto ou alterar datas', async () => {
       const first = await run(),
