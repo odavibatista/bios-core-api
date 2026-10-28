@@ -654,6 +654,41 @@ de `USER`, `403 INSUFFICIENT_ROLE`; chave de API não autentica aqui.
 - **Sem interface no MVP para quem é administrador:** a promoção é pelo `account:promote`
   (seção "Carga inicial de um banco novo e primeiro administrador").
 
+### Honeypot: rotas isca e bloqueio do IP (RF21, NFSE07, #87/#88)
+
+Quem chama uma rota isca tem o acesso registrado e o IP **bloqueado sem prazo, em toda a API**.
+
+- **Rotas isca** (módulo `honeypot`, isolado): `GET /v2/companies?page=&page_size=` e
+  `GET /v2/companies/:cnpj`. Imitam uma versão nova da API pública que não existe (a real é
+  `/v1/companies/:cnpj`, sem listagem), ficam fora do OpenAPI e da documentação e são públicas:
+  só chega a elas quem varre caminhos.
+  - **Dados sintéticos**, nunca reais: empresas geradas pelo Faker (pt-BR, instância própria) com
+    CNPJ válido (`cnpjWithCheckDigits`), CNAE oficial, UF, município e índices; o mesmo CNPJ ou a
+    mesma página devolvem sempre o mesmo conteúdo. Não leem banco, cache nem fontes.
+  - **Baixo volume:** no máximo 10 por página; `page_size` maior é reduzido a 10.
+  - **Baixa disponibilidade proposital:** `HONEYPOT_FAILURE_RATE` das chamadas (padrão 0,25)
+    responde `503 COMPANY_DATA_UNAVAILABLE`, como a API real; as demais demoram até
+    `HONEYPOT_MAX_DELAY_MS` (padrão 2 s). Só nas iscas.
+- **`@Honeypot()`** (`security`): marca a rota como pública e isca e a tira do OpenAPI. Antes de a
+  isca responder, grava `honeypot_hits` (IP, caminho sem a query, método, user-agent, data) e o
+  bloqueio em `access_blocks` (`scope=IP`, `reason=HONEYPOT`, sem `blocked_until`), e espelha o IP
+  no conjunto `bios:blocked-ips` do Redis. Falha no registro não muda a resposta da isca. Um teste
+  impede o uso do decorator fora do módulo das iscas.
+- **Recusa em toda rota** (`BlockedIpMiddleware`, global): o IP bloqueado recebe `403
+  ACCESS_BLOCKED` em qualquer rota (real ou isca, pública ou não), antes do limite de requisições
+  e da autenticação. A consulta é ao Redis; com o Redis fora, ao banco; se nenhum responder, a
+  requisição segue (o honeypot não derruba as rotas reais, NFSE07). Na subida, o conjunto do Redis
+  é recarregado dos bloqueios sem prazo do banco. O bloqueio temporário de login (RF20) continua
+  valendo só no login.
+- **IP do cliente atrás de proxy** (`TRUST_PROXY`): `false` (padrão, sem proxy), o número de
+  proxies na frente da API ou a lista deles. **Em produção atrás de proxy, configure**: sem isto,
+  todo acesso pareceria vir do proxy. `true` é recusado, porque deixaria o cliente escrever o
+  próprio IP em `X-Forwarded-For` e fazer o honeypot bloquear o IP de outra pessoa; com o proxy
+  declarado, entradas forjadas à esquerda do cabeçalho são ignoradas.
+- **Isentos** (`HONEYPOT_EXEMPT_IPS`, IPs e faixas CIDR): nunca bloqueados (a chamada é registrada).
+  O padrão cobre loopback e redes internas, onde ficam o proxy e o monitoramento: um proxy mal
+  declarado não derruba a API inteira.
+
 ### Retenção de dados (índices TTL)
 
 Tokens, sessões, bloqueios e logs são removidos automaticamente pelo MongoDB após um prazo
