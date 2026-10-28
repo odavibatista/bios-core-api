@@ -162,30 +162,32 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
           .set('Authorization', `Bearer ${accessToken}`)
           .expect(200);
 
-        expect(
-          CompanyFullProfileResponseSchema.parse(publicResponse.body),
-        ).toMatchObject({
+        const publicBody = CompanyFullProfileResponseSchema.parse(
+          publicResponse.body,
+        );
+        const panelBody = CompanyFullProfileResponseSchema.parse(
+          panelResponse.body,
+        );
+
+        expect(publicBody).toMatchObject({
           cnpj: CNPJ,
           registration_status: 'ATIVA',
           evidences: expect.any(Array),
           ods_scores: expect.any(Array),
         });
-        const { provenance: publicProvenance, ...publicProfile } =
-          publicResponse.body;
-        const { provenance: panelProvenance, ...panelProfile } =
-          panelResponse.body;
+
+        const { provenance: publicProvenance, ...publicProfile } = publicBody;
+        const { provenance: panelProvenance, ...panelProfile } = panelBody;
 
         expect(publicProfile).toEqual(panelProfile);
         // Sem coleta aqui, as fontes sem registro são pendentes para quem não esperou; o
         // painel as dá por indisponíveis.
         expect(
-          publicProvenance.sources.every(
-            ({ origin }: { origin: string }) => origin === 'PENDING',
-          ),
+          publicProvenance.sources.every(({ origin }) => origin === 'PENDING'),
         ).toBe(true);
         expect(
           panelProvenance.sources.every(
-            ({ origin }: { origin: string }) => origin === 'UNAVAILABLE',
+            ({ origin }) => origin === 'UNAVAILABLE',
           ),
         ).toBe(true);
       });
