@@ -5,9 +5,11 @@ import { CacheProvider } from '@shared/domain/providers/cache.provider.js';
 import { buildCnpj } from '@test/factories/companies/company-profile.factory.js';
 import { ScoringNotConfiguredError } from '../../domain/dtos/errors/scoring-not-configured.error.js';
 import {
+  AGGREGATE_SECTOR_SCORES_JOB,
   RECALCULATE_SCORES_JOB,
   RECALCULATE_STALE_SCORES_JOB,
 } from '../../domain/ods-scoring-job.dto.js';
+import { AggregateSectorScoresUseCase } from '../usecases/aggregate-sector-scores.usecase.js';
 import { CalculateCompanyOdsScoresUseCase } from '../usecases/calculate-company-ods-scores.usecase.js';
 import { RecalculateStaleScoresUseCase } from '../usecases/recalculate-stale-scores.usecase.js';
 import { OdsScoringProcessor } from './ods-scoring.processor.js';
@@ -17,6 +19,9 @@ describe('OdsScoringProcessor', () => {
     execute: vi.fn<CalculateCompanyOdsScoresUseCase['execute']>(),
   };
   const stale = { execute: vi.fn<RecalculateStaleScoresUseCase['execute']>() };
+  const sectors = {
+    execute: vi.fn<AggregateSectorScoresUseCase['execute']>(),
+  };
   const cache = {
     delete: vi.fn<CacheProvider['delete']>(),
     invalidate: vi.fn<CacheProvider['invalidate']>(),
@@ -38,6 +43,7 @@ describe('OdsScoringProcessor', () => {
         { provide: CalculateCompanyOdsScoresUseCase, useValue: calculate },
         { provide: RecalculateStaleScoresUseCase, useValue: stale },
         { provide: CacheProvider, useValue: cache },
+        { provide: AggregateSectorScoresUseCase, useValue: sectors },
       ],
     }).compile();
 
@@ -157,6 +163,37 @@ describe('OdsScoringProcessor', () => {
     });
   });
 
+  describe('aggregate-sector-scores (#89)', () => {
+    it('sem carga, grava os agregados do mês corrente', async () => {
+      const result = {
+        windowStart: '2026-10-01T00:00:00.000Z',
+        sectors: 4,
+      };
+      sectors.execute.mockResolvedValue(result);
+
+      await expect(
+        processor.process(job(AGGREGATE_SECTOR_SCORES_JOB, undefined)),
+      ).resolves.toEqual(result);
+      expect(sectors.execute).toHaveBeenCalledWith(expect.any(Date));
+      expect(calculate.execute).not.toHaveBeenCalled();
+    });
+
+    it('carga qualquer é fora do contrato: irrecuperável', async () => {
+      await expect(
+        processor.process(job(AGGREGATE_SECTOR_SCORES_JOB, { cnpj })),
+      ).rejects.toBeInstanceOf(UnrecoverableError);
+      expect(sectors.execute).not.toHaveBeenCalled();
+    });
+
+    it('falha da agregação propaga, para o BullMQ repetir', async () => {
+      sectors.execute.mockRejectedValue(new Error('banco fora'));
+
+      await expect(
+        processor.process(job(AGGREGATE_SECTOR_SCORES_JOB, {})),
+      ).rejects.toThrow('banco fora');
+    });
+  });
+
   it('job de nome desconhecido é irrecuperável', async () => {
     await expect(
       processor.process(job('outro-job', { cnpj })),
@@ -164,5 +201,6 @@ describe('OdsScoringProcessor', () => {
 
     expect(calculate.execute).not.toHaveBeenCalled();
     expect(stale.execute).not.toHaveBeenCalled();
+    expect(sectors.execute).not.toHaveBeenCalled();
   });
 });

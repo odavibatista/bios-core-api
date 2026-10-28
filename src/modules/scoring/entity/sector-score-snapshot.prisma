@@ -21,11 +21,13 @@ model SectorScoreSnapshot {
   /// Fim da janela de tempo.
   window_end DateTime
 
-  /// Média do índice das empresas do setor com índice não nulo.
+  /// Média do índice das empresas do setor com índice não nulo; nula quando elas são menos
+  /// que SECTOR_SNAPSHOT_MIN_COMPANIES (a média exporia o índice de uma empresa, IA05).
   average_score Float?
 
-  /// Média do nível de confiança das empresas do setor.
-  average_confidence Float
+  /// Média do nível de confiança das empresas do setor; nula quando elas são menos que
+  /// SECTOR_SNAPSHOT_MIN_COMPANIES.
+  average_confidence Float?
 
   /// Empresas do setor com registro em `company_ods_scores` na janela.
   company_count Int

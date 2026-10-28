@@ -6,6 +6,9 @@ import { CacheProvider } from '@shared/domain/providers/cache.provider.js';
 import { parseCnpj } from '@shared/domain/value-objects/cnpj.js';
 import { ScoringNotConfiguredError } from '../../domain/dtos/errors/scoring-not-configured.error.js';
 import {
+  AGGREGATE_SECTOR_SCORES_JOB,
+  AggregateSectorScoresJobSchema,
+  type AggregateSectorScoresJobResult,
   RECALCULATE_SCORES_JOB,
   RECALCULATE_STALE_SCORES_JOB,
   RecalculateScoresJobSchema,
@@ -13,6 +16,7 @@ import {
   type RecalculateScoresJobResult,
   type RecalculateStaleScoresJobResult,
 } from '../../domain/ods-scoring-job.dto.js';
+import { AggregateSectorScoresUseCase } from '../usecases/aggregate-sector-scores.usecase.js';
 import { CalculateCompanyOdsScoresUseCase } from '../usecases/calculate-company-ods-scores.usecase.js';
 import { RecalculateStaleScoresUseCase } from '../usecases/recalculate-stale-scores.usecase.js';
 
@@ -45,14 +49,22 @@ export class OdsScoringProcessor extends WorkerHost {
     private readonly calculate: CalculateCompanyOdsScoresUseCase,
     private readonly stale: RecalculateStaleScoresUseCase,
     private readonly cache: CacheProvider,
+    private readonly sectors: AggregateSectorScoresUseCase,
   ) {
     super();
   }
 
   async process(
     job: Job<unknown>,
-  ): Promise<RecalculateScoresJobResult | RecalculateStaleScoresJobResult> {
+  ): Promise<
+    | RecalculateScoresJobResult
+    | RecalculateStaleScoresJobResult
+    | AggregateSectorScoresJobResult
+  > {
     if (job.name === RECALCULATE_STALE_SCORES_JOB) return this.sweep(job);
+    if (job.name === AGGREGATE_SECTOR_SCORES_JOB) {
+      return this.aggregateSectors(job);
+    }
 
     if (job.name !== RECALCULATE_SCORES_JOB) {
       throw new UnrecoverableError(`Job desconhecido: "${job.name}".`);
@@ -93,5 +105,18 @@ export class OdsScoringProcessor extends WorkerHost {
     }
 
     return this.stale.execute();
+  }
+
+  /** Agregados setoriais do mês corrente (#89); o agendador publica sem carga. */
+  private aggregateSectors(
+    job: Job<unknown>,
+  ): Promise<AggregateSectorScoresJobResult> {
+    if (!AggregateSectorScoresJobSchema.safeParse(job.data ?? {}).success) {
+      throw new UnrecoverableError(
+        'Job de agregados setoriais fora do contrato.',
+      );
+    }
+
+    return this.sectors.execute(new Date());
   }
 }
