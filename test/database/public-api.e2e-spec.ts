@@ -153,7 +153,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
     });
 
     describe('com chave válida', () => {
-      it('200: devolve o perfil completo, igual ao da consulta do painel', async () => {
+      it('200: devolve o perfil completo, igual ao do painel, exceto pela proveniência (a pública não espera as fontes, #333)', async () => {
         const { key } = await createKey();
 
         const publicResponse = await getProfile(key).expect(200);
@@ -162,15 +162,34 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
           .set('Authorization', `Bearer ${accessToken}`)
           .expect(200);
 
-        expect(
-          CompanyFullProfileResponseSchema.parse(publicResponse.body),
-        ).toMatchObject({
+        const publicBody = CompanyFullProfileResponseSchema.parse(
+          publicResponse.body,
+        );
+        const panelBody = CompanyFullProfileResponseSchema.parse(
+          panelResponse.body,
+        );
+
+        expect(publicBody).toMatchObject({
           cnpj: CNPJ,
           registration_status: 'ATIVA',
           evidences: expect.any(Array),
           ods_scores: expect.any(Array),
         });
-        expect(publicResponse.body).toEqual(panelResponse.body);
+
+        const { provenance: publicProvenance, ...publicProfile } = publicBody;
+        const { provenance: panelProvenance, ...panelProfile } = panelBody;
+
+        expect(publicProfile).toEqual(panelProfile);
+        // Sem coleta aqui, as fontes sem registro são pendentes para quem não esperou; o
+        // painel as dá por indisponíveis.
+        expect(
+          publicProvenance.sources.every(({ origin }) => origin === 'PENDING'),
+        ).toBe(true);
+        expect(
+          panelProvenance.sources.every(
+            ({ origin }) => origin === 'UNAVAILABLE',
+          ),
+        ).toBe(true);
       });
 
       it('informa a cota nos cabeçalhos de limite', async () => {

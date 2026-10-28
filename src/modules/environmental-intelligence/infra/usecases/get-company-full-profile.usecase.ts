@@ -37,6 +37,23 @@ import { GetCompanyEnvironmentalEvidencesUseCase } from './get-company-environme
  */
 export const ENVIRONMENTAL_PROFILE_CACHE_TTL_SECONDS = 300;
 
+/**
+ * Por quanto tempo, no modo sem espera, um `UNKNOWN` recém-gravado ainda é tratado como
+ * atualização em andamento (`PENDING`) e não como fonte indisponível (`UNAVAILABLE`): é o
+ * marcador que a consulta deixa antes de publicar o job, e o job pode estar na fila ou rodando.
+ */
+export const PENDING_REFRESH_WINDOW_MS = 120_000;
+
+/** Opções da composição do perfil completo. */
+export interface FullProfileOptions {
+  /**
+   * Espera as coletas das fontes e o recálculo dos índices, no prazo da fila (padrão: o
+   * painel). Falso (API pública, #333): serve o que está guardado, publica as atualizações
+   * que faltam e marca o que ainda está pendente, sem esperar nenhuma fonte externa.
+   */
+  waitForCollection?: boolean;
+}
+
 const isCalculated = ({ calculation_status }: CompanyOdsScore): boolean =>
   calculation_status === 'CALCULATED';
 
@@ -75,6 +92,7 @@ function provenance(
   startedAt: number,
   collectionPending: boolean,
   scoresPending: boolean,
+  background = false,
 ) {
   const evidences = categories.flatMap(({ evidences }) => evidences);
   const sources = ENVIRONMENTAL_SOURCE_SLUGS.map((source_slug) => {
@@ -90,11 +108,17 @@ function provenance(
       (latest, row) => Math.max(latest, Date.parse(row.collected_at)),
       0,
     );
+    const refreshing =
+      background && Date.now() - newestCollection <= PENDING_REFRESH_WINDOW_MS;
     const origin =
-      state === EvidenceState.UNKNOWN || (!state && !collectionPending)
-        ? 'UNAVAILABLE'
-        : !state && collectionPending
+      state === EvidenceState.UNKNOWN
+        ? refreshing
           ? 'PENDING'
+          : 'UNAVAILABLE'
+        : !state
+          ? collectionPending || background
+            ? 'PENDING'
+            : 'UNAVAILABLE'
           : newestCollection >= startedAt
             ? 'COLLECTION'
             : 'PERSISTED';
@@ -150,7 +174,11 @@ export class GetCompanyFullProfileUseCase extends UseCase<
     super();
   }
 
-  override async execute(input: string): Promise<CompanyFullProfileResponse> {
+  override async execute(
+    input: string,
+    { waitForCollection = true }: FullProfileOptions = {},
+  ): Promise<CompanyFullProfileResponse> {
+    const background = !waitForCollection;
     const startedAt = Date.now();
     const budget = this.config.get('COMPANY_PROFILE_REQUEST_TIMEOUT_MS', {
       infer: true,
@@ -196,7 +224,7 @@ export class GetCompanyFullProfileUseCase extends UseCase<
     }
 
     const collected = await within(
-      this.evidences.execute(profile.cnpj),
+      this.evidences.execute(profile.cnpj, { wait: waitForCollection }),
       deadline - Date.now() - 500,
     );
     const local =
@@ -219,8 +247,25 @@ export class GetCompanyFullProfileUseCase extends UseCase<
     );
     const odsScores = readScores === TIMEOUT ? [] : readScores;
     const collectionPending = collected === TIMEOUT || local === TIMEOUT;
+    const newestEvidence = categories
+      .flatMap(({ evidences }) => evidences)
+      .reduce(
+        (latest, { collected_at }) =>
+          Math.max(latest, Date.parse(collected_at)),
+        0,
+      );
+    // Sem espera, o índice lido pode ser de antes da última coleta: enquanto o recálculo
+    // pedido não termina, ele vale como pendente, e não como o retrato atual das evidências.
+    const staleScores =
+      background &&
+      odsScores.some(
+        ({ calculated_at }) =>
+          calculated_at !== null && Date.parse(calculated_at) < newestEvidence,
+      );
     const scoresPending =
-      readScores === TIMEOUT || odsScores.some((score) => !isCalculated(score));
+      readScores === TIMEOUT ||
+      staleScores ||
+      odsScores.some((score) => !isCalculated(score));
     const pending = collectionPending || scoresPending;
     const full = CompanyFullProfileResponseSchema.parse({
       ...profile,
@@ -231,6 +276,7 @@ export class GetCompanyFullProfileUseCase extends UseCase<
         startedAt,
         collectionPending,
         scoresPending,
+        background,
       ),
     });
 

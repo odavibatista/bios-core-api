@@ -33,7 +33,7 @@ describe('fluxo GHG isolado', () => {
     collection = { execute: vi.fn() },
     list = { execute: vi.fn() },
     config = { execute: vi.fn() },
-    queue = { enqueueAndWait: vi.fn() },
+    queue = { enqueueAndWait: vi.fn(), enqueue: vi.fn() },
     syncOrganizations = { execute: vi.fn() };
   const inventory = ghgInventoryFactory.build();
   let collect: CollectGhgInventoryUseCase,
@@ -266,6 +266,56 @@ describe('fluxo GHG isolado', () => {
     queue.enqueueAndWait.mockRejectedValue(error);
     await expect(get.execute(inventory.cnpj)).resolves.toEqual([]);
     expect(collection.execute).toHaveBeenCalledTimes(1);
+  });
+  describe('sem espera (API pública, #333)', () => {
+    it('marca a fonte pendente, publica o job sem esperá-lo e devolve o guardado', async () => {
+      queue.enqueue.mockImplementation(() => {
+        expect(collection.execute).toHaveBeenCalledTimes(1);
+      });
+
+      await expect(
+        get.execute(inventory.cnpj, { wait: false }),
+      ).resolves.toEqual([]);
+
+      expect(queue.enqueue).toHaveBeenCalledExactlyOnceWith(
+        QueueName.GHG_INVENTORY,
+        FETCH_GHG_INVENTORY_JOB,
+        { cnpj: inventory.cnpj },
+        { jobId: expect.stringContaining(inventory.cnpj) },
+      );
+      expect(queue.enqueueAndWait).not.toHaveBeenCalled();
+    });
+
+    it('com a coleta válida, não publica nada', async () => {
+      list.execute.mockResolvedValue([local()]);
+
+      await get.execute(inventory.cnpj, { wait: false });
+
+      expect(queue.enqueue).not.toHaveBeenCalled();
+      expect(queue.enqueueAndWait).not.toHaveBeenCalled();
+    });
+
+    it('fonte desabilitada no catálogo: não publica job', async () => {
+      config.execute.mockResolvedValue({ isEnabled: false });
+
+      await get.execute(inventory.cnpj, { wait: false });
+
+      expect(queue.enqueue).not.toHaveBeenCalled();
+    });
+
+    it('fila fora do ar degrada e erro inesperado não é mascarado', async () => {
+      queue.enqueue.mockRejectedValueOnce(
+        new DependencyUnavailableException('redis'),
+      );
+      await expect(
+        get.execute(inventory.cnpj, { wait: false }),
+      ).resolves.toEqual([]);
+
+      queue.enqueue.mockRejectedValueOnce(new Error('bug'));
+      await expect(
+        get.execute(inventory.cnpj, { wait: false }),
+      ).rejects.toThrow('bug');
+    });
   });
   it('erros inesperados nao sao mascarados', async () => {
     queue.enqueueAndWait.mockRejectedValue(new Error('bug'));
