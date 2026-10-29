@@ -1,5 +1,7 @@
 # 17. Testes
 
+🇧🇷 **Português** · 🇺🇸 [English](en/17-Tests.md)
+
 [Índice da documentação](README.md) · ← [16. Chaves de API e API pública](16-Chaves-de-API.md) · [18. Qualidade e integração contínua](18-Qualidade-e-CI.md) →
 
 > Cobertura, testes e2e em paralelo e dados de teste.

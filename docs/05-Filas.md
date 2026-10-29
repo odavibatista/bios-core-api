@@ -1,5 +1,7 @@
 # 05. Filas (BullMQ)
 
+🇧🇷 **Português** · 🇺🇸 [English](en/05-Queues.md)
+
 [Índice da documentação](README.md) · ← [04. Banco de dados e carga inicial](04-Banco-de-Dados.md) · [06. Autenticação e contas](06-Autenticação-e-Contas.md) →
 
 > Filas, consumidores, agendamentos e políticas de repetição.

@@ -1,5 +1,7 @@
 # Documentação técnica do bios-core-api
 
+🇧🇷 **Português** · 🇺🇸 [English](en/README.md)
+
 [← Voltar ao README do projeto](../README.md)
 
 Como a API funciona por dentro: cada decisão de implementação, o motivo dela e onde ela está no código.

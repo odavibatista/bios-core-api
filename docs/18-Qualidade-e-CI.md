@@ -1,5 +1,7 @@
 # 18. Qualidade e integração contínua
 
+🇧🇷 **Português** · 🇺🇸 [English](en/18-Quality-and-CI.md)
+
 [Índice da documentação](README.md) · ← [17. Testes](17-Testes.md)
 
 > Hooks locais, pipeline do CI e fluxo de contribuição.
