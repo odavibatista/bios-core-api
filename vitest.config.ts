@@ -38,8 +38,12 @@ export default defineConfig({
     clearMocks: true,
     restoreMocks: true,
     root: './',
-    // Semente do Faker por arquivo, exibida quando um teste falha.
-    setupFiles: ['test/setup/faker.setup.ts'],
+    setupFiles: [
+      // Semente do Faker por arquivo, exibida quando um teste falha.
+      'test/setup/faker.setup.ts',
+      // Mensagens de validação em português, como na aplicação.
+      'test/setup/validation-messages.setup.ts',
+    ],
     include: ['src/**/*.spec.ts'],
     // Arquivos cuja mudança roda a suíte inteira, mesmo quando só os testes afetados são
     // pedidos (`vitest related`, no pre-push): o grafo de imports não os enxerga. Os três
