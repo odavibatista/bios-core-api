@@ -38,6 +38,29 @@ describe('PrismaAccessBlockRepository', () => {
     repository = moduleRef.get(PrismaAccessBlockRepository);
   });
 
+  describe('findPermanentlyBlockedIps (honeypot, #87)', () => {
+    it('lê os bloqueios de IP sem prazo (nulo ou ausente), sem repetir IP', async () => {
+      findMany.mockResolvedValue([
+        { ip: '203.0.113.7' },
+        { ip: '203.0.113.7' },
+        { ip: '198.51.100.1' },
+        { ip: null },
+      ]);
+
+      await expect(repository.findPermanentlyBlockedIps()).resolves.toEqual([
+        '203.0.113.7',
+        '198.51.100.1',
+      ]);
+      expect(findMany).toHaveBeenCalledWith({
+        where: {
+          scope: AccessBlockScope.IP,
+          OR: [{ blocked_until: null }, { blocked_until: { isSet: false } }],
+        },
+        select: { ip: true },
+      });
+    });
+  });
+
   describe('findActive', () => {
     it('não consulta o banco sem alvos', async () => {
       await expect(repository.findActive([], new Date())).resolves.toBeNull();
