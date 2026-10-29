@@ -160,4 +160,14 @@ export class PrismaSectorScoreSnapshotRepository
       rulesVersion: row.rules_version,
     }));
   }
+
+  async listDivisions(): Promise<string[]> {
+    const rows = await this.prisma.sectorScoreSnapshot.findMany({
+      distinct: ['cnae_division'],
+      select: { cnae_division: true },
+      orderBy: { cnae_division: 'asc' },
+    });
+
+    return rows.map(({ cnae_division }) => cnae_division);
+  }
 }

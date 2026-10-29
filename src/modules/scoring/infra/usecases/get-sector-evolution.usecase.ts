@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { UseCase } from '@shared/domain/protocols/use-case.protocol.js';
+import { cnaeDivisionDescription } from '../../domain/cnae-divisions.js';
 import { OdsNotAvailableException } from '../../domain/dtos/errors/ods-not-available.errors.js';
 import { OdsScoreRepository } from '../../domain/dtos/repositories/ods-score.repository.js';
 import { SectorScoreSnapshotRepository } from '../../domain/dtos/repositories/sector-score-snapshot.repository.js';
@@ -50,6 +51,8 @@ export class GetSectorEvolutionUseCase extends UseCase<
 
     return {
       cnae_division: cnaeDivision,
+      // A rota só aceita divisão da CNAE 2.3; o vazio cobre quem chama sem passar por ela.
+      cnae_division_description: cnaeDivisionDescription(cnaeDivision) ?? '',
       ods_number: odsNumber,
       history_status:
         windows.length >= MINIMUM_EVOLUTION_WINDOWS

@@ -45,4 +45,7 @@ export abstract class SectorScoreSnapshotRepository {
     odsId: string,
     cnaeDivision: string,
   ): Promise<SectorScoreSnapshot[]>;
+
+  /** Divisões CNAE com ao menos um agregado gravado, em ordem crescente. */
+  abstract listDivisions(): Promise<string[]>;
 }

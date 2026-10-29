@@ -19,6 +19,7 @@ import { SectorScoreSnapshotRepository } from '../../domain/dtos/repositories/se
 import { PrismaSectorScoreSnapshotRepository } from '../db/repositories/prisma-sector-score-snapshot.repository.js';
 import { AggregateSectorScoresUseCase } from '../usecases/aggregate-sector-scores.usecase.js';
 import { GetSectorEvolutionUseCase } from '../usecases/get-sector-evolution.usecase.js';
+import { ListSectorsUseCase } from '../usecases/list-sectors.usecase.js';
 
 /**
  * ODS de referência, índices de aderência e confiança por empresa e ODS,
@@ -51,6 +52,7 @@ import { GetSectorEvolutionUseCase } from '../usecases/get-sector-evolution.usec
     /* Evolução setorial (#89, #90) */
     AggregateSectorScoresUseCase,
     GetSectorEvolutionUseCase,
+    ListSectorsUseCase,
   ],
   exports: [
     CalculateCompanyOdsScoresUseCase,
