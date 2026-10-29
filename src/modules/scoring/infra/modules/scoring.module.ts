@@ -14,6 +14,11 @@ import { ListOdsUseCase } from '../usecases/list-ods.usecase.js';
 import { EnsureActiveOdsUseCase } from '../usecases/ensure-active-ods.usecase.js';
 import { OdsController } from '../../http/controllers/ods.controller.js';
 import { ScoreExplanationController } from '../../http/controllers/score-explanation.controller.js';
+import { SectorsController } from '../../http/controllers/sectors.controller.js';
+import { SectorScoreSnapshotRepository } from '../../domain/dtos/repositories/sector-score-snapshot.repository.js';
+import { PrismaSectorScoreSnapshotRepository } from '../db/repositories/prisma-sector-score-snapshot.repository.js';
+import { AggregateSectorScoresUseCase } from '../usecases/aggregate-sector-scores.usecase.js';
+import { GetSectorEvolutionUseCase } from '../usecases/get-sector-evolution.usecase.js';
 
 /**
  * ODS de referência, índices de aderência e confiança por empresa e ODS,
@@ -23,9 +28,13 @@ import { ScoreExplanationController } from '../../http/controllers/score-explana
  */
 @Module({
   imports: [EvidencesModule],
-  controllers: [ScoreExplanationController, OdsController],
+  controllers: [ScoreExplanationController, OdsController, SectorsController],
   providers: [
     { provide: OdsScoreRepository, useClass: PrismaOdsScoreRepository },
+    {
+      provide: SectorScoreSnapshotRepository,
+      useClass: PrismaSectorScoreSnapshotRepository,
+    },
     CalculateCompanyOdsScoresUseCase,
     GetScoreExplanationUseCase,
     GetCompanyOdsScoresUseCase,
@@ -38,6 +47,10 @@ import { ScoreExplanationController } from '../../http/controllers/score-explana
     RequestScoreRecalculationBatchUseCase,
     RecalculateStaleScoresUseCase,
     OdsScoringProcessor,
+
+    /* Evolução setorial (#89, #90) */
+    AggregateSectorScoresUseCase,
+    GetSectorEvolutionUseCase,
   ],
   exports: [
     CalculateCompanyOdsScoresUseCase,

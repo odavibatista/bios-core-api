@@ -67,6 +67,16 @@ export const QUEUE_SCHEDULES: readonly QueueSchedule[] = [
     cron: '30 5 * * *',
     retry: { attempts: 3, backoffMs: 60_000 },
   },
+  {
+    // Agregados setoriais do mês corrente (RF30, #89): depois da varredura de regras, para
+    // agregar índices da mesma versão. Reexecutar no mês sobrescreve o retrato dele.
+    queue: QueueName.ODS_SCORING,
+    id: 'sector-score-snapshots',
+    jobName: 'aggregate-sector-scores',
+    cron: '0 6 * * *',
+    cronSetting: 'SECTOR_SNAPSHOT_CRON',
+    retry: { attempts: 3, backoffMs: 60_000 },
+  },
 ];
 
 /**
