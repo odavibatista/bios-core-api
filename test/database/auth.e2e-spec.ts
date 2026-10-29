@@ -15,7 +15,10 @@ import { Queue } from 'bullmq';
 import request from 'supertest';
 import { inject } from 'vitest';
 import { buildPassword } from '../factories/shared/password.factory.js';
-import { createDatabaseTestingApp } from '../support/database-testing-app.js';
+import {
+  createDatabaseTestingApp,
+  waitForEmailQueue,
+} from '../support/database-testing-app.js';
 import { faker } from '../support/faker.js';
 import { createTestAccount } from '../support/test-account.js';
 import { resetThrottleCounters } from '../support/throttle.js';
@@ -71,6 +74,8 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
     });
 
     afterEach(async () => {
+      // Um aviso ainda na fila chegaria ao dublê durante o teste seguinte.
+      await waitForEmailQueue(app);
       mailProvider.sent.length = 0;
       await prisma.reset([
         'users',
@@ -428,6 +433,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         const blocks = await prisma.accessBlock.findMany();
         expect(blocks).toHaveLength(1);
         expect(blocks[0].scope).toBe(AccessBlockScope.IP);
+        await waitForEmailQueue(app);
         expect(mailProvider.sent).toHaveLength(0);
       });
 
