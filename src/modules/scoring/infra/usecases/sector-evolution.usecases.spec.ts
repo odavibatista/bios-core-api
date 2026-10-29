@@ -10,6 +10,7 @@ import type {
 import { ODS_SCORE_RULES_VERSION } from '../../domain/ods-score-rules.js';
 import { AggregateSectorScoresUseCase } from './aggregate-sector-scores.usecase.js';
 import { GetSectorEvolutionUseCase } from './get-sector-evolution.usecase.js';
+import { ListSectorsUseCase } from './list-sectors.usecase.js';
 
 describe('evolução setorial: casos de uso (#89, #90)', () => {
   const snapshots = {
@@ -17,6 +18,7 @@ describe('evolução setorial: casos de uso (#89, #90)', () => {
       vi.fn<SectorScoreSnapshotRepository['aggregateCurrentScores']>(),
     replaceWindow: vi.fn<SectorScoreSnapshotRepository['replaceWindow']>(),
     listEvolution: vi.fn<SectorScoreSnapshotRepository['listEvolution']>(),
+    listDivisions: vi.fn<SectorScoreSnapshotRepository['listDivisions']>(),
   };
   const odsId = faker.database.mongodbObjectId();
 
@@ -149,6 +151,8 @@ describe('evolução setorial: casos de uso (#89, #90)', () => {
       expect(snapshots.listEvolution).toHaveBeenCalledWith(odsId, '62');
       expect(evolution).toEqual({
         cnae_division: '62',
+        cnae_division_description:
+          'ATIVIDADES DOS SERVIÇOS DE TECNOLOGIA DA INFORMAÇÃO',
         ods_number: 15,
         history_status: 'AVAILABLE',
         windows: [
@@ -177,6 +181,14 @@ describe('evolução setorial: casos de uso (#89, #90)', () => {
       },
     );
 
+    it('divisão fora da CNAE 2.3 (só chamando sem a rota): descrição vazia', async () => {
+      snapshots.listEvolution.mockResolvedValue([]);
+
+      await expect(
+        useCase.execute({ cnaeDivision: '04', odsNumber: 15 }),
+      ).resolves.toMatchObject({ cnae_division_description: '' });
+    });
+
     it('ODS que o BIOS não calcula: 422 com os válidos, sem consultar os agregados', async () => {
       const error = await useCase
         .execute({ cnaeDivision: '62', odsNumber: 7 })
@@ -185,6 +197,41 @@ describe('evolução setorial: casos de uso (#89, #90)', () => {
       expect(error).toBeInstanceOf(OdsNotAvailableException);
       expect(error).toMatchObject({ details: { ods: 7, valid_ods: [13, 15] } });
       expect(snapshots.listEvolution).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('ListSectorsUseCase', () => {
+    const useCase = new ListSectorsUseCase(snapshots);
+
+    it('lista as divisões com agregados, com a descrição oficial, na ordem do repositório', async () => {
+      snapshots.listDivisions.mockResolvedValue(['01', '62']);
+
+      await expect(useCase.execute()).resolves.toEqual({
+        data: [
+          {
+            cnae_division: '01',
+            description: 'AGRICULTURA, PECUÁRIA E SERVIÇOS RELACIONADOS',
+          },
+          {
+            cnae_division: '62',
+            description: 'ATIVIDADES DOS SERVIÇOS DE TECNOLOGIA DA INFORMAÇÃO',
+          },
+        ],
+      });
+    });
+
+    it('divisão gravada que não existe na CNAE 2.3 fica de fora', async () => {
+      snapshots.listDivisions.mockResolvedValue(['04', '47', '98']);
+
+      const { data } = await useCase.execute();
+
+      expect(data.map(({ cnae_division }) => cnae_division)).toEqual(['47']);
+    });
+
+    it('sem agregados, lista vazia', async () => {
+      snapshots.listDivisions.mockResolvedValue([]);
+
+      await expect(useCase.execute()).resolves.toEqual({ data: [] });
     });
   });
 });
