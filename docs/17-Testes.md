@@ -60,6 +60,15 @@ descarte: `seed` e `reset` só executam com `NODE_ENV=test` **e** em banco com s
 que é o de uso geral, e recusa limpar um banco que contenha chave fora dos prefixos do projeto
 (`bios:`, `bull:`) — o que protege de outro Redis ocupando a porta 6379 na mesma máquina.
 
+Um job ainda na fila quando um teste termina seria processado durante o seguinte. Por isso as
+suítes esperam a fila esvaziar **antes** da limpeza (`test/support/database-testing-app.ts`):
+
+- `waitForEmailQueue(app)`: nas suítes que registram os e-mails num dublê do transporte. Sem a
+  espera, o aviso de um teste aparecia no dublê do seguinte; e, com `email_dispatch_logs` já
+  apagado, a tentativa falhava e o BullMQ reenviava o mesmo e-mail mais tarde. Também vem antes
+  de afirmar que **nenhum** e-mail saiu, já que o envio é assíncrono;
+- `waitForScoringQueue(app)`: antes de limpar `company_ods_scores`, e sempre no `app.close()`.
+
 ### E2E em paralelo (#368)
 
 Os arquivos e2e rodam em paralelo, e cada worker do Vitest tem a própria infraestrutura. Dentro
@@ -139,6 +148,10 @@ testada, como os ODS de referência, os padrões da configuração ou as mensage
 - **Factories**: registros e objetos de domínio vêm de `test/factories/<módulo>/`, criados
   com `defineFactory`. `build(overrides)` gera um objeto completo e fixa só os campos do
   cenário; `buildMany(n, overrides)` gera vários.
+- **Respeitar os limites do schema**: o valor sorteado precisa caber em qualquer semente. Um
+  exemplo: `faker.lorem.word()` às vezes devolve só `"a"`, abaixo do mínimo de 2 caracteres
+  do nome de uma chave de API, e o teste falhava em cerca de uma execução a cada mil. Para
+  esse campo, `faker.lorem.words(2)`.
 - **Semente reproduzível**: cada arquivo de teste recebe uma semente aleatória
   (`test/setup/faker.setup.ts`). Quando um teste falha, a semente aparece na saída; para
   repetir exatamente os mesmos dados:
