@@ -1,5 +1,7 @@
 # 07. Segurança
 
+🇧🇷 **Português** · 🇺🇸 [English](en/07-Security.md)
+
 [Índice da documentação](README.md) · ← [06. Autenticação e contas](06-Autenticação-e-Contas.md) · [08. Cache de consultas](08-Cache.md) →
 
 > Limite de requisições, criptografia de dados sensíveis e honeypot.

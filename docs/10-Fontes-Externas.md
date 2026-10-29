@@ -1,5 +1,7 @@
 # 10. Fontes externas (adapters)
 
+🇧🇷 **Português** · 🇺🇸 [English](en/10-External-Sources.md)
+
 [Índice da documentação](README.md) · ← [09. E-mails transacionais](09-E-mails.md) · [11. Evidências](11-Evidências.md) →
 
 > Adapters das fontes públicas, cadeia de fallback cadastral e descrição dos CNAEs.
@@ -160,7 +162,7 @@ não trazer nenhuma); o IBGE é a fonte da taxonomia.
 Um adapter novo declara o `slug` da fonte (que o seeder cria), chama
 `RequestDataSourceUseCase.execute({ slug, segments, cnpj, context })` e passa a resposta por
 `toLookupResult` com o seu *parser*. Fontes que não se consultam item a item, como o dump
-diário do IBAMA, definem o próprio fluxo de ingestão (próxima seção).
+diário do IBAMA, definem o próprio fluxo de ingestão (ver [IBAMA](12-IBAMA.md)).
 
 ---
 

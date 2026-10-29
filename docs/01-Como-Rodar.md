@@ -1,5 +1,7 @@
 # 01. Como rodar
 
+🇧🇷 **Português** · 🇺🇸 [English](en/01-Getting-Started.md)
+
 [Índice da documentação](README.md) · [02. Arquitetura e convenções](02-Arquitetura.md) →
 
 > Pré-requisitos, primeiros passos e scripts do projeto.

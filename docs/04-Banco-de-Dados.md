@@ -1,5 +1,7 @@
 # 04. Banco de dados e carga inicial
 
+🇧🇷 **Português** · 🇺🇸 [English](en/04-Database.md)
+
 [Índice da documentação](README.md) · ← [03. Contrato da API (OpenAPI e CORS)](03-Contrato-da-API.md) · [05. Filas (BullMQ)](05-Filas.md) →
 
 > Prisma sobre MongoDB, retenção por índices TTL e a carga dos catálogos num banco novo.
