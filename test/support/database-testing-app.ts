@@ -64,16 +64,32 @@ function drainScoringQueueBeforeClose(app: INestApplication): void {
  * recálculo ainda na fila gravaria o índice depois dela, e o arquivo seguinte do mesmo
  * worker (que divide o banco) encontraria um índice que não criou.
  */
-export async function waitForScoringQueue(
+export function waitForScoringQueue(app: INestApplication): Promise<void> {
+  return waitForQueue(app, QueueName.ODS_SCORING);
+}
+
+/**
+ * Espera a fila de e-mails esvaziar (até 10 s).
+ *
+ * Quem limpa o dublê do transporte e `email_dispatch_logs` entre os testes precisa chamar
+ * isto **antes** da limpeza: um aviso ainda na fila seria entregue durante o teste
+ * seguinte, que o encontraria no dublê, e o registro do envio, já apagado, faria a
+ * tentativa falhar e o BullMQ reenviar o mesmo e-mail mais tarde.
+ */
+export function waitForEmailQueue(app: INestApplication): Promise<void> {
+  return waitForQueue(app, QueueName.EMAIL_DISPATCH);
+}
+
+/** Espera a fila `name` ficar sem jobs pendentes, em andamento ou adiados (até 10 s). */
+async function waitForQueue(
   app: INestApplication,
+  name: QueueName,
 ): Promise<void> {
-  const scoring = app
-    .get<QueueRegistry>(QUEUE_REGISTRY)
-    .get(QueueName.ODS_SCORING);
+  const queue = app.get<QueueRegistry>(QUEUE_REGISTRY).get(name);
   const deadline = Date.now() + 10_000;
 
-  while (scoring && Date.now() < deadline) {
-    const { waiting, active, delayed } = await scoring.getJobCounts(
+  while (queue && Date.now() < deadline) {
+    const { waiting, active, delayed } = await queue.getJobCounts(
       'waiting',
       'active',
       'delayed',

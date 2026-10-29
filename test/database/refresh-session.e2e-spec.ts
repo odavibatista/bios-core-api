@@ -9,7 +9,10 @@ import { PrismaService } from '@shared/infra/database/prisma.service.js';
 import { Queue } from 'bullmq';
 import request from 'supertest';
 import { inject } from 'vitest';
-import { createDatabaseTestingApp } from '../support/database-testing-app.js';
+import {
+  createDatabaseTestingApp,
+  waitForEmailQueue,
+} from '../support/database-testing-app.js';
 import { faker } from '../support/faker.js';
 import {
   createTestAccount,
@@ -68,6 +71,8 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
     });
 
     afterEach(async () => {
+      // Um aviso ainda na fila chegaria ao dublê durante o teste seguinte.
+      await waitForEmailQueue(app);
       mailProvider.sent.length = 0;
       await prisma.reset([
         'users',
@@ -306,6 +311,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         await refresh(faker.string.alphanumeric(43)).expect(401);
 
         await expect(activeSessionCount(account.id)).resolves.toBe(1);
+        await waitForEmailQueue(app);
         expect(mailProvider.sent).toHaveLength(0);
       });
 
@@ -323,6 +329,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         await refresh(expired.refreshToken).expect(401);
 
         await expect(activeSessionCount(account.id)).resolves.toBe(2);
+        await waitForEmailQueue(app);
         expect(mailProvider.sent).toHaveLength(0);
       });
 
@@ -343,6 +350,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         await refresh(loggedOut.refreshToken).expect(401);
 
         await expect(activeSessionCount(account.id)).resolves.toBe(1);
+        await waitForEmailQueue(app);
         expect(mailProvider.sent).toHaveLength(0);
       });
 
