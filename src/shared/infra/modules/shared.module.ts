@@ -6,6 +6,7 @@ import {
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { validateEnvironment } from '../../config/environment.config.js';
+import { configureValidationMessages } from '../../config/validation-messages.config.js';
 import { HealthController } from '../../http/controllers/health.controller.js';
 import { DatabaseModule } from '../database/database.module.js';
 import { AllExceptionsFilter } from '../filters/all-exceptions.filter.js';
@@ -18,10 +19,14 @@ import { QueueModule } from './queue.module.js';
 import { RedisModule } from './redis.module.js';
 import { ThrottlerModule } from './throttler.module.js';
 
+// Antes do `ConfigModule.forRoot` abaixo: a validação do ambiente é a primeira do Zod.
+configureValidationMessages();
+
 /**
  * Módulo global de infraestrutura compartilhada.
  *
  * Responsável por:
+ *  - configurar as mensagens de validação em português (`validation-messages.config.ts`);
  *  - carregar e validar as variáveis de ambiente (falha no bootstrap se inválidas);
  *  - disponibilizar o acesso ao banco (`DatabaseModule`) e manter os índices de
  *    retenção alinhados à configuração (`DataRetentionModule`);

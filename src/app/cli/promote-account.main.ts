@@ -4,6 +4,7 @@ import {
   type Environment,
   validateEnvironment,
 } from '@shared/config/environment.config.js';
+import { configureValidationMessages } from '@shared/config/validation-messages.config.js';
 import { databaseNameOf } from '@shared/infra/database/database-name.js';
 import { AesEncryptionProvider } from '@shared/infra/providers/aes-encryption.provider.js';
 import { loadDotEnv, safeMessage } from './cli-support.js';
@@ -16,6 +17,7 @@ import { runPromoteAccount } from './promote-account.runner.js';
  */
 async function main(): Promise<void> {
   loadDotEnv();
+  configureValidationMessages();
 
   let environment: Environment;
 

@@ -92,7 +92,87 @@ describe('API (e2e)', () => {
 
     expect(ErrorResponseSchema.parse(response.body)).toMatchObject({
       code: 'NOT_FOUND',
+      message: 'Rota não encontrada.',
       path,
+    });
+  });
+
+  describe('mensagens de erro em português', () => {
+    /** Texto em inglês do framework ou do Zod que não pode chegar ao cliente. */
+    const ENGLISH =
+      /Invalid|expected|received|Cannot (GET|POST)|Unexpected token|entity too large|not valid JSON/i;
+
+    const login = () =>
+      request(app.getHttpServer())
+        .post('/auth/login')
+        .set('Content-Type', 'application/json');
+
+    it('422: campo obrigatório ausente e mensagem escrita no schema', async () => {
+      const response = await login().send({}).expect(422);
+      const body = ErrorResponseSchema.parse(response.body);
+
+      expect(body.details).toEqual(
+        expect.arrayContaining([
+          { path: 'email', message: 'Informe um e-mail válido.' },
+          { path: 'password', message: 'Campo obrigatório.' },
+        ]),
+      );
+      expect(JSON.stringify(body)).not.toMatch(ENGLISH);
+    });
+
+    it('422: tipo errado com a mensagem do locale pt-BR', async () => {
+      const response = await login()
+        .send({ email: faker.internet.email(), password: 12345678 })
+        .expect(422);
+
+      expect(ErrorResponseSchema.parse(response.body).details).toEqual([
+        {
+          path: 'password',
+          message: 'Entrada inválida: esperava um texto, recebeu um número',
+        },
+      ]);
+    });
+
+    it('400: JSON malformado sem o texto do parser', async () => {
+      const response = await login().send('nao-e-json').expect(400);
+      const body = ErrorResponseSchema.parse(response.body);
+
+      expect(body).toMatchObject({
+        code: 'BAD_REQUEST',
+        message: expect.stringContaining('JSON válido') as string,
+      });
+      expect(JSON.stringify(body)).not.toMatch(ENGLISH);
+    });
+
+    it('413: corpo grande demais responde 413 em português, e não 500', async () => {
+      const response = await login()
+        .send({ email: faker.internet.email(), password: 'x'.repeat(200_000) })
+        .expect(413);
+
+      const body = ErrorResponseSchema.parse(response.body);
+
+      expect(body).toMatchObject({
+        code: 'PAYLOAD_TOO_LARGE',
+        message: 'O corpo da requisição é grande demais.',
+      });
+      expect(JSON.stringify(body)).not.toMatch(ENGLISH);
+    });
+
+    it('404: rota inexistente sem o texto "Cannot POST" do framework', async () => {
+      const path = `/${faker.lorem.slug(3)}`;
+
+      const response = await request(app.getHttpServer())
+        .post(path)
+        .send({})
+        .expect(404);
+      const body = ErrorResponseSchema.parse(response.body);
+
+      expect(body).toMatchObject({
+        code: 'NOT_FOUND',
+        message: 'Rota não encontrada.',
+        path,
+      });
+      expect(JSON.stringify(body)).not.toMatch(ENGLISH);
     });
   });
 
