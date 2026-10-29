@@ -111,6 +111,12 @@ export interface QueueSchedule {
   cron: string;
 
   /**
+   * Variável de ambiente que, quando declarada, substitui `cron` (que fica como o padrão
+   * documentado). Lida pelo registro dos agendamentos na inicialização.
+   */
+  cronSetting?: 'SECTOR_SNAPSHOT_CRON';
+
+  /**
    * Política de repetição **deste** job, no lugar da política da fila.
    *
    * A fila é compartilhada: o lote diário (centenas de milhares de registros,

@@ -16,10 +16,16 @@ describe('QueueSchedulesInitializer', () => {
     unschedule: vi.fn<() => Promise<void>>(),
   };
   let syncOnBoot: boolean;
+  let sectorCron: string;
   let initializer: QueueSchedulesInitializer;
+
+  /** O agendamento como deve ser registrado: com o cron da variável, quando a declara. */
+  const registered = (schedule: (typeof QUEUE_SCHEDULES)[number]) =>
+    schedule.cronSetting ? { ...schedule, cron: sectorCron } : schedule;
 
   beforeEach(async () => {
     syncOnBoot = true;
+    sectorCron = '15 2 * * *';
     redisHealthProvider.isAvailable.mockResolvedValue(true);
     queueProvider.schedule.mockResolvedValue();
     queueProvider.unschedule.mockResolvedValue();
@@ -29,7 +35,13 @@ describe('QueueSchedulesInitializer', () => {
         QueueSchedulesInitializer,
         { provide: RedisHealthProvider, useValue: redisHealthProvider },
         { provide: QueueProvider, useValue: queueProvider },
-        { provide: ConfigService, useValue: { get: () => syncOnBoot } },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: (key: string) =>
+              key === 'SECTOR_SNAPSHOT_CRON' ? sectorCron : syncOnBoot,
+          },
+        },
       ],
     }).compile();
 
@@ -43,8 +55,29 @@ describe('QueueSchedulesInitializer', () => {
       QUEUE_SCHEDULES.length,
     );
     for (const schedule of QUEUE_SCHEDULES) {
-      expect(queueProvider.schedule).toHaveBeenCalledWith(schedule);
+      expect(queueProvider.schedule).toHaveBeenCalledWith(registered(schedule));
     }
+  });
+
+  it('o cron da variável de ambiente substitui o padrão do agendamento que a declara (#89)', async () => {
+    await initializer.synchronize();
+
+    const sector = QUEUE_SCHEDULES.find(
+      ({ id }) => id === 'sector-score-snapshots',
+    );
+    expect(sector?.cronSetting).toBe('SECTOR_SNAPSHOT_CRON');
+    expect(queueProvider.schedule).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'sector-score-snapshots',
+        cron: '15 2 * * *',
+      }),
+    );
+    expect(queueProvider.schedule).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'sector-score-snapshots',
+        cron: '0 6 * * *',
+      }),
+    );
   });
 
   it('remove os agendamentos que mudaram de fila antes de registrar os novos', async () => {

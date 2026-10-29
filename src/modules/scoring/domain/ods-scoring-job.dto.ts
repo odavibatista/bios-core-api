@@ -9,6 +9,21 @@ export const RECALCULATE_SCORES_JOB = 'recalculate-scores';
  */
 export const RECALCULATE_STALE_SCORES_JOB = 'recalculate-stale-scores';
 
+/**
+ * Agrega os índices por ODS e divisão CNAE na janela do mês corrente (RF30, #89).
+ * Agendado; não leva carga.
+ */
+export const AGGREGATE_SECTOR_SCORES_JOB = 'aggregate-sector-scores';
+
+export const AggregateSectorScoresJobSchema = z.object({}).strict();
+
+export interface AggregateSectorScoresJobResult {
+  /** Início da janela agregada (ISO 8601). */
+  windowStart: string;
+  /** Quantos agregados (ODS e setor) foram gravados na janela. */
+  sectors: number;
+}
+
 export const RecalculateScoresJobSchema = z
   .object({ cnpj: z.string() })
   .strict();

@@ -43,6 +43,7 @@ const EXPECTED_OPERATIONS: Record<string, string> = {
   'GET /v1/companies/{cnpj}': 'getPublicCompanyProfile',
   'GET /companies/{cnpj}/evidences': 'getCompanyEvidences',
   'GET /companies/{cnpj}/scores/{odsNumber}/explanation': 'getScoreExplanation',
+  'GET /sectors/{cnae}/evolution': 'getSectorEvolution',
 };
 
 interface Operation {

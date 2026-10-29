@@ -66,7 +66,18 @@ export class QueueSchedulesInitializer implements OnApplicationBootstrap {
     });
 
     const results = await Promise.allSettled(
-      QUEUE_SCHEDULES.map((schedule) => this.queueProvider.schedule(schedule)),
+      QUEUE_SCHEDULES.map((schedule) =>
+        this.queueProvider.schedule(
+          schedule.cronSetting
+            ? {
+                ...schedule,
+                cron: this.configService.get(schedule.cronSetting, {
+                  infer: true,
+                }),
+              }
+            : schedule,
+        ),
+      ),
     );
 
     results.forEach((result, position) => {

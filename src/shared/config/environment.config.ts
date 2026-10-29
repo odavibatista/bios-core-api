@@ -165,6 +165,19 @@ export const environmentSchema = z.object({
     .default(15_000),
   QUEUE_SCHEDULES_SYNC_ON_BOOT: z.stringbool().default(true),
 
+  /* Evolução setorial (RF30, UC10, #89). O job agrega os índices por ODS e divisão CNAE na
+     janela do mês corrente; o padrão roda depois da varredura de regras (05:30). Setor com
+     menos empresas que o mínimo tem as médias omitidas: com poucas, a média exporia o índice
+     de uma empresa (IA05). */
+  SECTOR_SNAPSHOT_CRON: z
+    .string()
+    .default('0 6 * * *')
+    .refine(
+      (cron) => /^\s*([\d*,/-]+\s+){4}[\d*,/-]+\s*$/.test(cron),
+      'deve ser uma expressão cron de 5 campos (ex.: 0 6 * * *)',
+    ),
+  SECTOR_SNAPSHOT_MIN_COMPANIES: z.coerce.number().int().min(1).default(5),
+
   /* Cache de consultas (NFDE01) — ver cache.config.ts.
      Vale apenas como reserva: a janela de cada consulta vem de
      `data_sources.cache_ttl_seconds`, ajustável no banco sem novo deploy. */
