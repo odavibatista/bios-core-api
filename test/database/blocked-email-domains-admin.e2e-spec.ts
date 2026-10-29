@@ -134,8 +134,11 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       });
 
       it('com chave de API, e sem sessão: 401 (a chave não autentica a administração)', async () => {
+        // Duas palavras: uma só pode sair com uma letra ("a"), abaixo do mínimo do nome.
         const { body } = await asAdmin(
-          http().post('/api-keys').send({ name: faker.lorem.word() }),
+          http()
+            .post('/api-keys')
+            .send({ name: faker.lorem.words(2) }),
         ).expect(201);
         const { key } = body as { key: string };
 
