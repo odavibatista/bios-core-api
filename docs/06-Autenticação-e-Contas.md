@@ -1,5 +1,7 @@
 # 06. Autenticação e contas
 
+🇧🇷 **Português** · 🇺🇸 [English](en/06-Authentication-and-Accounts.md)
+
 [Índice da documentação](README.md) · ← [05. Filas (BullMQ)](05-Filas.md) · [07. Segurança](07-Segurança.md) →
 
 > Sessões, renovação, guard de autenticação, senha, manutenção da conta e blacklist de domínios.

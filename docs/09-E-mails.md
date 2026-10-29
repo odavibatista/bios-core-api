@@ -1,5 +1,7 @@
 # 09. E-mails transacionais
 
+🇧🇷 **Português** · 🇺🇸 [English](en/09-Emails.md)
+
 [Índice da documentação](README.md) · ← [08. Cache de consultas](08-Cache.md) · [10. Fontes externas (adapters)](10-Fontes-Externas.md) →
 
 > Templates, envio pela fila e auditoria de cada disparo.

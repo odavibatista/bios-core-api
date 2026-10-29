@@ -1,5 +1,7 @@
 # 02. Arquitetura e convenções
 
+🇧🇷 **Português** · 🇺🇸 [English](en/02-Architecture.md)
+
 [Índice da documentação](README.md) · ← [01. Como rodar](01-Como-Rodar.md) · [03. Contrato da API (OpenAPI e CORS)](03-Contrato-da-API.md) →
 
 > Organização em módulos e camadas, e as convenções de código seguidas em todo o projeto.
@@ -103,6 +105,11 @@ src/
   literais de texto do código de produção e dos e-mails e **reprova** a grafia sem acento de uma
   lista de palavras (`invalido`, `nao`, `indice`...); ao achar uma nova, acrescente a grafia errada à
   lista do teste. Identificadores, nomes de campo das fontes, URLs e comentários ficam de fora.
+- **Documentação em português e em inglês.** Cada página de `docs/` tem a sua versão em `docs/en/`
+  (e o `README.md`, o `README.en.md`), com o seletor de idioma logo abaixo do título; a API em si
+  continua em pt-BR. Mudou uma página, mude a outra no mesmo PR. O teste
+  `src/shared/domain/documentation-languages.spec.ts` reprova página sem par, seletor que não volta à
+  página de origem, link relativo ou âncora inexistente e tradução com menos links que o original.
 
 ---
 

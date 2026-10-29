@@ -1,5 +1,7 @@
 # 12. IBAMA
 
+🇧🇷 **Português** · 🇺🇸 [English](en/12-IBAMA.md)
+
 [Índice da documentação](README.md) · ← [11. Evidências](11-Evidências.md) · [13. Inventário GHG Protocol](13-GHG-Protocol.md) →
 
 > Dumps do IBAMA: download, leitura, normalização, job diário e consulta avulsa por CNPJ.
