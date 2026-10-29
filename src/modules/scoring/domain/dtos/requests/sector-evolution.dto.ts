@@ -1,7 +1,11 @@
 import { z } from 'zod';
+import { cnaeDivisionDescription } from '../../cnae-divisions.js';
 import { cnaeDivisionOf } from '../../sector-evolution.js';
 
-/** CNAE do setor, convertido na divisão (2 dígitos) usada nos agregados. */
+/**
+ * CNAE do setor, convertido na divisão (2 dígitos) usada nos agregados. A divisão precisa
+ * existir na CNAE 2.3: um código bem formado de divisão inexistente (ex.: 04) é recusado.
+ */
 export const SectorEvolutionParamsSchema = z.object({
   cnae: z
     .string()
@@ -16,6 +20,14 @@ export const SectorEvolutionParamsSchema = z.object({
           code: 'custom',
           message:
             'CNAE inválido: informe a divisão (2 dígitos), o grupo, a classe ou a subclasse.',
+        });
+        return z.NEVER;
+      }
+
+      if (cnaeDivisionDescription(division) === undefined) {
+        context.addIssue({
+          code: 'custom',
+          message: `CNAE inválido: a divisão ${division} não existe na CNAE 2.3.`,
         });
         return z.NEVER;
       }
@@ -70,6 +82,9 @@ export const SectorScoreWindowSchema = z
 export const SectorEvolutionResponseSchema = z
   .object({
     cnae_division: z.string().describe('Divisão CNAE (2 dígitos) agregada'),
+    cnae_division_description: z
+      .string()
+      .describe('Descrição oficial da divisão CNAE (IBGE)'),
     ods_number: z.number().int().describe('Número do ODS'),
     history_status: z
       .enum(['AVAILABLE', 'INSUFFICIENT'])
@@ -86,3 +101,30 @@ export const SectorEvolutionResponseSchema = z
 export type SectorEvolutionResponse = z.infer<
   typeof SectorEvolutionResponseSchema
 >;
+
+/** Setor com agregados, como o seletor do front o mostra (UC10, fluxo normal 1). */
+export const SectorReferenceSchema = z
+  .object({
+    cnae_division: z.string().describe('Divisão CNAE (2 dígitos)'),
+    description: z
+      .string()
+      .describe('Descrição oficial da divisão CNAE (IBGE)'),
+  })
+  .strict()
+  .describe('Setor (divisão CNAE) com evolução registrada')
+  .meta({ id: 'SectorReference' });
+
+export const SectorListResponseSchema = z
+  .object({
+    data: z
+      .array(SectorReferenceSchema)
+      .describe(
+        'Setores com ao menos uma janela, em ordem crescente de divisão',
+      ),
+  })
+  .strict()
+  .describe('Setores que a evolução setorial pode mostrar')
+  .meta({ id: 'SectorListResponse' });
+
+export type SectorReference = z.infer<typeof SectorReferenceSchema>;
+export type SectorListResponse = z.infer<typeof SectorListResponseSchema>;
