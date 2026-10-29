@@ -54,7 +54,7 @@
     "@prisma/client": "~6.19.3",
     "@scalar/nestjs-api-reference": "^1.2.30",
     "bcryptjs": "^3.0.3",
-    "bullmq": "^6.3.13",
+    "bullmq": "^6.4.2",
     "csv-parse": "^7.0.3",
     "handlebars": "^4.7.10",
     "ioredis": "^6.0.0",
