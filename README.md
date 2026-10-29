@@ -172,12 +172,19 @@ preparado para **geração de cliente**:
 - **`operationId` explícito e estável.** Cada `@ApiOperation` declara o seu (`getCompanyProfile`,
   `searchCompanies`, `exportCompaniesXlsx`, `refreshSession`…), que vira o nome do método no cliente
   gerado. Antes o nome derivava da classe do controller, e renomeá-la (como na #81) mudava o método do
-  cliente em silêncio. Os 25 ids são únicos, e o teste do documento tem a lista completa: uma rota nova
-  precisa entrar nela.
+  cliente em silêncio. Os ids (31 operações) são únicos, e o teste do documento tem a lista completa: uma
+  rota nova precisa entrar nela.
 - **`servers` e versão.** A URL base vem de `API_BASE_URL` (opcional, sem barra no fim; sem ela, a
   relativa `/`), e a versão é a do `package.json`.
 - **O arquivo XLSX** é declarado como binário (`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`)
   só na resposta de sucesso; as de erro seguem JSON (`ErrorResponse`).
+
+**CORS (front em outra origem).** `CORS_ORIGINS` diz quais origens podem chamar a API: `*` (padrão) aceita
+qualquer uma, e uma lista separada por vírgulas (ex.: `http://localhost:4200`) restringe a ela. A API não usa
+cookie (os tokens vão no corpo e no `Authorization`), então não há `credentials`. Os cabeçalhos
+`Content-Disposition` (nome do arquivo XLSX) e `Retry-After` (prazo depois de um 429) são expostos
+(`cors.config.ts`): sem isso, o navegador os esconderia do JavaScript do front. O teste
+`test/integration/cors.e2e-spec.ts` confere no adaptador HTTP real.
 
 **Como o front gera o cliente.** O CI publica o documento como o artefato `openapi`
 (`openapi/openapi.json`, com `servers: [{ url: "/" }]`, para quem gera informar a base em tempo de
@@ -1567,11 +1574,19 @@ empresa é guardado ao longo do tempo nem exposto aqui.
   campo `cronSetting` de um agendamento faz o registro ler o cron da variável no lugar do padrão.
 - **Amostra mínima** (`SECTOR_SNAPSHOT_MIN_COMPANIES`, padrão 5): com menos empresas com índice, o índice
   médio fica nulo; com menos empresas no setor, a confiança média também. As contagens ficam.
+- **`GET /sectors`** (`[P08]`): o seletor de setor do UC10 (fluxo normal 1). Lista as divisões CNAE com ao
+  menos uma janela gravada, em ordem crescente, com a descrição oficial (`{ data: [{ cnae_division,
+  description }] }`). Só setores, nunca empresas.
 - **`GET /sectors/{cnae}/evolution?ods=`** (`[P08]`, qualquer usuário com sessão): o CNAE pode ser a divisão,
-  o grupo, a classe ou a subclasse, com ou sem máscara, e vira a divisão. Devolve as janelas da mais antiga à
-  mais recente; com menos de duas, `history_status: INSUFFICIENT` (fluxo 2.1). ODS obrigatório; ODS que o
-  BIOS não calcula, `422 ODS_NOT_AVAILABLE` com os válidos; CNAE inválido, `422`. A descrição da divisão
-  (RF06) não vem: o catálogo do IBGE usado pelo BIOS é por subclasse.
+  o grupo, a classe ou a subclasse, com ou sem máscara, e vira a divisão, que precisa existir na CNAE 2.3 (a
+  divisão `04`, por exemplo, não existe). Devolve a divisão com a descrição oficial
+  (`cnae_division_description`, RF06) e as janelas da mais antiga à mais recente; com menos de duas,
+  `history_status: INSUFFICIENT` (fluxo 2.1). ODS obrigatório; ODS que o BIOS não calcula,
+  `422 ODS_NOT_AVAILABLE` com os válidos; CNAE inválido ou divisão inexistente, `422`.
+- **Descrição das divisões:** as 87 divisões da CNAE 2.3, com a descrição do IBGE
+  (`servicodados.ibge.gov.br/api/v2/cnae/divisoes`), ficam no código (`scoring/domain/cnae-divisions.ts`). A
+  taxonomia só muda numa revisão da CNAE, então não é consultada a cada requisição; a fonte `IBGE_CNAE` segue
+  descrevendo a subclasse no perfil da empresa.
 
 ## Pesquisa de empresas (nome e filtros)
 
