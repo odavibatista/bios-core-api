@@ -13,7 +13,10 @@ import request from 'supertest';
 import { inject } from 'vitest';
 import { buildPassword } from '../factories/shared/password.factory.js';
 import { faker } from '../support/faker.js';
-import { createDatabaseTestingApp } from '../support/database-testing-app.js';
+import {
+  createDatabaseTestingApp,
+  waitForEmailQueue,
+} from '../support/database-testing-app.js';
 import { resetThrottleCounters } from '../support/throttle.js';
 import { testRedisUrl } from '../support/infrastructure.js';
 
@@ -59,6 +62,8 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
     });
 
     afterEach(async () => {
+      // Um e-mail ainda na fila chegaria ao dublê durante o teste seguinte.
+      await waitForEmailQueue(app);
       mailProvider.sent.length = 0;
       await prisma.reset([
         'users',
