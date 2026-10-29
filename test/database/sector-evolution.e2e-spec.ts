@@ -1,6 +1,9 @@
 import type { INestApplication } from '@nestjs/common';
 import { CATALOG_SEEDERS } from '@app/database/catalog.seeders.js';
-import { SectorEvolutionResponseSchema } from '@modules/scoring/domain/dtos/requests/sector-evolution.dto.js';
+import {
+  SectorEvolutionResponseSchema,
+  SectorListResponseSchema,
+} from '@modules/scoring/domain/dtos/requests/sector-evolution.dto.js';
 import { AGGREGATE_SECTOR_SCORES_JOB } from '@modules/scoring/domain/ods-scoring-job.dto.js';
 import { AggregateSectorScoresUseCase } from '@modules/scoring/infra/usecases/aggregate-sector-scores.usecase.js';
 import { ErrorResponseSchema } from '@shared/domain/dtos/errors/error-response.dto.js';
@@ -128,6 +131,8 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
 
       expect(parsed).toMatchObject({
         cnae_division: '62',
+        cnae_division_description:
+          'ATIVIDADES DOS SERVIÇOS DE TECNOLOGIA DA INFORMAÇÃO',
         ods_number: 15,
         history_status: 'AVAILABLE',
       });
@@ -184,6 +189,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
 
       expect(SectorEvolutionResponseSchema.parse(body)).toEqual({
         cnae_division: '47',
+        cnae_division_description: 'COMÉRCIO VAREJISTA',
         ods_number: 13,
         history_status: 'INSUFFICIENT',
         windows: [],
@@ -249,6 +255,41 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       expect(await prisma.sectorScoreSnapshot.count()).toBe(1);
     });
 
+    it('lista os setores com agregados, uma vez cada, com a descrição oficial', async () => {
+      await company('6201501', { 13: { score: 1, confidence: 0.5 } });
+      await company('6202300', { 15: { score: 2, confidence: 0.5 } });
+      await company('0115600', { 15: { score: 3, confidence: 0.5 } });
+      await aggregate.execute(OCTOBER);
+      await aggregate.execute(NOVEMBER);
+
+      const { body } = await request(app.getHttpServer())
+        .get('/sectors')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+
+      expect(SectorListResponseSchema.parse(body)).toEqual({
+        data: [
+          {
+            cnae_division: '01',
+            description: 'AGRICULTURA, PECUÁRIA E SERVIÇOS RELACIONADOS',
+          },
+          {
+            cnae_division: '62',
+            description: 'ATIVIDADES DOS SERVIÇOS DE TECNOLOGIA DA INFORMAÇÃO',
+          },
+        ],
+      });
+    });
+
+    it('sem agregados, a lista de setores é vazia', async () => {
+      const { body } = await request(app.getHttpServer())
+        .get('/sectors')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+
+      expect(body).toEqual({ data: [] });
+    });
+
     it('nunca por empresa: nem o banco nem a resposta têm CNPJ, nome ou índice individual', async () => {
       const cnpjs: string[] = [];
       for (const score of [1, 2, 3, 4, 5]) {
@@ -277,9 +318,10 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
           .get('/sectors/62/evolution')
           .query({ ods: 15 })
           .expect(401);
+        await request(app.getHttpServer()).get('/sectors').expect(401);
       });
 
-      it.each(['6', '6201', 'abc', '00'])(
+      it.each(['6', '6201', 'abc', '00', '04', '98'])(
         'CNAE inválido (%j): 422',
         async (cnae) => {
           await evolution(cnae, { ods: 15 }).expect(422);

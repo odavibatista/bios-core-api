@@ -5,7 +5,7 @@
 // src/modules/<módulo>/entity/*.prisma; o Prisma os reúne a partir da raiz
 // `src` configurada em prisma.config.ts.
 //
-// Convenções (ver README):
+// Convenções (ver docs/04-Banco-de-Dados.md):
 //  - chave primária `id_<entidade>` (ObjectId mapeado para `_id`);
 //  - chave estrangeira `<entidade>_id`; empresas referenciadas pela chave natural `cnpj`;
 //  - campos em snake_case; coleções em snake_case no plural (exceto as camadas de dados);

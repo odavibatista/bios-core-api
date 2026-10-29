@@ -178,4 +178,18 @@ describe('PrismaSectorScoreSnapshotRepository (#89, #90)', () => {
       orderBy: { window_start: 'asc' },
     });
   });
+
+  it('listDivisions devolve cada divisão uma vez, em ordem crescente', async () => {
+    findMany.mockResolvedValue([
+      { cnae_division: '01' },
+      { cnae_division: '62' },
+    ]);
+
+    await expect(repository.listDivisions()).resolves.toEqual(['01', '62']);
+    expect(findMany).toHaveBeenCalledWith({
+      distinct: ['cnae_division'],
+      select: { cnae_division: true },
+      orderBy: { cnae_division: 'asc' },
+    });
+  });
 });
