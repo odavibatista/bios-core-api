@@ -5,6 +5,11 @@ import {
   type DurationText,
 } from '../domain/value-objects/duration.js';
 import { encryptionKeyring, singleKey } from './encryption.config.js';
+import {
+  addressListVariable,
+  INTERNAL_NETWORKS,
+  trustProxyVariable,
+} from './network.config.js';
 
 /**
  * Ambientes de execução suportados.
@@ -215,6 +220,21 @@ export const environmentSchema = z.object({
     minimum: '5m',
     maximum: '24h',
   }),
+
+  /* Proxy reverso e honeypot (RF21, NFSE07, #87/#88) — ver network.config.ts.
+     TRUST_PROXY diz quais proxies podem informar o IP do cliente: sem ele, atrás de um
+     proxy, todo acesso pareceria vir do proxy. HONEYPOT_EXEMPT_IPS nunca é bloqueado pelo
+     honeypot (padrão: loopback e redes internas). As rotas isca falham (503) numa fração
+     das chamadas e demoram até HONEYPOT_MAX_DELAY_MS nas demais. */
+  TRUST_PROXY: trustProxyVariable(),
+  HONEYPOT_EXEMPT_IPS: addressListVariable(INTERNAL_NETWORKS),
+  HONEYPOT_FAILURE_RATE: z.coerce.number().min(0).max(1).default(0.25),
+  HONEYPOT_MAX_DELAY_MS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(10_000)
+    .default(2_000),
 
   /* Retenção de dados (índices TTL) — ver data-retention.config.ts */
   DATA_RETENTION_SYNC_ON_BOOT: z.stringbool().default(true),

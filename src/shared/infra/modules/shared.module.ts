@@ -10,6 +10,7 @@ import { HealthController } from '../../http/controllers/health.controller.js';
 import { DatabaseModule } from '../database/database.module.js';
 import { AllExceptionsFilter } from '../filters/all-exceptions.filter.js';
 import { SchemaValidationPipe } from '../pipes/schema-validation.pipe.js';
+import { TrustProxySetup } from '../providers/trust-proxy.setup.js';
 import { CheckHealthUseCase } from '../usecases/health/check-health.usecase.js';
 import { DataRetentionModule } from './data-retention.module.js';
 import { EncryptionModule } from './encryption.module.js';
@@ -51,6 +52,9 @@ import { ThrottlerModule } from './throttler.module.js';
   providers: [
     /* Casos de uso */
     CheckHealthUseCase,
+
+    /* IP do cliente atrás do proxy reverso (TRUST_PROXY) */
+    TrustProxySetup,
 
     /* Pipeline HTTP global */
     { provide: APP_PIPE, useClass: SchemaValidationPipe },
