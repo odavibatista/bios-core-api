@@ -1552,6 +1552,27 @@ calcula os ODS de referência.
   APIs consumidoras, que trabalham com os códigos. Se um segundo cliente com tela passar a existir, a
   decisão se reabre.
 
+## Evolução setorial (UC10, RF30, #89/#90)
+
+A série histórica é **só dos setores** (`sector_score_snapshots`, indicador IA05): nenhum índice de
+empresa é guardado ao longo do tempo nem exposto aqui.
+
+- **Job `aggregate-sector-scores`** (fila `ods-scoring`, agendamento `sector-score-snapshots`): agrega
+  `company_ods_scores` por ODS e **divisão do CNAE principal** (2 dígitos, lido do perfil cadastral; empresas
+  sem perfil ficam de fora), só com os índices da versão de regras vigente. Grava, na janela do **mês
+  corrente** (UTC), o índice médio (das empresas com índice), a confiança média (de todas), as contagens e a
+  versão das regras. Reexecutar no mesmo mês sobrescreve o retrato dele (índice único por ODS, setor e início
+  da janela), e o setor que deixou de ter empresas sai da janela. Virado o mês, o anterior fica como estava.
+- **Agendamento:** `SECTOR_SNAPSHOT_CRON` (padrão `0 6 * * *`, depois da varredura de regras das 05:30). O
+  campo `cronSetting` de um agendamento faz o registro ler o cron da variável no lugar do padrão.
+- **Amostra mínima** (`SECTOR_SNAPSHOT_MIN_COMPANIES`, padrão 5): com menos empresas com índice, o índice
+  médio fica nulo; com menos empresas no setor, a confiança média também. As contagens ficam.
+- **`GET /sectors/{cnae}/evolution?ods=`** (`[P08]`, qualquer usuário com sessão): o CNAE pode ser a divisão,
+  o grupo, a classe ou a subclasse, com ou sem máscara, e vira a divisão. Devolve as janelas da mais antiga à
+  mais recente; com menos de duas, `history_status: INSUFFICIENT` (fluxo 2.1). ODS obrigatório; ODS que o
+  BIOS não calcula, `422 ODS_NOT_AVAILABLE` com os válidos; CNAE inválido, `422`. A descrição da divisão
+  (RF06) não vem: o catálogo do IBGE usado pelo BIOS é por subclasse.
+
 ## Pesquisa de empresas (nome e filtros)
 
 `GET /companies` lista as empresas da base local (UC06 fluxo 1.1 e UC08; RF04, RF13, RF14) por nome, UF,
