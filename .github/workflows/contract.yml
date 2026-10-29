@@ -65,6 +65,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Avisa quando a tag publicada passou a apontar para outro conteúdo. Não muda
-      # nada: a atualização do lock é deliberada (README, seção CI).
+      # nada: a atualização do lock é deliberada (docs/18-Qualidade-e-CI.md, seção CI).
       - name: Digests de ci-images.lock ainda são os das tags
         run: bash .github/scripts/update-ci-images.sh --check
