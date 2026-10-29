@@ -1,5 +1,7 @@
 # 03. Contrato da API (OpenAPI e CORS)
 
+🇧🇷 **Português** · 🇺🇸 [English](en/03-API-Contract.md)
+
 [Índice da documentação](README.md) · ← [02. Arquitetura e convenções](02-Arquitetura.md) · [04. Banco de dados e carga inicial](04-Banco-de-Dados.md) →
 
 > O documento OpenAPI que o front e os integradores consomem, a geração de cliente e o CORS.

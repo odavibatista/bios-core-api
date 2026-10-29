@@ -1,5 +1,7 @@
 # bios-core-api
 
+🇧🇷 **Português** · 🇺🇸 [English](README.en.md)
+
 [![CI](https://github.com/odavibatista/bios-core-api/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/odavibatista/bios-core-api/actions/workflows/ci.yml)
 
 API do **BIOS — Business Intelligence on Sustainability**. A partir de um CNPJ, ela reúne dados públicos de
@@ -112,8 +114,9 @@ Banco novo, scripts e primeiro administrador: [01. Como rodar](docs/01-Como-Roda
 
 ## Documentação
 
-A documentação técnica fica em [`docs/`](docs/README.md), em 18 capítulos numerados: da instalação e da
-arquitetura até cada fonte de dados, o cálculo dos índices, os testes e o CI.
+A documentação técnica fica em [`docs/`](docs/README.md) (e, em inglês, em [`docs/en/`](docs/en/README.md)),
+em 18 capítulos numerados: da instalação e da arquitetura até cada fonte de dados, o cálculo dos índices, os
+testes e o CI. Cada página tem, logo abaixo do título, o atalho para a mesma página no outro idioma.
 
 ---
 

@@ -1,5 +1,7 @@
 # 15. Empresas
 
+🇧🇷 **Português** · 🇺🇸 [English](en/15-Companies.md)
+
 [Índice da documentação](README.md) · ← [14. Índices por ODS](14-Índices-por-ODS.md) · [16. Chaves de API e API pública](16-Chaves-de-API.md) →
 
 > Consulta por CNPJ, perfil completo, pesquisa e exportação em XLSX.

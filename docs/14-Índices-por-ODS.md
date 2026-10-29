@@ -1,5 +1,7 @@
 # 14. Índices por ODS
 
+🇧🇷 **Português** · 🇺🇸 [English](en/14-SDG-Indexes.md)
+
 [Índice da documentação](README.md) · ← [13. Inventário GHG Protocol](13-GHG-Protocol.md) · [15. Empresas](15-Empresas.md) →
 
 > Índice de aderência e confiança, recálculo por fila, explicação, catálogo de ODS e evolução setorial.

@@ -1,5 +1,7 @@
 # 13. Inventário GHG Protocol
 
+🇧🇷 **Português** · 🇺🇸 [English](en/13-GHG-Protocol.md)
+
 [Índice da documentação](README.md) · ← [12. IBAMA](12-IBAMA.md) · [14. Índices por ODS](14-Índices-por-ODS.md) →
 
 > Inventários de emissões do Registro Público do GHG Protocol (UC07).

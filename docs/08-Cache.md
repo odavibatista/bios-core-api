@@ -1,5 +1,7 @@
 # 08. Cache de consultas
 
+🇧🇷 **Português** · 🇺🇸 [English](en/08-Cache.md)
+
 [Índice da documentação](README.md) · ← [07. Segurança](07-Segurança.md) · [09. E-mails transacionais](09-E-mails.md) →
 
 > Cache das consultas por CNPJ no Redis, com degradação graciosa.

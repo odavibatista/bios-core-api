@@ -1,5 +1,7 @@
 # 11. Evidências
 
+🇧🇷 **Português** · 🇺🇸 [English](en/11-Evidence.md)
+
 [Índice da documentação](README.md) · ← [10. Fontes externas (adapters)](10-Fontes-Externas.md) · [12. IBAMA](12-IBAMA.md) →
 
 > Modelo e persistência, consolidação por CNPJ, referências às fontes, motivos de UNKNOWN e a CGU.

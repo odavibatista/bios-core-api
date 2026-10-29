@@ -1,5 +1,7 @@
 # 16. Chaves de API e API pública
 
+🇧🇷 **Português** · 🇺🇸 [English](en/16-API-Keys.md)
+
 [Índice da documentação](README.md) · ← [15. Empresas](15-Empresas.md) · [17. Testes](17-Testes.md) →
 
 > Gestão das chaves pelo painel e a consulta de perfil por chave (UC11, UC12).
