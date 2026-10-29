@@ -13,7 +13,10 @@
 
 Vitest com a API de mocks equivalente à do Jest (`vi.fn`, `vi.spyOn`). Dependências são
 substituídas pelo container do Nest com `Test.createTestingModule(...).overrideProvider()`,
-sem mock de módulo inteiro. Mocks são limpos e restaurados automaticamente entre testes.
+sem mock de módulo inteiro. Mocks são limpos e restaurados automaticamente entre testes. Nos
+unitários, `test/setup/validation-messages.setup.ts` aplica as mensagens de validação em
+português (#398), como a aplicação: um schema testado isoladamente dá o mesmo texto que a API
+devolve. Nos e2e quem as aplica é o próprio `SharedModule`.
 
 ## Cobertura
 

@@ -83,6 +83,14 @@ src/
 - **Erros.** Exceções de negócio estendem `DomainException` (código estável + status HTTP);
   o `AllExceptionsFilter` converte qualquer erro no corpo padronizado `ErrorResponse`.
   Erros de validação respondem 422 com a lista de campos inválidos.
+- **Mensagens de erro em português (#398).** As mensagens escritas no domínio e nos schemas têm
+  precedência. As padrão do Zod saem do locale pt-BR (`validation-messages.config.ts`, aplicado
+  pelo `SharedModule` antes da validação do ambiente, pela CLI `account:promote` e pelo setup dos
+  testes unitários), com "Campo obrigatório." para campo ausente. Erros do próprio framework
+  (`HttpException` e erros 4xx no formato `http-errors`, como o 413 do body-parser) mantêm o
+  `code` derivado do status, mas a mensagem vem da tabela `FRAMEWORK_ERROR_MESSAGES` do filtro: o
+  texto original, em inglês, nunca chega ao cliente (`Cannot GET /x`, `Unexpected token ...`).
+  Corpo acima do limite padrão do body-parser (100 KB) responde 413 `PAYLOAD_TOO_LARGE`.
 - **Controllers** retornam valores — sem `@Res()` —, preservando interceptors, filtros e
   serialização do framework.
 - **Imports.** Relativos dentro da mesma área (`app`, `shared` ou um módulo); entre áreas,
