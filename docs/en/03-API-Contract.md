@@ -31,6 +31,12 @@ schemas, and it was prepared for **client generation**:
   without it, the relative `/`), and the version is the one in `package.json`.
 - **The XLSX file** is declared as binary (`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`)
   only in the success response; the error responses remain JSON (`ErrorResponse`).
+- **A nullable enum lists `null`.** A `z.enum([...]).nullable()` comes out of Zod as `nullable: true`
+  with an `enum` that lacks `null`, and in OpenAPI 3.0.3 the `enum` applies even with `nullable`: the
+  field would look never null, and the client generated in the front end typed it that way, although
+  the API returns `null` (`signal`, `weight_reason`, `coverage_status`, `evidence_state`).
+  `buildApiDocument` appends `null` to the list of every nullable enum (`includeNullInNullableEnums`).
+  Found by checking the real responses captured by the webapp against the generated types.
 
 **CORS (front end on another origin).** `CORS_ORIGINS` says which origins may call the API: `*` (the
 default) accepts any of them, and a comma-separated list (e.g. `http://localhost:4200`) restricts it to
@@ -49,8 +55,9 @@ test/database/openapi-document.e2e-spec.ts` writes the same file. Checked with `
 **How to name a new schema.** Append `.meta({ id: 'ModelName' })` to the end of the exposed schema
 (after `.describe`). The name must be unique in the project: two different schemas with the same `id`
 become the same component. The `openapi-document.e2e-spec.ts` test fails on an inline response or body,
-an error without `ErrorResponse`, `__schemaN`, a `$ref` without a component, an unused component and an
-`operationId` that is missing, repeated or derived from the class name.
+an error without `ErrorResponse`, `__schemaN`, a `$ref` without a component, an unused component, a
+nullable enum without `null` and an `operationId` that is missing, repeated or derived from the class
+name.
 
 ---
 

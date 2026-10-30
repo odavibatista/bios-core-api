@@ -265,6 +265,40 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         }
       });
 
+      it('todo enum anulável traz null na lista, como exige o OpenAPI 3.0.3', () => {
+        const nullableEnums: { path: string; values: unknown[] }[] = [];
+        const visit = (value: unknown, path: string): void => {
+          if (Array.isArray(value)) {
+            value.forEach((child, index) => visit(child, `${path}/${index}`));
+          } else if (value && typeof value === 'object') {
+            const schema = value as Record<string, unknown>;
+
+            if (schema.nullable === true && Array.isArray(schema.enum)) {
+              nullableEnums.push({ path, values: schema.enum });
+            }
+            Object.entries(schema).forEach(([key, child]) =>
+              visit(child, `${path}/${key}`),
+            );
+          }
+        };
+
+        visit(document, '');
+
+        // Os campos que a API devolve nulos de verdade precisam estar entre eles.
+        expect(nullableEnums.map(({ path }) => path)).toEqual(
+          expect.arrayContaining([
+            '/components/schemas/ScoreContribution/properties/weight_reason',
+            '/components/schemas/CompanyEvidence/properties/signal',
+            '/components/schemas/CompanyOdsScore/properties/coverage_status',
+          ]),
+        );
+        expect(
+          nullableEnums
+            .filter(({ values }) => !values.includes(null))
+            .map(({ path }) => path),
+        ).toEqual([]);
+      });
+
       it('o JSON livre das evidências é o tipo recursivo JsonValue', () => {
         const schemas = document.components?.schemas ?? {};
         const jsonValue = JSON.stringify(schemas.JsonValue);

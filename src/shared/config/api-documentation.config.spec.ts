@@ -8,8 +8,86 @@ import { Test } from '@nestjs/testing';
 import {
   buildApiDocument,
   DEFAULT_SERVER_URL,
+  includeNullInNullableEnums,
   readApiVersion,
 } from './api-documentation.config.js';
+
+describe('includeNullInNullableEnums', () => {
+  it('inclui null na lista de um enum anulável, em qualquer profundidade', () => {
+    const document = {
+      components: {
+        schemas: {
+          ScoreContribution: {
+            properties: {
+              weight_reason: {
+                nullable: true,
+                type: 'string',
+                enum: ['CGU_SANCTION_EXPIRED', 'IBAMA_EMBARGO_LIFTED'],
+              },
+              evidences: {
+                type: 'array',
+                items: {
+                  allOf: [
+                    {
+                      properties: {
+                        signal: {
+                          nullable: true,
+                          enum: ['POSITIVE', 'NEGATIVE'],
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+
+    const result = includeNullInNullableEnums(document);
+    const { properties } = result.components.schemas.ScoreContribution;
+
+    expect(result).toBe(document);
+    expect(properties.weight_reason.enum).toEqual([
+      'CGU_SANCTION_EXPIRED',
+      'IBAMA_EMBARGO_LIFTED',
+      null,
+    ]);
+    expect(properties.evidences.items.allOf[0]?.properties.signal.enum).toEqual(
+      ['POSITIVE', 'NEGATIVE', null],
+    );
+  });
+
+  it('não mexe em enum que não é anulável', () => {
+    const schema = { type: 'string', enum: ['USER', 'ADMIN'] };
+
+    includeNullInNullableEnums({ properties: { role: schema } });
+
+    expect(schema.enum).toEqual(['USER', 'ADMIN']);
+  });
+
+  it('não repete null em enum que já o tem, e reaplicar não muda nada', () => {
+    const schema = { nullable: true, enum: [null] as unknown[] };
+    const other = { nullable: true, enum: ['A'] as unknown[] };
+
+    includeNullInNullableEnums({ a: schema, b: other });
+    includeNullInNullableEnums({ a: schema, b: other });
+
+    expect(schema.enum).toEqual([null]);
+    expect(other.enum).toEqual(['A', null]);
+  });
+
+  it('não mexe em campo anulável sem enum nem em valores que não são objeto', () => {
+    const schema = { nullable: true, type: 'string' };
+
+    expect(includeNullInNullableEnums(null)).toBeNull();
+    expect(includeNullInNullableEnums('texto')).toBe('texto');
+    includeNullInNullableEnums([schema]);
+
+    expect(schema).toEqual({ nullable: true, type: 'string' });
+  });
+});
 
 describe('readApiVersion', () => {
   let directory: string;
