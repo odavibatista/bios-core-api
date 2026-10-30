@@ -30,6 +30,12 @@ preparado para **geração de cliente**:
   relativa `/`), e a versão é a do `package.json`.
 - **O arquivo XLSX** é declarado como binário (`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`)
   só na resposta de sucesso; as de erro seguem JSON (`ErrorResponse`).
+- **Enum anulável traz `null` na lista.** Um `z.enum([...]).nullable()` sai do Zod como
+  `nullable: true` com o `enum` sem `null`, e no OpenAPI 3.0.3 o `enum` vale mesmo com `nullable`: o
+  campo pareceria nunca nulo, e o cliente gerado no front o tipava assim, embora a API devolva `null`
+  (`signal`, `weight_reason`, `coverage_status`, `evidence_state`). O `buildApiDocument` acrescenta
+  `null` à lista de todo enum anulável (`includeNullInNullableEnums`). Achado ao conferir as respostas
+  reais capturadas pelo webapp contra os tipos gerados.
 
 **CORS (front em outra origem).** `CORS_ORIGINS` diz quais origens podem chamar a API: `*` (padrão) aceita
 qualquer uma, e uma lista separada por vírgulas (ex.: `http://localhost:4200`) restringe a ela. A API não usa
@@ -48,8 +54,8 @@ test/database/openapi-document.e2e-spec.ts` grava o mesmo arquivo. Conferido com
 **Como dar nome a um schema novo.** Acrescente `.meta({ id: 'NomeDoModelo' })` ao fim do schema exposto
 (depois do `.describe`). O nome precisa ser único no projeto: dois schemas diferentes com o mesmo `id`
 viram o mesmo componente. O teste `openapi-document.e2e-spec.ts` reprova resposta ou corpo inline, erro
-sem `ErrorResponse`, `__schemaN`, `$ref` sem componente, componente sem uso e `operationId` ausente,
-repetido ou derivado do nome da classe.
+sem `ErrorResponse`, `__schemaN`, `$ref` sem componente, componente sem uso, enum anulável sem `null`
+e `operationId` ausente, repetido ou derivado do nome da classe.
 
 ---
 
