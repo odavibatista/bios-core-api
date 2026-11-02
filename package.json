@@ -52,7 +52,7 @@
     "@nestjs/swagger": "^12.0.4",
     "@nestjs/throttler": "^6.7.1",
     "@prisma/client": "~6.19.3",
-    "@scalar/nestjs-api-reference": "^1.2.30",
+    "@scalar/nestjs-api-reference": "^1.2.34",
     "bcryptjs": "^3.0.3",
     "bullmq": "^6.4.2",
     "csv-parse": "^7.0.3",
