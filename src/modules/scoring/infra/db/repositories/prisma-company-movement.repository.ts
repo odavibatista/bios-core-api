@@ -3,6 +3,8 @@ import { PrismaRepository } from '@shared/infra/database/prisma.repository.js';
 import { PrismaService } from '@shared/infra/database/prisma.service.js';
 import {
   CompanyMovementRepository,
+  type CompanyMovementsPage,
+  type CompanyMovementsWindow,
   type MovementCandidatesPage,
   type ReconstructedMovementToSave,
 } from '../../../domain/dtos/repositories/company-movement.repository.js';
@@ -21,6 +23,38 @@ export class PrismaCompanyMovementRepository
 {
   constructor(prisma: PrismaService) {
     super(prisma);
+  }
+
+  async findPage({
+    skip,
+    take,
+  }: CompanyMovementsWindow): Promise<CompanyMovementsPage> {
+    // A ordem é exatamente a de `idx_company_movements_moved_at_cnpj`: a leitura custa o
+    // tamanho da página, e não o da base (NFDE03).
+    const [rows, total] = await Promise.all([
+      this.prisma.companyMovement.findMany({
+        select: { cnpj: true, moved_at: true, ods_movements: true },
+        orderBy: [{ moved_at: 'desc' }, { cnpj: 'asc' }],
+        skip,
+        take,
+      }),
+      this.prisma.companyMovement.count(),
+    ]);
+
+    return {
+      rows: rows.map((row) => ({
+        cnpj: row.cnpj,
+        movedAt: row.moved_at,
+        movements: row.ods_movements.map((item) => ({
+          odsNumber: item.ods_number,
+          direction: item.direction,
+          cause: item.cause,
+          evidenceCategory: item.evidence_category,
+          movedAt: item.moved_at,
+        })),
+      })),
+      total,
+    };
   }
 
   async findCandidates(

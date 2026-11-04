@@ -4,7 +4,7 @@ import { PrismaCompanyMovementRepository } from './prisma-company-movement.repos
 describe('PrismaCompanyMovementRepository', () => {
   const prisma = {
     companyProfile: { findMany: vi.fn() },
-    companyMovement: { findMany: vi.fn(), create: vi.fn() },
+    companyMovement: { findMany: vi.fn(), create: vi.fn(), count: vi.fn() },
     companyOdsScore: { findMany: vi.fn() },
     evidenceNormalized: { findMany: vi.fn() },
   };
@@ -19,6 +19,55 @@ describe('PrismaCompanyMovementRepository', () => {
     prisma.companyMovement.findMany.mockResolvedValue([]);
     prisma.companyOdsScore.findMany.mockResolvedValue([]);
     prisma.evidenceNormalized.findMany.mockResolvedValue([]);
+  });
+
+  describe('findPage', () => {
+    it('lê a janela na ordem do índice e traduz para o domínio', async () => {
+      prisma.companyMovement.findMany.mockResolvedValue([
+        {
+          cnpj: '1',
+          moved_at: collected,
+          ods_movements: [
+            {
+              ods_number: 15,
+              direction: 'DECREASED',
+              cause: 'EVIDENCE_ADDED',
+              evidence_category: 'INFRACAO_AMBIENTAL',
+              moved_at: published,
+            },
+          ],
+        },
+      ]);
+      prisma.companyMovement.count.mockResolvedValue(7);
+
+      await expect(
+        repository.findPage({ skip: 20, take: 10 }),
+      ).resolves.toEqual({
+        rows: [
+          {
+            cnpj: '1',
+            movedAt: collected,
+            movements: [
+              {
+                odsNumber: 15,
+                direction: 'DECREASED',
+                cause: 'EVIDENCE_ADDED',
+                evidenceCategory: 'INFRACAO_AMBIENTAL',
+                movedAt: published,
+              },
+            ],
+          },
+        ],
+        total: 7,
+      });
+      expect(prisma.companyMovement.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: [{ moved_at: 'desc' }, { cnpj: 'asc' }],
+          skip: 20,
+          take: 10,
+        }),
+      );
+    });
   });
 
   describe('findCandidates', () => {

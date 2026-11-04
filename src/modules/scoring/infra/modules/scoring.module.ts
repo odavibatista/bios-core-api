@@ -17,6 +17,7 @@ import { ScoreExplanationController } from '../../http/controllers/score-explana
 import { SectorsController } from '../../http/controllers/sectors.controller.js';
 import { CompanyMovementRepository } from '../../domain/dtos/repositories/company-movement.repository.js';
 import { PrismaCompanyMovementRepository } from '../db/repositories/prisma-company-movement.repository.js';
+import { ListCompanyMovementsUseCase } from '../usecases/list-company-movements.usecase.js';
 import { ReconcileCompanyMovementsUseCase } from '../usecases/reconcile-company-movements.usecase.js';
 import { SectorScoreSnapshotRepository } from '../../domain/dtos/repositories/sector-score-snapshot.repository.js';
 import { PrismaSectorScoreSnapshotRepository } from '../db/repositories/prisma-sector-score-snapshot.repository.js';
@@ -58,6 +59,7 @@ import { ListSectorsUseCase } from '../usecases/list-sectors.usecase.js';
     OdsScoringProcessor,
 
     /* Movimentações (RF33) */
+    ListCompanyMovementsUseCase,
     ReconcileCompanyMovementsUseCase,
 
     /* Evolução setorial (#89, #90) */
@@ -69,6 +71,7 @@ import { ListSectorsUseCase } from '../usecases/list-sectors.usecase.js';
     CalculateCompanyOdsScoresUseCase,
     GetCompanyOdsScoresUseCase,
     ListOdsScoreSummariesUseCase,
+    ListCompanyMovementsUseCase,
     EnsureActiveOdsUseCase,
     RequestScoreRecalculationUseCase,
     RequestScoreRecalculationBatchUseCase,

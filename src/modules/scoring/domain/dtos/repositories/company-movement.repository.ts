@@ -1,5 +1,6 @@
 import type {
   DatedContribution,
+  DetectedOdsMovement,
   ReconstructedOdsMovement,
 } from '../../ods-movement-rules.js';
 
@@ -30,8 +31,33 @@ export interface ReconstructedMovementToSave extends ReconstructedOdsMovement {
   odsNumber: number;
 }
 
+/** Janela de leitura da lista. */
+export interface CompanyMovementsWindow {
+  skip: number;
+  take: number;
+}
+
+/** A movimentação de uma empresa, como a lista a lê. */
+export interface CompanyMovementRow {
+  cnpj: string;
+  movedAt: Date;
+  movements: (DetectedOdsMovement & { odsNumber: number; movedAt: Date })[];
+}
+
+export interface CompanyMovementsPage {
+  rows: CompanyMovementRow[];
+
+  /** Total de empresas com movimentação. */
+  total: number;
+}
+
 /** Contrato de `company_movements` fora do recálculo, que grava na própria transação. */
 export abstract class CompanyMovementRepository {
+  /** A janela pedida, da mais recente para a mais antiga, com o CNPJ como desempate. */
+  abstract findPage(
+    window: CompanyMovementsWindow,
+  ): Promise<CompanyMovementsPage>;
+
   /**
    * Empresas com perfil, a partir do cursor (exclusivo), em ordem de CNPJ, das quais ficam as
    * que não têm movimentação. Lê `limit` perfis por chamada: a página pode vir vazia com a
