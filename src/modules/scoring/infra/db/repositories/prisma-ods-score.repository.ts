@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { PrismaRepository } from '@shared/infra/database/prisma.repository.js';
 import { PrismaService } from '@shared/infra/database/prisma.service.js';
 import {
@@ -10,6 +11,34 @@ import {
   type OdsScoreSummary,
   type ScoreProfileLocation,
 } from '../../../domain/dtos/repositories/ods-score.repository.js';
+import {
+  detectOdsMovement,
+  type MovementScoreState,
+} from '../../../domain/ods-movement-rules.js';
+
+/** O índice gravado, com o que a comparação da movimentação precisa. */
+const STORED_SCORE_FOR_MOVEMENT = {
+  ods_id: true,
+  score_value: true,
+  rules_version: true,
+  contributions: true,
+} satisfies Prisma.CompanyOdsScoreSelect;
+
+type StoredScoreForMovement = Prisma.CompanyOdsScoreGetPayload<{
+  select: typeof STORED_SCORE_FOR_MOVEMENT;
+}>;
+
+function toMovementState(row: StoredScoreForMovement): MovementScoreState {
+  return {
+    scoreValue: row.score_value ?? null,
+    rulesVersion: row.rules_version,
+    contributions: row.contributions.map((item) => ({
+      evidenceId: item.evidence_id,
+      category: item.category,
+      points: item.points,
+    })),
+  };
+}
 
 /**
  * Quantas empresas entram em cada consulta de resumos. O mecanismo de consultas do Prisma
@@ -159,6 +188,11 @@ export class PrismaOdsScoreRepository
 
       if (newer) return false;
 
+      const stored = await tx.companyOdsScore.findMany({
+        where: { cnpj },
+        select: STORED_SCORE_FOR_MOVEMENT,
+      });
+
       for (const score of scores) {
         const fields = {
           ods_number: score.odsNumber,
@@ -190,8 +224,70 @@ export class PrismaOdsScoreRepository
       await tx.companyOdsScore.deleteMany({
         where: { cnpj, ods_id: { notIn: scores.map((score) => score.odsId) } },
       });
+      await this.recordMovements(tx, cnpj, scores, stored);
 
       return true;
+    });
+  }
+
+  /**
+   * Compara os índices gravados com os novos e guarda a última movimentação de cada ODS (RF33).
+   * Roda na transação de `replaceForCompany`: depois dela, o índice anterior não existe mais, e
+   * uma falha aqui desfaz os índices para o recálculo tentar de novo sem perder a mudança.
+   */
+  private async recordMovements(
+    tx: Prisma.TransactionClient,
+    cnpj: string,
+    scores: readonly OdsScoreToSave[],
+    stored: readonly StoredScoreForMovement[],
+  ): Promise<void> {
+    // Sem perfil, a lista não tem o que mostrar da empresa. A movimentação nasce pela
+    // varredura diária, quando o perfil chegar.
+    if (!scores.some(({ location }) => location)) return;
+
+    const detected = scores.flatMap((score) => {
+      const before = stored.find(({ ods_id }) => ods_id === score.odsId);
+      const movement = detectOdsMovement(
+        before ? toMovementState(before) : null,
+        score,
+      );
+
+      if (!movement) return [];
+
+      return [
+        {
+          ods_id: score.odsId,
+          ods_number: score.odsNumber,
+          direction: movement.direction,
+          cause: movement.cause,
+          evidence_category: movement.evidenceCategory,
+          moved_at: score.calculatedAt,
+        },
+      ];
+    });
+
+    if (!detected.length) return;
+
+    const current = await tx.companyMovement.findUnique({
+      where: { cnpj },
+      select: { ods_movements: true },
+    });
+    const untouched = (current?.ods_movements ?? []).filter(
+      ({ ods_id }) =>
+        scores.some(({ odsId }) => odsId === ods_id) &&
+        !detected.some((movement) => movement.ods_id === ods_id),
+    );
+    const ods_movements = [...untouched, ...detected].sort(
+      (a, b) => a.ods_number - b.ods_number,
+    );
+    const moved_at = new Date(
+      Math.max(...ods_movements.map((item) => item.moved_at.getTime())),
+    );
+
+    await tx.companyMovement.upsert({
+      where: { cnpj },
+      create: { cnpj, moved_at, ods_movements },
+      update: { moved_at, ods_movements },
     });
   }
 
