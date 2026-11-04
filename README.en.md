@@ -2,9 +2,11 @@
   <img src="docs/assets/banner-api.en.png" width="100%" alt="BIOS, bios-core-api: from public data to an explainable index">
 </p>
 
-<p align="center">
-  🇧🇷 <a href="README.md">Português</a> · 🇺🇸 <strong>English</strong>
-</p>
+<div align="center">
+
+🇧🇷 [Português](README.md) · 🇺🇸 **English**
+
+</div>
 
 <p align="center">
   <a href="https://github.com/odavibatista/bios-core-api/actions/workflows/ci.yml"><img src="https://github.com/odavibatista/bios-core-api/actions/workflows/ci.yml/badge.svg?branch=develop" alt="CI"></a>
