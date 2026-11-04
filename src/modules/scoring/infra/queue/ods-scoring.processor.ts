@@ -11,14 +11,18 @@ import {
   type AggregateSectorScoresJobResult,
   RECALCULATE_SCORES_JOB,
   RECALCULATE_STALE_SCORES_JOB,
+  RECONCILE_COMPANY_MOVEMENTS_JOB,
   RecalculateScoresJobSchema,
   RecalculateStaleScoresJobSchema,
   type RecalculateScoresJobResult,
   type RecalculateStaleScoresJobResult,
+  ReconcileCompanyMovementsJobSchema,
+  type ReconcileCompanyMovementsJobResult,
 } from '../../domain/ods-scoring-job.dto.js';
 import { AggregateSectorScoresUseCase } from '../usecases/aggregate-sector-scores.usecase.js';
 import { CalculateCompanyOdsScoresUseCase } from '../usecases/calculate-company-ods-scores.usecase.js';
 import { RecalculateStaleScoresUseCase } from '../usecases/recalculate-stale-scores.usecase.js';
+import { ReconcileCompanyMovementsUseCase } from '../usecases/reconcile-company-movements.usecase.js';
 
 /**
  * O que o recálculo torna velho no cache de um CNPJ: o perfil, as evidências consolidadas e
@@ -34,7 +38,7 @@ const STALE_AFTER_RECALCULATION = [
 
 /**
  * Consumidor da fila `ods-scoring` (UC15, #80): o recálculo de índice e confiança de um
- * CNPJ e a varredura agendada por versão de regras.
+ * CNPJ, a varredura agendada por versão de regras e a das movimentações que faltam.
  *
  * Ao final de cada recálculo, o cache derivado do CNPJ é invalidado (perfil, evidências e
  * notas saem juntos): a próxima leitura traz o índice novo. Apagar nunca falha por causa do
@@ -50,6 +54,7 @@ export class OdsScoringProcessor extends WorkerHost {
     private readonly stale: RecalculateStaleScoresUseCase,
     private readonly cache: CacheProvider,
     private readonly sectors: AggregateSectorScoresUseCase,
+    private readonly movements: ReconcileCompanyMovementsUseCase,
   ) {
     super();
   }
@@ -60,8 +65,12 @@ export class OdsScoringProcessor extends WorkerHost {
     | RecalculateScoresJobResult
     | RecalculateStaleScoresJobResult
     | AggregateSectorScoresJobResult
+    | ReconcileCompanyMovementsJobResult
   > {
     if (job.name === RECALCULATE_STALE_SCORES_JOB) return this.sweep(job);
+    if (job.name === RECONCILE_COMPANY_MOVEMENTS_JOB) {
+      return this.reconcileMovements(job);
+    }
     if (job.name === AGGREGATE_SECTOR_SCORES_JOB) {
       return this.aggregateSectors(job);
     }
@@ -105,6 +114,17 @@ export class OdsScoringProcessor extends WorkerHost {
     }
 
     return this.stale.execute();
+  }
+
+  /** Movimentações que faltam (RF33 c); o agendador publica sem carga. */
+  private reconcileMovements(
+    job: Job<unknown>,
+  ): Promise<ReconcileCompanyMovementsJobResult> {
+    if (!ReconcileCompanyMovementsJobSchema.safeParse(job.data ?? {}).success) {
+      throw new UnrecoverableError('Job de movimentações fora do contrato.');
+    }
+
+    return this.movements.execute(new Date());
   }
 
   /** Agregados setoriais do mês corrente (#89); o agendador publica sem carga. */

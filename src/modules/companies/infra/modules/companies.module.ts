@@ -6,17 +6,19 @@ import { ScoringModule } from '@modules/scoring/infra/modules/scoring.module.js'
 import { CompanyProfileRepository } from '../../domain/dtos/repositories/company-profile.repository.js';
 import { CompaniesController } from '../../http/controllers/companies.controller.js';
 import { CompaniesExportController } from '../../http/controllers/companies-export.controller.js';
+import { CompanyMovementsController } from '../../http/controllers/company-movements.controller.js';
 import { PrismaCompanyProfileRepository } from '../db/repositories/prisma-company-profile.repository.js';
 import { CompanyProfileProcessor } from '../queue/company-profile.processor.js';
 import { ExportCompaniesUseCase } from '../usecases/export-companies.usecase.js';
 import { GetCompanyProfileUseCase } from '../usecases/get-company-profile.usecase.js';
+import { ListRecentCompanyMovementsUseCase } from '../usecases/list-recent-company-movements.usecase.js';
 import { RefreshCompanyProfileUseCase } from '../usecases/refresh-company-profile.usecase.js';
 import { ResolveCnaeDescriptionsUseCase } from '../usecases/resolve-cnae-descriptions.usecase.js';
 import { SearchCompaniesUseCase } from '../usecases/search-companies.usecase.js';
 
 /**
  * Perfil cadastral de pessoas jurídicas: consulta por CNPJ e por nome,
- * pesquisa e exportação (UC06, UC08, UC09). A rota do perfil completo (cadastro +
+ * pesquisa, exportação e a lista de movimentações (UC06, UC08, UC09, UC18). A rota do perfil completo (cadastro +
  * perfil ambiental) e a consulta por chave de API (UC12) moram no
  * `EnvironmentalIntelligenceModule`, que compõe este módulo com evidências e índices.
  *
@@ -32,7 +34,13 @@ import { SearchCompaniesUseCase } from '../usecases/search-companies.usecase.js'
  */
 @Module({
   imports: [DataSourcesModule, ReceitaModule, IbgeCnaeModule, ScoringModule],
-  controllers: [CompaniesController, CompaniesExportController],
+  // A rota fixa `companies/movements` vem antes de `companies/:cnpj`, que mora no
+  // `EnvironmentalIntelligenceModule`, carregado depois deste módulo.
+  controllers: [
+    CompaniesController,
+    CompaniesExportController,
+    CompanyMovementsController,
+  ],
   exports: [CompanyProfileRepository, GetCompanyProfileUseCase],
   providers: [
     /* Repositórios */
@@ -43,6 +51,7 @@ import { SearchCompaniesUseCase } from '../usecases/search-companies.usecase.js'
 
     /* Casos de uso */
     GetCompanyProfileUseCase,
+    ListRecentCompanyMovementsUseCase,
     RefreshCompanyProfileUseCase,
     ResolveCnaeDescriptionsUseCase,
     SearchCompaniesUseCase,

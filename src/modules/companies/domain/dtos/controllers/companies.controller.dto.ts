@@ -1,5 +1,9 @@
 import type { StreamableFile } from '@nestjs/common';
 import type {
+  CompanyMovementsQuery,
+  CompanyMovementsResponse,
+} from '../requests/company-movements.dto.js';
+import type {
   ExportCompaniesQuery,
   SearchCompaniesQuery,
   SearchCompaniesResponse,
@@ -13,6 +17,13 @@ export interface CompaniesSearchControllerInterface {
   searchCompanies(
     query: SearchCompaniesQuery,
   ): Promise<SearchCompaniesResponse>;
+}
+
+/** Contrato da lista de movimentações da tela principal (UC18). */
+export interface CompanyMovementsControllerInterface {
+  listCompanyMovements(
+    query: CompanyMovementsQuery,
+  ): Promise<CompanyMovementsResponse>;
 }
 
 /** Contrato da exportação da lista de empresas em XLSX (UC09). */

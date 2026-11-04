@@ -9,6 +9,11 @@ describe('PrismaOdsScoreRepository', () => {
       upsert: ReturnType<typeof vi.fn>;
       deleteMany: ReturnType<typeof vi.fn>;
       findFirst: ReturnType<typeof vi.fn>;
+      findMany: ReturnType<typeof vi.fn>;
+    };
+    companyMovement: {
+      findUnique: ReturnType<typeof vi.fn>;
+      upsert: ReturnType<typeof vi.fn>;
     };
   };
   const tx: TransactionClient = {
@@ -16,7 +21,9 @@ describe('PrismaOdsScoreRepository', () => {
       upsert: vi.fn(),
       deleteMany: vi.fn(),
       findFirst: vi.fn(),
+      findMany: vi.fn(),
     },
+    companyMovement: { findUnique: vi.fn(), upsert: vi.fn() },
   };
   const prisma = {
     ods: { findMany: vi.fn() },
@@ -32,6 +39,8 @@ describe('PrismaOdsScoreRepository', () => {
     vi.clearAllMocks();
     // Sem índice mais novo gravado: a guarda deixa passar.
     tx.companyOdsScore.findFirst.mockResolvedValue(null);
+    tx.companyOdsScore.findMany.mockResolvedValue([]);
+    tx.companyMovement.findUnique.mockResolvedValue(null);
   });
 
   it('carrega somente ODS ativos em ordem e preserva os IDs reais', async () => {
@@ -295,6 +304,129 @@ describe('PrismaOdsScoreRepository', () => {
     });
     expect(tx.companyOdsScore.deleteMany).toHaveBeenCalledWith({
       where: { cnpj: score.cnpj, ods_id: { notIn: [score.odsId] } },
+    });
+  });
+
+  describe('movimentação do índice (RF33)', () => {
+    const odsId = faker.database.mongodbObjectId();
+    const otherOdsId = faker.database.mongodbObjectId();
+    const evidenceId = faker.database.mongodbObjectId();
+    const calculatedAt = new Date('2026-11-04T12:00:00.000Z');
+    const contribution = {
+      evidenceId,
+      category: 'INFRACAO_AMBIENTAL',
+      signal: 'NEGATIVE',
+      weight: 40,
+      weightReason: null,
+      points: -40,
+    } as const;
+    const score: OdsScoreToSave = {
+      cnpj: '11222333000181',
+      odsId,
+      odsNumber: 15,
+      scoreValue: -40,
+      confidenceValue: 0.4,
+      evidenceCount: 1,
+      contributions: [contribution],
+      coverageStatus: 'HAS_RECORDS',
+      sourcesWithoutRecords: [],
+      rulesVersion: 'rf10-v1',
+      calculatedAt,
+      location: { uf: 'SP', city: 'São Paulo', cnaeCodes: ['6201501'] },
+    };
+    const movement = {
+      ods_id: odsId,
+      ods_number: 15,
+      direction: 'AVAILABLE',
+      cause: 'EVIDENCE_ADDED',
+      evidence_category: 'INFRACAO_AMBIENTAL',
+      moved_at: calculatedAt,
+    };
+
+    it('grava a mudança detectada, sem perder a do outro ODS, em ordem de ODS', async () => {
+      const older = {
+        ...movement,
+        ods_id: otherOdsId,
+        ods_number: 13,
+        moved_at: new Date('2026-10-01T00:00:00.000Z'),
+      };
+      tx.companyMovement.findUnique.mockResolvedValue({
+        ods_movements: [older],
+      });
+
+      await repo.replaceForCompany(score.cnpj, [
+        score,
+        {
+          ...score,
+          odsId: otherOdsId,
+          odsNumber: 13,
+          scoreValue: null,
+          evidenceCount: 0,
+          contributions: [],
+        },
+      ]);
+
+      expect(tx.companyMovement.upsert).toHaveBeenCalledWith({
+        where: { cnpj: score.cnpj },
+        create: {
+          cnpj: score.cnpj,
+          moved_at: calculatedAt,
+          ods_movements: [older, movement],
+        },
+        update: { moved_at: calculatedAt, ods_movements: [older, movement] },
+      });
+    });
+
+    it('sai a movimentação de um ODS que deixou de ser calculado', async () => {
+      tx.companyMovement.findUnique.mockResolvedValue({
+        ods_movements: [{ ...movement, ods_id: otherOdsId, ods_number: 13 }],
+      });
+
+      await repo.replaceForCompany(score.cnpj, [score]);
+
+      expect(tx.companyMovement.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: { moved_at: calculatedAt, ods_movements: [movement] },
+        }),
+      );
+    });
+
+    it('compara com o índice gravado: o mesmo índice não grava nada', async () => {
+      tx.companyOdsScore.findMany.mockResolvedValue([
+        {
+          ods_id: odsId,
+          score_value: -40,
+          rules_version: 'rf10-v1',
+          contributions: [
+            {
+              evidence_id: evidenceId,
+              category: 'INFRACAO_AMBIENTAL',
+              points: -40,
+            },
+          ],
+        },
+      ]);
+
+      await repo.replaceForCompany(score.cnpj, [score]);
+
+      expect(tx.companyMovement.upsert).not.toHaveBeenCalled();
+    });
+
+    it('empresa sem perfil cadastral não grava movimentação', async () => {
+      await repo.replaceForCompany(score.cnpj, [{ ...score, location: null }]);
+
+      expect(tx.companyMovement.findUnique).not.toHaveBeenCalled();
+      expect(tx.companyMovement.upsert).not.toHaveBeenCalled();
+    });
+
+    it('índice anterior nulo em documento antigo conta como sem índice', async () => {
+      tx.companyOdsScore.findMany.mockResolvedValue([
+        { ods_id: odsId, rules_version: 'rf10-v1', contributions: [] },
+      ]);
+
+      await repo.replaceForCompany(score.cnpj, [score]);
+
+      expect(tx.companyMovement.upsert).toHaveBeenCalledOnce();
     });
   });
 
