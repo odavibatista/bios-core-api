@@ -118,3 +118,78 @@ export function detectOdsMovement(
     evidenceCategory: main.category,
   };
 }
+
+/** Uma contribuição com a data do fato registrado pela evidência, quando se sabe. */
+export interface DatedContribution extends MovementContribution {
+  evidenceDate: Date | null;
+}
+
+function dateOf(value: unknown): Date | null {
+  if (typeof value !== 'string') return null;
+
+  const date = new Date(value);
+
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/**
+ * Quando o fato registrado pela evidência aconteceu: a publicação ou, sem ela, o início da sanção
+ * (CEIS/CNEP) ou o fim do ano do inventário (GHG). A data de coleta nunca entra: ela diz quando o
+ * BIOS leu o dado, e uma sanção antiga apareceria como se fosse de hoje.
+ */
+export function evidenceFactDate(
+  publishedAt: Date | null,
+  details: unknown,
+): Date | null {
+  if (publishedAt) return publishedAt;
+
+  const { startDate, inventoryYear } = (details ?? {}) as Record<
+    string,
+    unknown
+  >;
+
+  return (
+    dateOf(startDate) ??
+    (typeof inventoryYear === 'number'
+      ? new Date(Date.UTC(inventoryYear, 11, 31))
+      : null)
+  );
+}
+
+export interface ReconstructedOdsMovement extends DetectedOdsMovement {
+  movedAt: Date;
+}
+
+/**
+ * A movimentação de um índice sem registro de mudança (RF33 c; UC15, regra 8), deduzida da
+ * evidência mais recente que pontua: foi ela que deu ao índice o valor atual. Sem data
+ * utilizável, ou só com data futura, não há o que afirmar, e nada é reconstruído.
+ */
+export function reconstructOdsMovement(
+  contributions: readonly DatedContribution[],
+  now: Date,
+): ReconstructedOdsMovement | null {
+  const scoring = contributions.filter(({ points }) => points !== 0);
+  const [latest] = scoring
+    .filter(({ evidenceDate }) => evidenceDate && evidenceDate <= now)
+    .sort(
+      (a, b) =>
+        b.evidenceDate!.getTime() - a.evidenceDate!.getTime() ||
+        Math.abs(b.points) - Math.abs(a.points) ||
+        a.evidenceId.localeCompare(b.evidenceId),
+    );
+
+  if (!latest) return null;
+
+  const signed =
+    latest.points > 0
+      ? ScoreMovementDirection.INCREASED
+      : ScoreMovementDirection.DECREASED;
+
+  return {
+    direction: scoring.length === 1 ? ScoreMovementDirection.AVAILABLE : signed,
+    cause: ScoreMovementCause.EVIDENCE_ADDED,
+    evidenceCategory: latest.category,
+    movedAt: latest.evidenceDate!,
+  };
+}

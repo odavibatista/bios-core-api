@@ -17,6 +17,22 @@ export const AGGREGATE_SECTOR_SCORES_JOB = 'aggregate-sector-scores';
 
 export const AggregateSectorScoresJobSchema = z.object({}).strict();
 
+/**
+ * Varredura que reconstrói a movimentação das empresas com perfil e índice que ainda não a têm
+ * (RF33 c). Agendada; não leva carga.
+ */
+export const RECONCILE_COMPANY_MOVEMENTS_JOB = 'reconcile-company-movements';
+
+export const ReconcileCompanyMovementsJobSchema = z.object({}).strict();
+
+export interface ReconcileCompanyMovementsJobResult {
+  /** Quantas empresas ganharam movimentação. */
+  created: number;
+}
+
+/** Quantas empresas a varredura de movimentações lê por vez. */
+export const MOVEMENT_RECONCILE_PAGE_SIZE = 200;
+
 export interface AggregateSectorScoresJobResult {
   /** Início da janela agregada (ISO 8601). */
   windowStart: string;
