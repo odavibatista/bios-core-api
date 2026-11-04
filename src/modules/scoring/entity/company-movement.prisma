@@ -1,0 +1,83 @@
+/// Última movimentação do índice de cada ODS, por empresa (RF33): a projeção de leitura da
+/// tela principal (RF34).
+///
+/// Observações:
+///  - um documento por empresa com perfil cadastral, gravado na mesma transação do recálculo:
+///    fora dela, uma queda entre as duas escritas perderia a mudança, porque o índice anterior
+///    já teria sido sobrescrito;
+///  - não é log: cada ODS guarda só a última movimentação, sem o índice anterior nem a variação,
+///    e a coleção não forma série histórica por empresa (IA05, IND03);
+///  - identificação e índices atuais são lidos de `company_profile` e `company_ods_scores`,
+///    para um dado cadastral novo nunca ficar defasado na lista;
+///  - `cnpj` é referência lógica a `company_profile` (sem relação Prisma);
+///  - mapeado para a coleção `company_movements`.
+model CompanyMovement {
+  /// Identificador do registro.
+  id_company_movement String @id @default(auto()) @map("_id") @db.ObjectId
+
+  /// CNPJ da empresa (14 dígitos, sem máscara).
+  cnpj String @unique(map: "idx_company_movements_cnpj")
+
+  /// Movimentação mais recente entre os ODS: é a ordem da lista.
+  moved_at DateTime
+
+  /// Última movimentação de cada ODS, no máximo uma por ODS.
+  ods_movements OdsMovement[]
+
+  /// Data/hora de criação do registro.
+  created_at DateTime @default(now())
+
+  /// Data/hora da última atualização do registro.
+  updated_at DateTime @updatedAt
+
+  @@index([moved_at(sort: Desc), cnpj], map: "idx_company_movements_moved_at_cnpj")
+  @@map("company_movements")
+}
+
+/// Última movimentação de um ODS (subdocumento embutido).
+type OdsMovement {
+  /// ID do ODS (`Ods`) em que o índice mudou.
+  ods_id String @db.ObjectId
+
+  /// Número do ODS, desnormalizado para a lista.
+  ods_number Int
+
+  /// Sentido da mudança.
+  direction ScoreMovementDirection
+
+  /// O que mudou nas contribuições.
+  cause ScoreMovementCause
+
+  /// Categoria da contribuição de maior efeito na mudança.
+  evidence_category EvidenceCategory
+
+  /// Data do recálculo que detectou a mudança; na reconstrução, a da evidência.
+  moved_at DateTime
+}
+
+/// Sentido da mudança do índice de um ODS.
+enum ScoreMovementDirection {
+  /// O índice existia e subiu.
+  INCREASED
+
+  /// O índice existia e desceu.
+  DECREASED
+
+  /// O ODS não tinha índice e passou a ter.
+  AVAILABLE
+
+  /// O ODS tinha índice e deixou de ter.
+  UNAVAILABLE
+}
+
+/// Causa da mudança do índice, vista na comparação das contribuições.
+enum ScoreMovementCause {
+  /// Entrou ao menos uma evidência que pontua.
+  EVIDENCE_ADDED
+
+  /// Saiu ao menos uma evidência que pontuava, e nenhuma que pontua entrou.
+  EVIDENCE_REMOVED
+
+  /// As evidências são as mesmas, e o peso efetivo de alguma mudou.
+  WEIGHT_CHANGED
+}

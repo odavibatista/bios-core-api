@@ -27,6 +27,7 @@ evidência**.
 | **Pesquisa e ranking** | Por nome, UF, município, CNAE, índice e confiança mínimos, ordenada pelo índice do ODS | UC08 |
 | **Exportação** | A lista filtrada em XLSX | UC09 |
 | **Evolução setorial** | Índice médio por setor (divisão CNAE) mês a mês, sempre agregado, nunca por empresa | UC10 |
+| **Movimentações** | Última mudança do índice de cada ODS por empresa, com sentido, causa e data, gravada na transação do recálculo, sem guardar o índice anterior |
 | **API pública** | O mesmo perfil para sistemas de terceiros, por chave de API com limite próprio | UC11, UC12 |
 | **Contas e acesso** | Cadastro com confirmação por e-mail, sessões revogáveis, recuperação de senha, papéis e blacklist de domínios | UC01–UC05, UC13, UC17 |
 
