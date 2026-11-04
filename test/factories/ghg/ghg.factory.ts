@@ -36,7 +36,9 @@ let nextOrganizationId = faker.number.int({ min: 10_000, max: 80_000 });
 export const ghgOrganizationFactory = defineFactory(() => {
   const id = nextOrganizationId++;
 
-  return { id, name: `${faker.company.name()} ${id}` };
+  // Nome fora do sorteio de `faker.company.name()`: a busca de candidatos casa por trecho, e um
+  // nome sorteado igual ao da empresa viraria candidato por acaso (1 em cada 135 rodadas).
+  return { id, name: `Organizacao inventariante ${id}` };
 });
 /** Tamanho da pagina que o portal devolve quando a busca nao informa `maxResultCount`. */
 export const GHG_PORTAL_DEFAULT_PAGE = 10;
