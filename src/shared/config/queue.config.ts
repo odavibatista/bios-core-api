@@ -77,6 +77,15 @@ export const QUEUE_SCHEDULES: readonly QueueSchedule[] = [
     cronSetting: 'SECTOR_SNAPSHOT_CRON',
     retry: { attempts: 3, backoffMs: 60_000 },
   },
+  {
+    // Movimentações que faltam (RF33 c): depois da ingestão e da varredura de regras, para ler
+    // os índices do dia. Só cria o que falta; repetir não muda nada.
+    queue: QueueName.ODS_SCORING,
+    id: 'company-movements-reconcile',
+    jobName: 'reconcile-company-movements',
+    cron: '30 6 * * *',
+    retry: { attempts: 3, backoffMs: 60_000 },
+  },
 ];
 
 /**

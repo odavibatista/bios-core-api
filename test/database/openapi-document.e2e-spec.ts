@@ -39,6 +39,7 @@ const EXPECTED_OPERATIONS: Record<string, string> = {
   'DELETE /admin/blocked-email-domains/{id}': 'removeBlockedEmailDomain',
   'GET /companies': 'searchCompanies',
   'GET /companies/export/xlsx': 'exportCompaniesXlsx',
+  'GET /companies/movements': 'listCompanyMovements',
   'GET /companies/{cnpj}': 'getCompanyProfile',
   'GET /v1/companies/{cnpj}': 'getPublicCompanyProfile',
   'GET /companies/{cnpj}/evidences': 'getCompanyEvidences',

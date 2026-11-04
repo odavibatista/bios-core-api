@@ -18,6 +18,7 @@ import { PrismaCompanyProfileRepository } from './prisma-company-profile.reposit
 
 describe('PrismaCompanyProfileRepository', () => {
   const findUnique = vi.fn();
+  const findMany = vi.fn();
   const upsert = vi.fn();
   const aggregateRaw = vi.fn();
   const scoreAggregateRaw = vi.fn();
@@ -71,7 +72,7 @@ describe('PrismaCompanyProfileRepository', () => {
         {
           provide: PrismaService,
           useValue: {
-            companyProfile: { findUnique, upsert, aggregateRaw },
+            companyProfile: { findUnique, findMany, upsert, aggregateRaw },
             companyOdsScore: { aggregateRaw: scoreAggregateRaw },
             dataSource: { findUniqueOrThrow: findSourceOrThrow },
           },
@@ -770,5 +771,39 @@ describe('PrismaCompanyProfileRepository', () => {
     expect(serialized).not.toContain('previous_content_hash');
     expect(serialized).not.toContain('cadastral_source');
     expect(serialized).not.toContain('id_company_profile');
+  });
+
+  describe('findIdentities', () => {
+    beforeEach(() => {
+      findMany.mockReset();
+    });
+
+    it('sem CNPJs, não consulta o banco', async () => {
+      await expect(repository.findIdentities([])).resolves.toEqual([]);
+      expect(findMany).not.toHaveBeenCalled();
+    });
+
+    it('devolve o que a lista mostra, com nome fantasia nulo quando ausente', async () => {
+      findMany.mockResolvedValue([
+        {
+          cnpj: '1',
+          legal_name: 'Empresa',
+          address: { city: 'SÃO PAULO', uf: 'SP' },
+        },
+      ]);
+
+      await expect(repository.findIdentities(['1'])).resolves.toEqual([
+        {
+          cnpj: '1',
+          legal_name: 'Empresa',
+          trade_name: null,
+          city: 'SÃO PAULO',
+          uf: 'SP',
+        },
+      ]);
+      expect(findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { cnpj: { in: ['1'] } } }),
+      );
+    });
   });
 });
