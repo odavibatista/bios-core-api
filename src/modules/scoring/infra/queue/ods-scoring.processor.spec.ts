@@ -8,10 +8,12 @@ import {
   AGGREGATE_SECTOR_SCORES_JOB,
   RECALCULATE_SCORES_JOB,
   RECALCULATE_STALE_SCORES_JOB,
+  RECONCILE_COMPANY_MOVEMENTS_JOB,
 } from '../../domain/ods-scoring-job.dto.js';
 import { AggregateSectorScoresUseCase } from '../usecases/aggregate-sector-scores.usecase.js';
 import { CalculateCompanyOdsScoresUseCase } from '../usecases/calculate-company-ods-scores.usecase.js';
 import { RecalculateStaleScoresUseCase } from '../usecases/recalculate-stale-scores.usecase.js';
+import { ReconcileCompanyMovementsUseCase } from '../usecases/reconcile-company-movements.usecase.js';
 import { OdsScoringProcessor } from './ods-scoring.processor.js';
 
 describe('OdsScoringProcessor', () => {
@@ -21,6 +23,9 @@ describe('OdsScoringProcessor', () => {
   const stale = { execute: vi.fn<RecalculateStaleScoresUseCase['execute']>() };
   const sectors = {
     execute: vi.fn<AggregateSectorScoresUseCase['execute']>(),
+  };
+  const movements = {
+    execute: vi.fn<ReconcileCompanyMovementsUseCase['execute']>(),
   };
   const cache = {
     delete: vi.fn<CacheProvider['delete']>(),
@@ -44,10 +49,30 @@ describe('OdsScoringProcessor', () => {
         { provide: RecalculateStaleScoresUseCase, useValue: stale },
         { provide: CacheProvider, useValue: cache },
         { provide: AggregateSectorScoresUseCase, useValue: sectors },
+        { provide: ReconcileCompanyMovementsUseCase, useValue: movements },
       ],
     }).compile();
 
     processor = moduleRef.get(OdsScoringProcessor);
+  });
+
+  describe('reconcile-company-movements', () => {
+    it('reconstrói o que falta e devolve quantas empresas ganharam movimentação', async () => {
+      movements.execute.mockResolvedValue({ created: 3 });
+
+      await expect(
+        processor.process(job(RECONCILE_COMPANY_MOVEMENTS_JOB, {})),
+      ).resolves.toEqual({ created: 3 });
+      expect(movements.execute).toHaveBeenCalledExactlyOnceWith(
+        expect.any(Date),
+      );
+    });
+
+    it('carga fora do contrato é irrecuperável', async () => {
+      await expect(
+        processor.process(job(RECONCILE_COMPANY_MOVEMENTS_JOB, { cnpj: '1' })),
+      ).rejects.toBeInstanceOf(UnrecoverableError);
+    });
   });
 
   describe('recalculate-scores', () => {

@@ -15,6 +15,10 @@ import { EnsureActiveOdsUseCase } from '../usecases/ensure-active-ods.usecase.js
 import { OdsController } from '../../http/controllers/ods.controller.js';
 import { ScoreExplanationController } from '../../http/controllers/score-explanation.controller.js';
 import { SectorsController } from '../../http/controllers/sectors.controller.js';
+import { CompanyMovementRepository } from '../../domain/dtos/repositories/company-movement.repository.js';
+import { PrismaCompanyMovementRepository } from '../db/repositories/prisma-company-movement.repository.js';
+import { ListCompanyMovementsUseCase } from '../usecases/list-company-movements.usecase.js';
+import { ReconcileCompanyMovementsUseCase } from '../usecases/reconcile-company-movements.usecase.js';
 import { SectorScoreSnapshotRepository } from '../../domain/dtos/repositories/sector-score-snapshot.repository.js';
 import { PrismaSectorScoreSnapshotRepository } from '../db/repositories/prisma-sector-score-snapshot.repository.js';
 import { AggregateSectorScoresUseCase } from '../usecases/aggregate-sector-scores.usecase.js';
@@ -25,7 +29,8 @@ import { ListSectorsUseCase } from '../usecases/list-sectors.usecase.js';
  * ODS de referência, índices de aderência e confiança por empresa e ODS,
  * explicação do score e agregados setoriais (UC07, UC10, UC15).
  *
- * Entidades (schemas Prisma em `../../entity`): `Ods`, `CompanyOdsScore`, `SectorScoreSnapshot`.
+ * Entidades (schemas Prisma em `../../entity`): `Ods`, `CompanyOdsScore`, `CompanyMovement`,
+ * `SectorScoreSnapshot`.
  */
 @Module({
   imports: [EvidencesModule],
@@ -35,6 +40,10 @@ import { ListSectorsUseCase } from '../usecases/list-sectors.usecase.js';
     {
       provide: SectorScoreSnapshotRepository,
       useClass: PrismaSectorScoreSnapshotRepository,
+    },
+    {
+      provide: CompanyMovementRepository,
+      useClass: PrismaCompanyMovementRepository,
     },
     CalculateCompanyOdsScoresUseCase,
     GetScoreExplanationUseCase,
@@ -49,6 +58,10 @@ import { ListSectorsUseCase } from '../usecases/list-sectors.usecase.js';
     RecalculateStaleScoresUseCase,
     OdsScoringProcessor,
 
+    /* Movimentações (RF33) */
+    ListCompanyMovementsUseCase,
+    ReconcileCompanyMovementsUseCase,
+
     /* Evolução setorial (#89, #90) */
     AggregateSectorScoresUseCase,
     GetSectorEvolutionUseCase,
@@ -58,6 +71,7 @@ import { ListSectorsUseCase } from '../usecases/list-sectors.usecase.js';
     CalculateCompanyOdsScoresUseCase,
     GetCompanyOdsScoresUseCase,
     ListOdsScoreSummariesUseCase,
+    ListCompanyMovementsUseCase,
     EnsureActiveOdsUseCase,
     RequestScoreRecalculationUseCase,
     RequestScoreRecalculationBatchUseCase,

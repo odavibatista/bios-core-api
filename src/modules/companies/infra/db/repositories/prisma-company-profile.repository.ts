@@ -6,6 +6,7 @@ import { PrismaService } from '@shared/infra/database/prisma.service.js';
 import { z } from 'zod';
 import {
   CompanyProfileRepository,
+  type CompanyIdentity,
   type SaveCompanyProfileInput,
   type SearchCompaniesInput,
   type SearchCompaniesResult,
@@ -56,6 +57,23 @@ export class PrismaCompanyProfileRepository
 {
   constructor(prisma: PrismaService) {
     super(prisma);
+  }
+
+  async findIdentities(cnpjs: readonly string[]): Promise<CompanyIdentity[]> {
+    if (!cnpjs.length) return [];
+
+    const rows = await this.prisma.companyProfile.findMany({
+      where: { cnpj: { in: [...cnpjs] } },
+      select: { cnpj: true, legal_name: true, trade_name: true, address: true },
+    });
+
+    return rows.map((row) => ({
+      cnpj: row.cnpj,
+      legal_name: row.legal_name,
+      trade_name: row.trade_name ?? null,
+      city: row.address.city,
+      uf: row.address.uf,
+    }));
   }
 
   async findByCnpj(cnpj: string): Promise<StoredCompanyProfile | null> {

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   detectOdsMovement,
+  evidenceFactDate,
+  reconstructOdsMovement,
+  type DatedContribution,
   type MovementContribution,
   type MovementScoreState,
 } from './ods-movement-rules.js';
@@ -186,5 +189,133 @@ describe('detectOdsMovement', () => {
         ),
       ).toBeNull();
     });
+  });
+});
+
+describe('evidenceFactDate', () => {
+  const published = new Date('2026-05-05T00:00:00.000Z');
+
+  it('prefere a data de publicação', () => {
+    expect(evidenceFactDate(published, { startDate: '2019-07-10' })).toBe(
+      published,
+    );
+  });
+
+  it('sem publicação, usa o início da sanção', () => {
+    expect(evidenceFactDate(null, { startDate: '2019-07-10' })).toEqual(
+      new Date('2019-07-10T00:00:00.000Z'),
+    );
+  });
+
+  it('sem publicação, usa o fim do ano do inventário', () => {
+    expect(evidenceFactDate(null, { inventoryYear: 2025 })).toEqual(
+      new Date('2025-12-31T00:00:00.000Z'),
+    );
+  });
+
+  it('sem data do fato, não inventa uma', () => {
+    expect(evidenceFactDate(null, null)).toBeNull();
+    expect(evidenceFactDate(null, {})).toBeNull();
+    expect(evidenceFactDate(null, { startDate: 'sem data' })).toBeNull();
+    expect(evidenceFactDate(null, { startDate: 20190710 })).toBeNull();
+    expect(evidenceFactDate(null, { inventoryYear: '2025' })).toBeNull();
+  });
+});
+
+describe('reconstructOdsMovement', () => {
+  const now = new Date('2026-11-04T12:00:00.000Z');
+  const older = new Date('2024-05-01T00:00:00.000Z');
+  const newer = new Date('2026-10-01T00:00:00.000Z');
+  const dated = (
+    item: MovementContribution,
+    evidenceDate: Date | null,
+  ): DatedContribution => ({ ...item, evidenceDate });
+
+  it('uma única evidência que pontua é AVAILABLE, com a data dela', () => {
+    expect(
+      reconstructOdsMovement([dated(infraction('a'), older)], now),
+    ).toEqual({
+      direction: 'AVAILABLE',
+      cause: 'EVIDENCE_ADDED',
+      evidenceCategory: 'INFRACAO_AMBIENTAL',
+      movedAt: older,
+    });
+  });
+
+  it('com mais de uma, o sentido vem do sinal dos pontos da mais recente', () => {
+    expect(
+      reconstructOdsMovement(
+        [dated(sanction('a'), older), dated(infraction('b'), newer)],
+        now,
+      ),
+    ).toEqual({
+      direction: 'DECREASED',
+      cause: 'EVIDENCE_ADDED',
+      evidenceCategory: 'INFRACAO_AMBIENTAL',
+      movedAt: newer,
+    });
+  });
+
+  it('pontos positivos são INCREASED', () => {
+    const inventory: MovementContribution = {
+      evidenceId: 'c',
+      category: 'EMISSAO_GEE',
+      points: 60,
+    };
+
+    expect(
+      reconstructOdsMovement(
+        [
+          dated(inventory, newer),
+          dated({ ...inventory, evidenceId: 'd' }, older),
+        ],
+        now,
+      )?.direction,
+    ).toBe('INCREASED');
+  });
+
+  it('evidência zerada pelo teto não é a mais recente nem conta como segunda', () => {
+    expect(
+      reconstructOdsMovement(
+        [dated(infraction('a'), older), dated(infraction('b', 0), newer)],
+        now,
+      ),
+    ).toMatchObject({ direction: 'AVAILABLE', movedAt: older });
+  });
+
+  it('data futura é ignorada', () => {
+    const future = new Date('2030-01-01T00:00:00.000Z');
+
+    expect(
+      reconstructOdsMovement(
+        [dated(infraction('a'), older), dated(sanction('b'), future)],
+        now,
+      )?.movedAt,
+    ).toEqual(older);
+    expect(
+      reconstructOdsMovement([dated(infraction('a'), future)], now),
+    ).toBeNull();
+  });
+
+  it('sem data utilizável, nada é reconstruído', () => {
+    expect(
+      reconstructOdsMovement([dated(infraction('a'), null)], now),
+    ).toBeNull();
+    expect(reconstructOdsMovement([], now)).toBeNull();
+  });
+
+  it('no empate de data, vale o maior efeito e depois o menor identificador', () => {
+    expect(
+      reconstructOdsMovement(
+        [dated(sanction('a', -5), newer), dated(infraction('b', -40), newer)],
+        now,
+      )?.evidenceCategory,
+    ).toBe('INFRACAO_AMBIENTAL');
+    expect(
+      reconstructOdsMovement(
+        [dated(infraction('b', -5), newer), dated(sanction('a', -5), newer)],
+        now,
+      )?.evidenceCategory,
+    ).toBe('CONDUTA_ADMINISTRATIVA');
   });
 });

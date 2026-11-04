@@ -77,6 +77,15 @@ export interface SearchCompaniesResult {
   total: number;
 }
 
+/** O que uma lista mostra da empresa, com a razão social já mascarada (INL02). */
+export interface CompanyIdentity {
+  cnpj: string;
+  legal_name: string;
+  trade_name: string | null;
+  city: string;
+  uf: string;
+}
+
 /**
  * Contrato do perfil cadastral guardado (RF05).
  *
@@ -88,6 +97,9 @@ export interface SearchCompaniesResult {
 export abstract class CompanyProfileRepository {
   /** Localiza o perfil pelo CNPJ canônico. */
   abstract findByCnpj(cnpj: string): Promise<StoredCompanyProfile | null>;
+
+  /** Identificação das empresas dadas; CNPJ sem perfil fica de fora. */
+  abstract findIdentities(cnpjs: readonly string[]): Promise<CompanyIdentity[]>;
 
   /**
    * Pesquisa entre os perfis guardados (UC06, fluxo 1.1; UC08): as empresas que atendem a
