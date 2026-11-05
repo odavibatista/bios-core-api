@@ -45,7 +45,7 @@ const CnpjsSchema = z.array(z.object({ cnpj: z.string() }));
 /**
  * Perfil cadastral das empresas no MongoDB.
  *
- * Só campos de pessoa jurídica existem na coleção (INL02), e é só o que este
+ * Só campos do cadastro com CNPJ existem na coleção (INL02), e é só o que este
  * repositório lê e grava. Na atualização, um campo que deixou de existir na
  * fonte (o nome fantasia, por exemplo) é gravado como `null`, e não omitido:
  * omitir deixaria o valor antigo no documento.

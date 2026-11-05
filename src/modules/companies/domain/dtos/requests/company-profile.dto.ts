@@ -40,8 +40,8 @@ const CompanyAddressSchema = z
 /**
  * Perfil cadastral de uma empresa (RF05, RF06).
  *
- * Só dados de pessoa jurídica: nenhum dado de sócios ou administradores existe
- * no perfil, nem aqui (INL02).
+ * Nenhum dado de sócios ou administradores existe no perfil (INL02). No
+ * empresário individual, a razão social e o endereço são os do titular.
  */
 export const CompanyProfileResponseSchema = z
   .object({
