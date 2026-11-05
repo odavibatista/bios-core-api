@@ -334,3 +334,30 @@ repository is a single one (`toSearchInput`), so what is downloaded is what the 
 ---
 
 [Documentation index](README.md) · ← [14. SDG indexes](14-SDG-Indexes.md) · [16. API keys and public API](16-API-Keys.md) →
+
+## Removal at the owner's request
+
+The request arrives by email, with the CNPJ and proof of ownership. Once it is checked, the
+administrator uses `POST /admin/company-removals` (`[P15]`, `ADMIN` only).
+
+- **What is erased:** `company_profile`, `company_ods_scores`, `company_movements`,
+  `evidence_normalized` and `evidence_raw` for the CNPJ, plus the profile, evidence and score
+  caches.
+- **What stays:** the CNPJ and the date in `company_removals`, so that no collection brings the record
+  back. The list is checked when the profile is read or refreshed, and source batch loads drop the
+  CNPJ.
+- **How it answers:** profile, evidence, explanation and CRM import treat the CNPJ as an unknown
+  company (404, or `NOT_FOUND` in a batch). Search, export and movements no longer list it.
+- **Sector averages:** they do not change, because they identify no company.
+- **Undoing it:** `DELETE /admin/company-removals/:cnpj` takes the CNPJ off the list, and the record
+  returns on the next lookup, collected again from the sources.
+
+When OpenCNPJ flags a record with `lgpd_anonimizado`, the provider chain stops there (`WITHHELD`):
+fetching the same data from the next provider would bypass the request made to it.
+
+## Legal nature
+
+`legal_nature_code` and `legal_nature` come from all three providers in the chain. Code `2135`
+identifies sole proprietors, including MEIs, and helps check a removal request. Both fields stay out
+of the content hash, so the new data does not count as a registration change. Records saved before
+them remain `null` until the next refresh.
