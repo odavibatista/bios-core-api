@@ -14,8 +14,8 @@ const CPF_PATTERN = /(?<!\d)(?:\d{3}\.?\d{3}\.?\d{3}-?\d{2})(?!\d)/g;
  *
  * A Receita Federal grava a razão social de empresário individual e de MEI como
  * `NOME COMPLETO 12345678901`: o CPF do titular vem dentro do nome da empresa.
- * O nome do empresário é público por lei; o CPF não precisa ser, e o BIOS só
- * guarda dado público de pessoa jurídica.
+ * O nome do empresário é público por lei; o CPF não precisa aparecer, e o BIOS
+ * guarda o mínimo necessário (LGPD, art. 6º, III).
  *
  * Mascara toda sequência de 11 dígitos, sem conferir os dígitos verificadores:
  * mascarar um número que não era CPF custa quase nada, e deixar passar um que

@@ -7,7 +7,7 @@ export interface WorkbookOdsScore {
   confidence: number | null;
 }
 
-/** Uma empresa da lista exportada: só dados de pessoa jurídica (INL02). */
+/** Uma empresa da lista exportada: sem contato nem endereço de rua (INL02). */
 export interface WorkbookCompany {
   cnpj: string;
   legalName: string;
