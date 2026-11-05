@@ -307,6 +307,8 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
             'content_hash',
             'created_at',
             'legal_name',
+            'legal_nature',
+            'legal_nature_code',
             'main_cnae',
             'previous_content_hash',
             'refreshed_at',

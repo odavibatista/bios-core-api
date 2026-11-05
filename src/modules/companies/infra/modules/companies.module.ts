@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CompanyRemovalsModule } from '@modules/company-removals/infra/modules/company-removals.module.js';
 import { DataSourcesModule } from '@modules/data-sources/infra/modules/data-sources.module.js';
 import { IbgeCnaeModule } from '@modules/ibge-cnae/infra/modules/ibge-cnae.module.js';
 import { ReceitaModule } from '@modules/receita/infra/modules/receita.module.js';
@@ -33,7 +34,13 @@ import { SearchCompaniesUseCase } from '../usecases/search-companies.usecase.js'
  * vem do catálogo de fontes (`DataSourcesModule`).
  */
 @Module({
-  imports: [DataSourcesModule, ReceitaModule, IbgeCnaeModule, ScoringModule],
+  imports: [
+    CompanyRemovalsModule,
+    DataSourcesModule,
+    ReceitaModule,
+    IbgeCnaeModule,
+    ScoringModule,
+  ],
   // A rota fixa `companies/movements` vem antes de `companies/:cnpj`, que mora no
   // `EnvironmentalIntelligenceModule`, carregado depois deste módulo.
   controllers: [

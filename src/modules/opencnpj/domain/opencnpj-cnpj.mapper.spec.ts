@@ -21,6 +21,8 @@ describe('toCadastralRecord (OpenCNPJ)', () => {
         registrationStatus: 'ATIVA',
         registrationStatusUnrecognized: null,
         companySize: 'DEMAIS',
+        legalNatureCode: '2062',
+        legalNature: 'Sociedade Empresária Limitada',
         address: {
           street: 'AVENIDA PAULISTA',
           number: '1578',
@@ -77,6 +79,8 @@ describe('toCadastralRecord (OpenCNPJ)', () => {
         'cnpj',
         'companySize',
         'legalName',
+        'legalNature',
+        'legalNatureCode',
         'mainCnae',
         'registrationStatus',
         'registrationStatusUnrecognized',

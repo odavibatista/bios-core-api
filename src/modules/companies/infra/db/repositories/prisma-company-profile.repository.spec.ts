@@ -33,6 +33,8 @@ describe('PrismaCompanyProfileRepository', () => {
       trade_name: faker.company.name(),
       registration_status: 'ATIVA',
       company_size: 'DEMAIS',
+      legal_nature_code: '2062',
+      legal_nature: 'Sociedade Empresária Limitada',
       address: {
         street: faker.location.street(),
         number: '100',
@@ -120,6 +122,8 @@ describe('PrismaCompanyProfileRepository', () => {
       registration_status: 'ATIVA',
       registration_status_unrecognized: null,
       company_size: 'DEMAIS',
+      legal_nature_code: '2062',
+      legal_nature: 'Sociedade Empresária Limitada',
       address: document.address,
       main_cnae: document.main_cnae,
       secondary_cnaes: document.secondary_cnaes,
@@ -176,6 +180,8 @@ describe('PrismaCompanyProfileRepository', () => {
       buildDocument({
         trade_name: null,
         company_size: null,
+        legal_nature_code: null,
+        legal_nature: null,
         address: { city: 'Campinas', uf: 'SP' },
       }),
     );
@@ -641,6 +647,8 @@ describe('PrismaCompanyProfileRepository', () => {
       registrationStatus: 'ATIVA' as const,
       registrationStatusUnrecognized: null,
       companySize: null,
+      legalNatureCode: null,
+      legalNature: null,
       address: {
         street: 'AVENIDA PAULISTA',
         number: '1578',
@@ -684,6 +692,8 @@ describe('PrismaCompanyProfileRepository', () => {
         registration_status: 'ATIVA',
         registration_status_unrecognized: null,
         company_size: null,
+        legal_nature_code: null,
+        legal_nature: null,
         address: {
           street: 'AVENIDA PAULISTA',
           number: '1578',

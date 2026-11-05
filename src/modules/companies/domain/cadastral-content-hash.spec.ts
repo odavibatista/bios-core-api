@@ -12,6 +12,8 @@ function buildRecord(
     registrationStatus: 'ATIVA',
     registrationStatusUnrecognized: null,
     companySize: 'DEMAIS',
+    legalNatureCode: null,
+    legalNature: null,
     address: {
       street: 'AVENIDA PAULISTA',
       number: '1578',

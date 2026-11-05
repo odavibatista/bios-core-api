@@ -77,9 +77,9 @@ iniciais que o provedor perdeu ao mandar número voltam), UF em 2 letras, vazio 
 o mesmo molde: `GET {base_url}/{cnpj}`, lista de campos permitidos (o `QSA`, e-mail e
 telefones nunca são lidos) e rejeição de resposta de outro CNPJ. Diferenças do provedor:
 
-- **Registro anonimizado é rejeitado.** O OpenCNPJ mascara os dados de empresas cujo titular é
-  pessoa física e marca `lgpd_anonimizado`; um cadastro mascarado não é cadastro, então o
-  resultado é `UNAVAILABLE`.
+- **Registro anonimizado encerra a cadeia.** O OpenCNPJ anonimiza os CNPJs da lista dele, a pedido
+  do titular, e marca `lgpd_anonimizado`. O resultado é `WITHHELD`, e a cadeia para: consultar o
+  provedor seguinte contornaria o pedido.
 - **Sem código IBGE.** O `codigo_municipio` dele é o da Receita (outra tabela): `cityIbgeCode`
   fica `null`.
 - **Descrições de CNAE** vêm da lista `cnaes` quando existe; `cnaes_secundarios` traz só os

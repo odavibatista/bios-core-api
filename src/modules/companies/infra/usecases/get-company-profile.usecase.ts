@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { CompanyRemovalRepository } from '@modules/company-removals/domain/dtos/repositories/company-removal.repository.js';
 import { ResolveSourceCacheTtlUseCase } from '@modules/data-sources/infra/usecases/cache/resolve-source-cache-ttl.usecase.js';
 import {
   type CacheKey,
@@ -70,6 +71,7 @@ export class GetCompanyProfileUseCase extends UseCase<
     private readonly queueProvider: QueueProvider,
     private readonly companyProfileRepository: CompanyProfileRepository,
     private readonly resolveSourceCacheTtlUseCase: ResolveSourceCacheTtlUseCase,
+    private readonly removals: CompanyRemovalRepository,
   ) {
     super();
   }
@@ -81,6 +83,11 @@ export class GetCompanyProfileUseCase extends UseCase<
     const cnpj = parseCnpj(input);
 
     if (!cnpj) throw new InvalidCnpjException();
+
+    // Cadastro retirado a pedido do titular responde como empresa desconhecida.
+    if (await this.removals.isRemoved(cnpj)) {
+      throw new CompanyNotFoundException();
+    }
 
     const key: CacheKey = {
       namespace: CacheNamespace.COMPANY_PROFILE,

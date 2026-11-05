@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { RequestTrigger } from '@prisma/client';
 import type { CadastralRecord } from '@modules/data-sources/domain/dtos/providers/cadastral-record.dto.js';
+import { CompanyRemovalRepository } from '@modules/company-removals/domain/dtos/repositories/company-removal.repository.js';
 import { ReceitaDataSource } from '@modules/receita/infra/providers/receita.data-source.js';
 import { CacheNamespace } from '@shared/domain/dtos/providers/cache-key.dto.js';
 import { RequestScoreRecalculationUseCase } from '@modules/scoring/infra/usecases/request-score-recalculation.usecase.js';
@@ -23,6 +24,8 @@ function buildRecord(
     registrationStatus: 'ATIVA',
     registrationStatusUnrecognized: null,
     companySize: 'DEMAIS',
+    legalNatureCode: '2062',
+    legalNature: 'Sociedade Empresária Limitada',
     address: {
       street: 'AVENIDA PAULISTA',
       number: '1578',
@@ -43,6 +46,27 @@ function buildRecord(
 }
 
 describe('RefreshCompanyProfileUseCase', () => {
+  it('não coleta cadastro retirado a pedido do titular', async () => {
+    removals.isRemoved.mockResolvedValue(true);
+
+    await expect(useCase.execute(CNPJ)).resolves.toEqual({
+      outcome: 'NOT_FOUND',
+    });
+
+    expect(receita.fetch).not.toHaveBeenCalled();
+    expect(repository.save).not.toHaveBeenCalled();
+  });
+
+  it('provedor que retirou o registro a pedido do titular encerra sem gravar', async () => {
+    receita.fetch.mockResolvedValue({ status: 'WITHHELD' });
+
+    await expect(useCase.execute(CNPJ)).resolves.toEqual({
+      outcome: 'NOT_FOUND',
+    });
+
+    expect(repository.save).not.toHaveBeenCalled();
+  });
+
   const receita = { fetch: vi.fn() };
   const cnae = { execute: vi.fn() };
   const repository = {
@@ -52,6 +76,9 @@ describe('RefreshCompanyProfileUseCase', () => {
   const cache = { delete: vi.fn<CacheProvider['delete']>() };
   const requestScores = {
     execute: vi.fn<RequestScoreRecalculationUseCase['execute']>(),
+  };
+  const removals = {
+    isRemoved: vi.fn<CompanyRemovalRepository['isRemoved']>(),
   };
   let useCase: RefreshCompanyProfileUseCase;
 
@@ -70,6 +97,7 @@ describe('RefreshCompanyProfileUseCase', () => {
   beforeEach(async () => {
     vi.useFakeTimers({ now: new Date('2026-10-16T12:00:00.000Z') });
     receita.fetch.mockReset();
+    removals.isRemoved.mockResolvedValue(false);
     providerAnswers(buildRecord());
     cnae.execute.mockResolvedValue(new Map());
     repository.findByCnpj.mockResolvedValue(null);
@@ -83,6 +111,7 @@ describe('RefreshCompanyProfileUseCase', () => {
         { provide: ReceitaDataSource, useValue: receita },
         { provide: ResolveCnaeDescriptionsUseCase, useValue: cnae },
         { provide: CompanyProfileRepository, useValue: repository },
+        { provide: CompanyRemovalRepository, useValue: removals },
         { provide: CacheProvider, useValue: cache },
         { provide: RequestScoreRecalculationUseCase, useValue: requestScores },
       ],

@@ -14,14 +14,16 @@ export type SourceUnavailableReason =
 /**
  * Resposta de um adapter, já no vocabulário do domínio.
  *
- * Três situações que quem chama trata de modo diferente: a fonte respondeu com
+ * Quatro situações que quem chama trata de modo diferente: a fonte respondeu com
  * dado (`FOUND`), respondeu que não há registro (`NOT_FOUND`, uma resposta
- * válida) ou não pôde responder (`UNAVAILABLE`, que na cadeia de fallback leva
- * à fonte seguinte e na ingestão leva a nova tentativa).
+ * válida), não pôde responder (`UNAVAILABLE`, que na cadeia de fallback leva à
+ * fonte seguinte e na ingestão leva a nova tentativa) ou informou que o titular
+ * pediu para retirar o registro (`WITHHELD`, que encerra a cadeia).
  */
 export type SourceLookupResult<TData> =
   | { status: 'FOUND'; data: TData }
   | { status: 'NOT_FOUND' }
+  | { status: 'WITHHELD' }
   | {
       status: 'UNAVAILABLE';
       reason: SourceUnavailableReason;
