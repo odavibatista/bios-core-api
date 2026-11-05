@@ -47,6 +47,7 @@ const EXPECTED_OPERATIONS: Record<string, string> = {
   'GET /v1/companies/{cnpj}': 'getPublicCompanyProfile',
   'POST /v1/crm/companies': 'importCrmCompanies',
   'GET /companies/{cnpj}/evidences': 'getCompanyEvidences',
+  'GET /companies/{cnpj}/index-evolution': 'getCompanyIndexEvolution',
   'GET /companies/{cnpj}/scores/{odsNumber}/explanation': 'getScoreExplanation',
   'GET /sectors': 'listSectors',
   'GET /sectors/{cnae}/evolution': 'getSectorEvolution',
