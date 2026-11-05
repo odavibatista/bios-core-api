@@ -148,6 +148,26 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
     });
 
     describe('operações', () => {
+      it('documenta o filtro opcional de categoria das movimentações', () => {
+        const operation = document.paths['/companies/movements']?.get;
+        const category = operation?.parameters?.find(
+          (parameter) => 'name' in parameter && parameter.name === 'category',
+        );
+
+        expect(category).toMatchObject({
+          name: 'category',
+          in: 'query',
+          required: false,
+          schema: {
+            enum: [
+              'INFRACAO_AMBIENTAL',
+              'CONDUTA_ADMINISTRATIVA',
+              'EMISSAO_GEE',
+            ],
+          },
+        });
+      });
+
       it('cada operação tem o operationId explícito esperado, e nenhuma operação some ou aparece sem registro', () => {
         const actual = Object.fromEntries(
           operations.map(({ method, path, operation }) => [

@@ -34,10 +34,11 @@ export class ListRecentCompanyMovementsUseCase extends UseCase<
   async execute(
     pagination: CompanyMovementsQuery,
   ): Promise<CompanyMovementsResponse> {
-    const { page, page_size } = pagination;
+    const { page, page_size, category } = pagination;
     const { rows, total } = await this.movements.execute({
       skip: (page - 1) * page_size,
       take: page_size,
+      ...(category ? { category } : {}),
     });
     const cnpjs = rows.map(({ cnpj }) => cnpj);
     const [identities, { odsNumbers, summaries }] = await Promise.all([

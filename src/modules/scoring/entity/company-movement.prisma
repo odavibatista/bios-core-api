@@ -31,6 +31,7 @@ model CompanyMovement {
   updated_at DateTime @updatedAt
 
   @@index([moved_at(sort: Desc), cnpj], map: "idx_company_movements_moved_at_cnpj")
+  @@index([ods_movements.evidence_category, moved_at(sort: Desc), cnpj], map: "idx_company_movements_category_moved_at_cnpj")
   @@map("company_movements")
 }
 
