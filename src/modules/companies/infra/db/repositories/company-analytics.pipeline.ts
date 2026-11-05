@@ -142,7 +142,15 @@ export function buildScoreAnalyticsPipeline(
         _id: '$ods_number',
         companies: { $sum: 1 },
         averageScore: { $avg: '$score_value' },
-        averageConfidence: { $avg: '$confidence_value' },
+        averageConfidence: {
+          $avg: {
+            $cond: [
+              { $isNumber: '$score_value' },
+              '$confidence_value',
+              '$$REMOVE',
+            ],
+          },
+        },
         scores: {
           $push: {
             $cond: [{ $isNumber: '$score_value' }, '$score_value', '$$REMOVE'],

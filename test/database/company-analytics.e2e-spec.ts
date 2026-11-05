@@ -62,7 +62,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       ods_id: odsId,
       ods_number: 15,
       score_value: value,
-      confidence_value: 0.5,
+      confidence_value: value === null ? 0 : 0.5,
       evidence_count: value === null ? 0 : 1,
       contributions: [],
       rules_version: 'rf10-rf11-v3',
@@ -210,6 +210,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         companies: 6,
         companies_with_index: 5,
         average_score: -40,
+        average_confidence: 0.5,
       });
       expect(
         ods?.score_ranges.reduce((total, { count }) => total + count, 0),
