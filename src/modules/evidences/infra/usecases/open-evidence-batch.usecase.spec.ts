@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { EvidenceCategory } from '@prisma/client';
+import { CompanyRemovalRepository } from '@modules/company-removals/domain/dtos/repositories/company-removal.repository.js';
 import { ResolveSourceCacheTtlUseCase } from '@modules/data-sources/infra/usecases/cache/resolve-source-cache-ttl.usecase.js';
 import { ResolveEvidenceSourceUseCase } from '@modules/data-sources/infra/usecases/evidence/resolve-evidence-source.usecase.js';
 import { evidenceSourceFactory } from '@test/factories/evidences/evidence.factory.js';
@@ -27,6 +28,9 @@ describe('OpenEvidenceBatchUseCase', () => {
   const resolveSourceCacheTtl = {
     execute: vi.fn<ResolveSourceCacheTtlUseCase['execute']>(),
   };
+  const removals = {
+    findAllCnpjs: vi.fn<CompanyRemovalRepository['findAllCnpjs']>(),
+  };
   let useCase: OpenEvidenceBatchUseCase;
 
   const source = evidenceSourceFactory.build({
@@ -43,6 +47,7 @@ describe('OpenEvidenceBatchUseCase', () => {
     rawEvidenceRepository.save.mockResolvedValue('raw-1');
     resolveEvidenceSource.execute.mockResolvedValue(source);
     resolveSourceCacheTtl.execute.mockResolvedValue(TTL_SECONDS);
+    removals.findAllCnpjs.mockResolvedValue(new Set());
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -57,6 +62,7 @@ describe('OpenEvidenceBatchUseCase', () => {
           provide: ResolveSourceCacheTtlUseCase,
           useValue: resolveSourceCacheTtl,
         },
+        { provide: CompanyRemovalRepository, useValue: removals },
       ],
     }).compile();
 

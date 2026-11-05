@@ -330,3 +330,30 @@ ignorados, e o arquivo traz a lista inteira. A tradução dos critérios para o 
 ---
 
 [Índice da documentação](README.md) · ← [14. Índices por ODS](14-Índices-por-ODS.md) · [16. Chaves de API e API pública](16-Chaves-de-API.md) →
+
+## Retirada de cadastro a pedido do titular
+
+O pedido chega por e-mail, com o CNPJ e a comprovação da titularidade. Conferido o pedido, o
+administrador usa `POST /admin/company-removals` (`[P15]`, exclusivo de `ADMIN`).
+
+- **O que é apagado:** `company_profile`, `company_ods_scores`, `company_movements`,
+  `evidence_normalized` e `evidence_raw` do CNPJ, mais o cache de perfil, evidências e índices.
+- **O que fica:** o CNPJ e a data em `company_removals`, para nenhuma coleta trazer o cadastro de
+  volta. A lista é conferida na consulta e na atualização do perfil, e a carga em lote das fontes
+  descarta o CNPJ.
+- **Como responde:** perfil, evidências, explicação e importação por CRM tratam o CNPJ como empresa
+  desconhecida (404, ou `NOT_FOUND` no lote). A pesquisa, a exportação e as movimentações não o
+  listam mais.
+- **Médias de setor:** não mudam, porque não identificam nenhuma empresa.
+- **Reversão:** `DELETE /admin/company-removals/:cnpj` tira o CNPJ da lista, e o cadastro volta na
+  próxima consulta, coletado de novo nas fontes.
+
+Quando o OpenCNPJ marca o registro com `lgpd_anonimizado`, a cadeia de provedores termina ali
+(`WITHHELD`): buscar o mesmo dado no provedor seguinte contornaria o pedido feito a ele.
+
+## Natureza jurídica
+
+`legal_nature_code` e `legal_nature` vêm dos três provedores da cadeia. O código `2135` identifica
+o empresário individual, inclusive o MEI, e ajuda a conferir um pedido de remoção. Os dois campos
+ficam fora do hash de conteúdo, para o novo dado não contar como mudança cadastral. Cadastros
+gravados antes deles ficam com `null` até a próxima atualização.

@@ -30,6 +30,8 @@ const OpenCnpjSchema = z.object({
   nome_fantasia: field,
   situacao_cadastral: field,
   porte_empresa: field,
+  codigo_natureza_juridica: field,
+  natureza_juridica: field,
   cnae_principal: field,
   cnaes_secundarios: z.array(field).nullish(),
   cnaes: z.array(z.object({ codigo: field, descricao: field })).nullish(),
@@ -44,6 +46,18 @@ const OpenCnpjSchema = z.object({
   lgpd_anonimizado: z.boolean().nullish(),
 });
 
+/**
+ * O provedor anonimizou o registro a pedido (`lgpd_anonimizado`). Vale para os CNPJs da lista
+ * dele, e não para todo cadastro de pessoa física.
+ */
+export function isAnonymizedRecord(body: unknown): boolean {
+  const parsed = OpenCnpjSchema.pick({ lgpd_anonimizado: true }).safeParse(
+    body,
+  );
+
+  return parsed.success && parsed.data.lgpd_anonimizado === true;
+}
+
 /** CNPJ da resposta, na forma canônica (sem máscara, em maiúsculas). */
 function canonical(cnpj: string): string {
   return cnpj.replace(/[./\-\s]/g, '').toUpperCase();
@@ -54,10 +68,9 @@ function canonical(cnpj: string): string {
  * ela não é utilizável.
  *
  * É `null` quando o corpo não tem o formato esperado, quando faltam os campos
- * sem os quais o perfil não faz sentido, quando o CNPJ da resposta não é o
- * consultado e quando o registro vem **anonimizado** (`lgpd_anonimizado`): o
- * provedor mascara os dados de empresas cujo titular é pessoa física, e um
- * cadastro mascarado não é um cadastro.
+ * sem os quais o perfil não faz sentido e quando o CNPJ da resposta não é o
+ * consultado. O registro **anonimizado** chega aqui como `null` também, mas o
+ * adapter o reconhece antes por `isAnonymizedRecord` e não segue a cadeia.
  *
  * O OpenCNPJ não informa o código IBGE do município (o `codigo_municipio`
  * dele é o da Receita, outra tabela), então `cityIbgeCode` fica `null`. A
@@ -102,6 +115,8 @@ export function toCadastralRecord(
     registrationStatus: registrationStatus.status,
     registrationStatusUnrecognized: registrationStatus.unrecognized,
     companySize: normalizeCompanySize(raw.porte_empresa),
+    legalNatureCode: cleanText(raw.codigo_natureza_juridica),
+    legalNature: cleanText(raw.natureza_juridica),
     address: {
       street: joinStreet(raw.tipo_logradouro, raw.logradouro),
       number: cleanText(raw.numero),

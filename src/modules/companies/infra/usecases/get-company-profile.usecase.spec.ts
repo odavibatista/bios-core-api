@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { CompanyRemovalRepository } from '@modules/company-removals/domain/dtos/repositories/company-removal.repository.js';
 import { ResolveSourceCacheTtlUseCase } from '@modules/data-sources/infra/usecases/cache/resolve-source-cache-ttl.usecase.js';
 import { CacheNamespace } from '@shared/domain/dtos/providers/cache-key.dto.js';
 import { QueueName } from '@shared/domain/dtos/providers/queue-job.dto.js';
@@ -36,6 +37,9 @@ describe('GetCompanyProfileUseCase', () => {
   const resolveSourceCacheTtl = {
     execute: vi.fn<ResolveSourceCacheTtlUseCase['execute']>(),
   };
+  const removals = {
+    isRemoved: vi.fn<CompanyRemovalRepository['isRemoved']>(),
+  };
   let useCase: GetCompanyProfileUseCase;
 
   const cnpj = buildCnpj();
@@ -45,6 +49,7 @@ describe('GetCompanyProfileUseCase', () => {
     vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
     vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
 
+    removals.isRemoved.mockResolvedValue(false);
     cacheProvider.get.mockResolvedValue(undefined);
     cacheProvider.set.mockResolvedValue(undefined);
     companyProfileRepository.findByCnpj.mockResolvedValue(null);
@@ -64,10 +69,23 @@ describe('GetCompanyProfileUseCase', () => {
           provide: ResolveSourceCacheTtlUseCase,
           useValue: resolveSourceCacheTtl,
         },
+        { provide: CompanyRemovalRepository, useValue: removals },
       ],
     }).compile();
 
     useCase = moduleRef.get(GetCompanyProfileUseCase);
+  });
+
+  it('cadastro retirado a pedido do titular responde 404, sem ler nem coletar nada', async () => {
+    removals.isRemoved.mockResolvedValue(true);
+
+    await expect(useCase.execute(cnpj)).rejects.toBeInstanceOf(
+      CompanyNotFoundException,
+    );
+
+    expect(cacheProvider.get).not.toHaveBeenCalled();
+    expect(companyProfileRepository.findByCnpj).not.toHaveBeenCalled();
+    expect(queueProvider.enqueueAndWait).not.toHaveBeenCalled();
   });
 
   afterEach(() => {
@@ -388,6 +406,8 @@ describe('GetCompanyProfileUseCase', () => {
       'cnpj',
       'company_size',
       'legal_name',
+      'legal_nature',
+      'legal_nature_code',
       'main_cnae',
       'refreshed_at',
       'registration_status',

@@ -112,7 +112,8 @@ export class ResolveCnaeDescriptionsUseCase extends UseCase<
         return { kind: 'FOUND', description: result.data.description };
       }
 
-      if (result.status === 'NOT_FOUND') return { kind: 'ABSENT' };
+      if (result.status === 'NOT_FOUND' || result.status === 'WITHHELD')
+        return { kind: 'ABSENT' };
 
       this.logger.warn(
         `IBGE indisponível (${result.reason}): CNAEs seguintes ficam com a descrição do provedor.`,
