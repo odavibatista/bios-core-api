@@ -42,6 +42,7 @@ const EXPECTED_OPERATIONS: Record<string, string> = {
   'GET /companies/movements': 'listCompanyMovements',
   'GET /companies/{cnpj}': 'getCompanyProfile',
   'GET /v1/companies/{cnpj}': 'getPublicCompanyProfile',
+  'POST /v1/crm/companies': 'importCrmCompanies',
   'GET /companies/{cnpj}/evidences': 'getCompanyEvidences',
   'GET /companies/{cnpj}/scores/{odsNumber}/explanation': 'getScoreExplanation',
   'GET /sectors': 'listSectors',
@@ -148,6 +149,26 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
     });
 
     describe('operações', () => {
+      it('documenta o filtro opcional de categoria das movimentações', () => {
+        const operation = document.paths['/companies/movements']?.get;
+        const category = operation?.parameters?.find(
+          (parameter) => 'name' in parameter && parameter.name === 'category',
+        );
+
+        expect(category).toMatchObject({
+          name: 'category',
+          in: 'query',
+          required: false,
+          schema: {
+            enum: [
+              'INFRACAO_AMBIENTAL',
+              'CONDUTA_ADMINISTRATIVA',
+              'EMISSAO_GEE',
+            ],
+          },
+        });
+      });
+
       it('cada operação tem o operationId explícito esperado, e nenhuma operação some ou aparece sem registro', () => {
         const actual = Object.fromEntries(
           operations.map(({ method, path, operation }) => [

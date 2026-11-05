@@ -9,8 +9,13 @@ import {
   paginatedSchema,
 } from '@shared/domain/dtos/requests/pagination.dto.js';
 
-/** Página pedida da lista de movimentações. */
-export const CompanyMovementsQuerySchema = PaginationQuerySchema;
+/** Página pedida da lista de movimentações, opcionalmente por categoria. */
+export const CompanyMovementsQuerySchema = PaginationQuerySchema.extend({
+  category: z
+    .enum(EvidenceCategory)
+    .optional()
+    .describe('Categoria da evidência da movimentação'),
+});
 
 export type CompanyMovementsQuery = z.infer<typeof CompanyMovementsQuerySchema>;
 

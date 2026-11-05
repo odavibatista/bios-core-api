@@ -28,7 +28,7 @@ export class CompanyMovementsController implements CompanyMovementsControllerInt
     operationId: 'listCompanyMovements',
     summary: 'Lista as empresas com movimentação recente do índice',
     description:
-      'A lista da tela principal (UC18): empresas com perfil e movimentação registrada, da mais recente para a mais antiga, com o CNPJ como desempate. Cada empresa aparece uma vez e traz, para cada ODS ativo, o índice e a confiança atuais e a última movimentação, com sentido, causa e data. Não traz índice anterior, variação nem histórico por empresa (IND03), e a ordem é só cronológica. Lê apenas o que já foi gravado, sem consultar fontes externas nem recalcular. Sem movimentações, responde 200 com a lista vazia.',
+      'A lista da tela principal (UC18): empresas com perfil e movimentação registrada, da mais recente para a mais antiga, com o CNPJ como desempate. O parâmetro opcional category restringe a empresas com movimentação da categoria indicada e exibe somente esse conjunto na página. Cada empresa aparece uma vez e traz, para cada ODS ativo, o índice e a confiança atuais e a última movimentação, com sentido, causa e data. Não traz índice anterior, variação nem histórico por empresa (IND03), e a ordem é só cronológica. Lê apenas o que já foi gravado, sem consultar fontes externas nem recalcular. Sem movimentações, responde 200 com a lista vazia.',
   })
   @ResponseSchema(CompanyMovementsResponseSchema, {
     description: 'Página de empresas com movimentação recente',

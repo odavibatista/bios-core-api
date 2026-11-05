@@ -27,6 +27,7 @@ with two instances running.
 | `companyEvidences` | `THROTTLE_TTL` / `THROTTLE_COMPANY_EVIDENCES_LIMIT` (20) | IP address |
 | `companySearch` | `THROTTLE_TTL` / `THROTTLE_COMPANY_SEARCH_LIMIT` (60) | IP address |
 | `companyExport` | `THROTTLE_TTL` / `THROTTLE_COMPANY_EXPORT_LIMIT` (10) | IP address |
+| `crmImport` | `THROTTLE_TTL` / `THROTTLE_CRM_IMPORT_LIMIT` (3) | IP address |
 
 - **Company routes have their own limit (#335).** No ceiling lives in the route code: each one declares
   `@RouteRateLimit(ThrottlerName.X)` and the value comes from the validated environment variable. The

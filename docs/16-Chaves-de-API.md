@@ -74,3 +74,23 @@ perfil completo: cadastro, evidências e, por ODS, índice, confiança e explica
 ---
 
 [Índice da documentação](README.md) · ← [15. Empresas](15-Empresas.md) · [17. Testes](17-Testes.md) →
+
+## Importação por CRM (UC16, RF31)
+
+`POST /v1/crm/companies` recebe `{ "cnpjs": [...] }` e devolve as contas em campos planos, para
+mapear às colunas do CRM. Autentica como a consulta pública, pelo cabeçalho `x-api-key`.
+
+- **Lote de até 20 CNPJs.** Repetidos contam uma vez, e a resposta segue a ordem enviada.
+- **Cada CNPJ tem seu estado:** `IMPORTED`, `NOT_FOUND`, `INVALID` ou `UNAVAILABLE`. Os fluxos
+  alternativos do UC12 viram o estado da conta, e uma falha não derruba as demais. Lote vazio ou
+  acima do teto responde 422.
+- **Não espera as fontes externas,** como `GET /v1/companies/:cnpj`. O que estiver pendente vem em
+  `scores_pending` e `retry_after_seconds`.
+- **Limite próprio.** Uma chamada vale até 20 consultas, então a rota tem
+  `THROTTLE_CRM_IMPORT_LIMIT` (3 por minuto, por IP), além do limite por chave. São 60 CNPJs por
+  minuto, o mesmo volume da consulta avulsa.
+- **Dados mínimos (LGPD, art. 6º, III).** Vai a mesma lista da exportação em XLSX, com índice e
+  confiança por ODS e a contagem de evidências confirmadas por categoria. Não vão contato,
+  logradouro, número, complemento nem CEP, que no empresário individual costumam ser os da
+  residência. A razão social pode conter o nome do titular, com o CPF mascarado. O detalhe das
+  evidências continua em `GET /v1/companies/:cnpj`.

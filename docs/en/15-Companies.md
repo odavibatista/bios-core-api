@@ -74,8 +74,9 @@ their back does not help. The requester validates the return against the schema
 3. **Masked CPF (INL02).** Receita records the legal name of sole proprietors and MEIs (individual
    micro-entrepreneurs) as `NAME 12345678901`. Every sequence of 11 digits (with or without CPF
    punctuation) becomes `***` in the legal name and the trade name. The entrepreneur's name is public by
-   law; the CPF does not need to be. Only legal entities reach the database: the ownership structure,
-   email and phones are never read by the adapters.
+   law, but it is still personal data (LGPD, art. 5, I); the CPF does not need to appear. Partners
+   and contacts do not reach the database: the ownership structure, email and phones are never read
+   by the adapters.
 4. **Content hash.** `content_hash` is the SHA-256 of name, status, size, address and activities (CNAEs
    in code order). Left **out** of it are the provider, the moment and the municipality's IBGE code (only
    some providers report it), so switching providers does not change the hash. If the content changed,
@@ -286,8 +287,7 @@ repository is a single one (`toSearchInput`), so what is downloaded is what the 
   **every** SDG, not only the one selected in the search: the spreadsheet is for comparing companies.
   What was not calculated is an **empty cell**, not zero; the index `0` is written as `0`. Index and
   confidence are never combined.
-- **No personal data (INL02).** Only the fields above, which already belong to legal entities: the sole
-  proprietor's/MEI's name comes out with the CPF masked (`***`), and street address, hashes, registration
+- **Minimum data (INL02).** Only the fields above: the sole proprietor's/MEI's name comes out with the CPF masked (`***`), and street address, hashes, registration
   source, internal dates and index rules are not in the file.
 - **Text is text.** Text cells are written as text (the XLSX shared strings table), never as a formula: a
   legal name such as `=HYPERLINK(...)` shows up literally and is not executed when opened in Excel. The
