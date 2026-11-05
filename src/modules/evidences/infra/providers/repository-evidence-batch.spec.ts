@@ -53,7 +53,10 @@ describe('RepositoryEvidenceBatch', () => {
   const savedEvidences = (): EvidenceToSave[] =>
     evidenceRepository.save.mock.calls.map(([evidence]) => evidence);
 
-  function open(ingestionRunId: string | null = null) {
+  function open(
+    ingestionRunId: string | null = null,
+    removedCnpjs: ReadonlySet<string> = new Set(),
+  ) {
     batch = new RepositoryEvidenceBatch(
       evidenceRepository as unknown as EvidenceRepository,
       rawEvidenceRepository,
@@ -61,8 +64,22 @@ describe('RepositoryEvidenceBatch', () => {
       collectedAt,
       validUntil,
       ingestionRunId,
+      removedCnpjs,
     );
   }
+
+  it('descarta o registro de cadastro retirado a pedido do titular', async () => {
+    const [kept, removed] = [
+      entry('1'),
+      entry('2', { cnpj: IBAMA_OTHER_CNPJ }),
+    ];
+    open(null, new Set([IBAMA_OTHER_CNPJ]));
+
+    await expect(batch.write([kept, removed])).resolves.toBe(1);
+
+    expect(rawEvidenceRepository.save).toHaveBeenCalledTimes(1);
+    expect(savedEvidences().map(({ cnpj }) => cnpj)).toEqual([kept.cnpj]);
+  });
 
   beforeEach(() => {
     evidenceRepository.save.mockResolvedValue(undefined);

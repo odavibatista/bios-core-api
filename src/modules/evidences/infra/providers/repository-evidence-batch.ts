@@ -62,6 +62,8 @@ export class RepositoryEvidenceBatch implements EvidenceBatch {
     private readonly collectedAt: Date,
     private readonly validUntil: Date,
     private readonly ingestionRunId: string | null,
+    /** Cadastros retirados a pedido do titular: as fontes os trazem, e a carga os descarta. */
+    private readonly removedCnpjs: ReadonlySet<string> = new Set(),
   ) {}
 
   get sourceSlug(): string {
@@ -77,6 +79,8 @@ export class RepositoryEvidenceBatch implements EvidenceBatch {
     >();
 
     for (const entry of entries) {
+      if (this.removedCnpjs.has(entry.cnpj)) continue;
+
       if (parseCnpj(entry.cnpj) !== entry.cnpj) {
         throw new InvalidEvidenceError(
           `CNPJ "${entry.cnpj}" não é canônico e válido.`,

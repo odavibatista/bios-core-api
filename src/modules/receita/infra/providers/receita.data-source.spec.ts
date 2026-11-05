@@ -170,6 +170,15 @@ describe('ReceitaDataSource (cadeia de fallback cadastral)', () => {
     });
   });
 
+  it('registro retirado a pedido do titular encerra a cadeia, sem consultar o provedor seguinte', async () => {
+    respond(notFound, { status: 'WITHHELD' }, found('do terceiro'));
+
+    await expect(chain.fetch(CNPJ, context)).resolves.toEqual({
+      status: 'WITHHELD',
+    });
+    expect(calls()).toEqual(['BRASIL_API', 'OPEN_CNPJ']);
+  });
+
   describe('"não encontrado"', () => {
     it('um provedor sem o CNPJ não encerra a cadeia: espelhos se atualizam em ritmos diferentes', async () => {
       respond(notFound, found('do segundo'));

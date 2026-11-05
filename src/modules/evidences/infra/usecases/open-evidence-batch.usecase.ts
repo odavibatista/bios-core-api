@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { CompanyRemovalRepository } from '@modules/company-removals/domain/dtos/repositories/company-removal.repository.js';
 import { ResolveSourceCacheTtlUseCase } from '@modules/data-sources/infra/usecases/cache/resolve-source-cache-ttl.usecase.js';
 import { ResolveEvidenceSourceUseCase } from '@modules/data-sources/infra/usecases/evidence/resolve-evidence-source.usecase.js';
 import { UseCase } from '@shared/domain/protocols/use-case.protocol.js';
@@ -30,6 +31,7 @@ export class OpenEvidenceBatchUseCase extends UseCase<
     private readonly rawEvidenceRepository: RawEvidenceRepository,
     private readonly resolveEvidenceSource: ResolveEvidenceSourceUseCase,
     private readonly resolveSourceCacheTtl: ResolveSourceCacheTtlUseCase,
+    private readonly removals: CompanyRemovalRepository,
   ) {
     super();
   }
@@ -51,6 +53,7 @@ export class OpenEvidenceBatchUseCase extends UseCase<
       collectedAt,
       new Date(collectedAt.getTime() + ttlSeconds * 1_000),
       ingestionRunId ?? null,
+      await this.removals.findAllCnpjs(),
     );
   }
 }

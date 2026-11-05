@@ -4,6 +4,7 @@ import type {
   CadastralCnae,
   CadastralRecord,
 } from '@modules/data-sources/domain/dtos/providers/cadastral-record.dto.js';
+import { CompanyRemovalRepository } from '@modules/company-removals/domain/dtos/repositories/company-removal.repository.js';
 import { ReceitaDataSource } from '@modules/receita/infra/providers/receita.data-source.js';
 import { RequestScoreRecalculationUseCase } from '@modules/scoring/infra/usecases/request-score-recalculation.usecase.js';
 import { CacheNamespace } from '@shared/domain/dtos/providers/cache-key.dto.js';
@@ -54,15 +55,20 @@ export class RefreshCompanyProfileUseCase extends UseCase<
     private readonly companyProfileRepository: CompanyProfileRepository,
     private readonly cacheProvider: CacheProvider,
     private readonly requestScores: RequestScoreRecalculationUseCase,
+    private readonly removals: CompanyRemovalRepository,
   ) {
     super();
   }
 
   override async execute(cnpj: string): Promise<CompanyProfileJobResult> {
+    if (await this.removals.isRemoved(cnpj)) return { outcome: 'NOT_FOUND' };
+
     const context = { trigger: RequestTrigger.ON_DEMAND_JOB };
     const lookup = await this.receitaDataSource.fetch(cnpj, context);
 
-    if (lookup.status === 'NOT_FOUND') return { outcome: 'NOT_FOUND' };
+    if (lookup.status === 'NOT_FOUND' || lookup.status === 'WITHHELD') {
+      return { outcome: 'NOT_FOUND' };
+    }
 
     if (lookup.status === 'UNAVAILABLE') {
       this.logger.warn(

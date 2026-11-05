@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CompanyRemovalsModule } from '@modules/company-removals/infra/modules/company-removals.module.js';
 import { DataSourcesModule } from '@modules/data-sources/infra/modules/data-sources.module.js';
 import { EvidenceRepository } from '../../domain/dtos/repositories/evidence.repository.js';
 import { RawEvidenceRepository } from '../../domain/dtos/repositories/raw-evidence.repository.js';
@@ -29,7 +30,7 @@ import { RenewSourceEvidencesUseCase } from '../usecases/renew-source-evidences.
  *    de agora (`OUTDATED` derivado da validade).
  */
 @Module({
-  imports: [DataSourcesModule],
+  imports: [CompanyRemovalsModule, DataSourcesModule],
   providers: [
     /* Repositórios */
     { provide: EvidenceRepository, useClass: PrismaEvidenceRepository },

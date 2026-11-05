@@ -59,7 +59,6 @@ describe('OpenCnpjDataSource', () => {
 
   it.each([
     ['de outro CNPJ', { cnpj: '00000000000191' }],
-    ['anonimizada', { lgpd_anonimizado: true }],
     ['sem razão social', { razao_social: null }],
   ])(
     'resposta %s é indisponibilidade, não dado',
@@ -76,6 +75,18 @@ describe('OpenCnpjDataSource', () => {
       });
     },
   );
+
+  it('registro anonimizado a pedido do titular encerra a cadeia', async () => {
+    requestDataSource.execute.mockResolvedValue({
+      outcome: SourceOutcome.SUCCESS,
+      status: 200,
+      body: { ...openCnpjFactory.build(), lgpd_anonimizado: true },
+    });
+
+    await expect(dataSource.fetch(CNPJ, context)).resolves.toEqual({
+      status: 'WITHHELD',
+    });
+  });
 
   it('404 é "não encontrado"', async () => {
     requestDataSource.execute.mockResolvedValue({
