@@ -3,6 +3,7 @@ import type {
   DetectedOdsMovement,
   ReconstructedOdsMovement,
 } from '../../ods-movement-rules.js';
+import type { EvidenceCategory } from '@prisma/client';
 
 /** Um índice calculado, com as contribuições datadas pela evidência de cada uma. */
 export interface MovementCandidateScore {
@@ -35,6 +36,7 @@ export interface ReconstructedMovementToSave extends ReconstructedOdsMovement {
 export interface CompanyMovementsWindow {
   skip: number;
   take: number;
+  category?: EvidenceCategory;
 }
 
 /** A movimentação de uma empresa, como a lista a lê. */

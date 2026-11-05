@@ -108,6 +108,16 @@ describe('ListRecentCompanyMovementsUseCase', () => {
     });
   });
 
+  it('repassa a categoria sem alterar a janela cronológica', async () => {
+    await useCase.execute({ page: 2, page_size: 10, category: 'EMISSAO_GEE' });
+
+    expect(movements.execute).toHaveBeenCalledWith({
+      skip: 10,
+      take: 10,
+      category: 'EMISSAO_GEE',
+    });
+  });
+
   it('lê identificação e índices só das empresas da página', async () => {
     await useCase.execute({ page: 1, page_size: 20 });
 
