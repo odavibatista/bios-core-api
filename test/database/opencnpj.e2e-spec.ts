@@ -115,6 +115,8 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
           registrationStatus: 'ATIVA',
           registrationStatusUnrecognized: null,
           companySize: 'DEMAIS',
+          legalNatureCode: '2062',
+          legalNature: 'Sociedade Empresária Limitada',
           address: {
             street: 'AVENIDA PAULISTA',
             number: '1578',
@@ -181,7 +183,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       });
     });
 
-    it('registro anonimizado (LGPD): indisponível, nunca dado mascarado', async () => {
+    it('registro anonimizado (LGPD): encerra a cadeia, sem dado mascarado', async () => {
       handler = () => ({
         status: 200,
         body: JSON.stringify(
@@ -192,9 +194,8 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         ),
       });
 
-      await expect(dataSource.fetch(CNPJ, context)).resolves.toMatchObject({
-        status: 'UNAVAILABLE',
-        reason: 'FAILURE',
+      await expect(dataSource.fetch(CNPJ, context)).resolves.toEqual({
+        status: 'WITHHELD',
       });
     });
 
