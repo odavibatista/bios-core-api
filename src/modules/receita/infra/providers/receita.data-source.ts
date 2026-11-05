@@ -29,6 +29,8 @@ type CadastralProvider = DataSourceInterface<string, CadastralRecord>;
  *
  * Como cada desfecho é tratado:
  *  - **`FOUND`**: encerra, devolvendo o cadastro e o provedor que o respondeu.
+ *  - **`WITHHELD`**: encerra, sem cadastro. O provedor retirou o registro a pedido do
+ *    titular, e buscar o mesmo dado no provedor seguinte contornaria o pedido.
  *  - **`UNAVAILABLE`** (erro, tempo esgotado, limite atingido, resposta fora do
  *    formato): vai ao próximo.
  *  - **`NOT_FOUND`**: também vai ao próximo. Os espelhos da Receita se
@@ -81,6 +83,8 @@ export class ReceitaDataSource implements DataSourceInterface<
           data: { record: result.data, sourceSlug: provider.slug },
         };
       }
+
+      if (result.status === 'WITHHELD') return result;
 
       if (result.status === 'NOT_FOUND') {
         notFound += 1;

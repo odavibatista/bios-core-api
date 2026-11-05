@@ -76,9 +76,9 @@ back), state in 2 letters, empty becomes `null`.
 pattern: `GET {base_url}/{cnpj}`, allowlist of fields (the `QSA`, email and phones are never read) and
 rejection of a response for another CNPJ. Provider differences:
 
-- **An anonymized record is rejected.** OpenCNPJ masks the data of companies whose owner is an
-  individual and flags `lgpd_anonimizado`; a masked registration is not a registration, so the result
-  is `UNAVAILABLE`.
+- **An anonymized record ends the chain.** OpenCNPJ anonymizes the CNPJs on its list, at the owner's
+  request, and flags `lgpd_anonimizado`. The result is `WITHHELD`, and the chain stops: asking the
+  next provider would bypass the request.
 - **No IBGE code.** Its `codigo_municipio` is Receita's (another table): `cityIbgeCode` stays `null`.
 - **CNAE descriptions** come from the `cnaes` list when present; `cnaes_secundarios` carries only the
   codes. Without the list, the description stays empty and IBGE fills it in (RF06).

@@ -101,6 +101,8 @@ export class PrismaCompanyProfileRepository
         registration_status: registration.status,
         registration_status_unrecognized: registration.unrecognized,
         company_size: company.company_size ?? null,
+        legal_nature_code: company.legal_nature_code ?? null,
+        legal_nature: company.legal_nature ?? null,
         address: {
           street: company.address.street ?? null,
           number: company.address.number ?? null,
@@ -285,6 +287,8 @@ export class PrismaCompanyProfileRepository
       registration_status: record.registrationStatus,
       registration_status_unrecognized: record.registrationStatusUnrecognized,
       company_size: record.companySize,
+      legal_nature_code: record.legalNatureCode,
+      legal_nature: record.legalNature,
       address: {
         street: address.street,
         number: address.number,

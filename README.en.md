@@ -177,6 +177,16 @@ same page in the other language.
   <img src="docs/assets/ecosystem.en.png" width="100%" alt="Public sources feed bios-core-api, which serves bios-webapp and third-party systems; bios-docs defines the requirements of both">
 </p>
 
+## Privacy and data removal
+
+BIOS works with public data linked to the CNPJ. A sole proprietor's registered name and address may
+contain the owner's personal data, even though they are public at the Federal Revenue Service. A CPF
+in the registered name is masked, and partners and contacts are not collected.
+
+To request the removal of a record, write to **odavibatista@hotmail.com** with the CNPJ and proof that
+you are the owner. The details are on the
+[privacy page](https://bios-webapp.vercel.app/privacidade).
+
 ## Academic context
 
 BIOS is the individual project of Assessment 3 of the Software Engineering and Software Management and

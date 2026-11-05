@@ -177,6 +177,16 @@ testes e o CI. Cada página tem, logo abaixo do título, o atalho para a mesma p
   <img src="docs/assets/ecosystem.pt.png" width="100%" alt="Fontes públicas alimentam o bios-core-api, que atende o bios-webapp e sistemas de terceiros; o bios-docs define os requisitos dos dois">
 </p>
 
+## Privacidade e remoção de dados
+
+O BIOS trabalha com dados públicos ligados ao CNPJ. A razão social e o endereço de um empresário
+individual podem conter dados pessoais do titular, mesmo sendo públicos na Receita Federal. O CPF na
+razão social é mascarado, e sócios e contatos não são coletados.
+
+Para pedir a remoção de um cadastro, escreva para **odavibatista@hotmail.com** com o CNPJ e uma
+comprovação de que você é o titular. Os detalhes estão na
+[página de privacidade](https://bios-webapp.vercel.app/privacidade).
+
 ## Contexto acadêmico
 
 O BIOS é o projeto individual da Avaliação 3 das disciplinas de Engenharia de Software e de Gestão e

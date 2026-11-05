@@ -32,6 +32,8 @@ export const companyProfileResponseFactory =
     registration_status: 'ATIVA',
     registration_status_unrecognized: null,
     company_size: 'DEMAIS',
+    legal_nature_code: '2062',
+    legal_nature: 'Sociedade Empresária Limitada',
     address: {
       street: faker.location.street(),
       number: faker.string.numeric(3),

@@ -5,9 +5,15 @@ import {
   toLookupResult,
 } from '@modules/data-sources/domain/data-source.interface.js';
 import type { CadastralRecord } from '@modules/data-sources/domain/dtos/providers/cadastral-record.dto.js';
-import type { SourceCallContext } from '@modules/data-sources/domain/dtos/providers/data-source-request.dto.js';
+import {
+  type SourceCallContext,
+  SourceOutcome,
+} from '@modules/data-sources/domain/dtos/providers/data-source-request.dto.js';
 import { RequestDataSourceUseCase } from '@modules/data-sources/infra/usecases/request/request-data-source.usecase.js';
-import { toCadastralRecord } from '../../domain/opencnpj-cnpj.mapper.js';
+import {
+  isAnonymizedRecord,
+  toCadastralRecord,
+} from '../../domain/opencnpj-cnpj.mapper.js';
 
 /** Identificador do OpenCNPJ no catálogo de fontes (`data_sources.slug`). */
 export const OPEN_CNPJ_SLUG = 'OPEN_CNPJ';
@@ -42,6 +48,13 @@ export class OpenCnpjDataSource implements DataSourceInterface<
       cnpj,
       context,
     });
+
+    if (
+      response.outcome === SourceOutcome.SUCCESS &&
+      isAnonymizedRecord(response.body)
+    ) {
+      return { status: 'WITHHELD' };
+    }
 
     return toLookupResult(response, (body) => toCadastralRecord(body, cnpj));
   }

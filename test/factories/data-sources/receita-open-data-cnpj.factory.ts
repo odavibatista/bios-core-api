@@ -10,6 +10,7 @@ export interface ReceitaOpenDataCnpjBody {
   situacao_cadastral: number;
   porte: string;
   codigo_porte: number;
+  codigo_natureza_juridica: number;
   cnae_fiscal: number;
   cnae_fiscal_descricao: string;
   cnaes_secundarios: { codigo: number; descricao: string }[];
@@ -54,6 +55,7 @@ export const receitaOpenDataCnpjFactory =
     situacao_cadastral: 2,
     porte: 'DEMAIS',
     codigo_porte: 5,
+    codigo_natureza_juridica: 2062,
     cnae_fiscal: 6201501,
     cnae_fiscal_descricao:
       'Desenvolvimento de programas de computador sob encomenda',

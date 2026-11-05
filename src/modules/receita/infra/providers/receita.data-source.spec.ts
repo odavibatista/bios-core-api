@@ -21,6 +21,8 @@ function buildRecord(legalName: string): CadastralRecord {
     registrationStatus: 'ATIVA',
     registrationStatusUnrecognized: null,
     companySize: 'DEMAIS',
+    legalNatureCode: '2062',
+    legalNature: 'Sociedade Empresária Limitada',
     address: {
       street: null,
       number: null,
@@ -166,6 +168,15 @@ describe('ReceitaDataSource (cadeia de fallback cadastral)', () => {
           'BRASIL_API: TIMEOUT; OPEN_CNPJ: RATE_LIMITED; MINHA_RECEITA: FAILURE',
       });
     });
+  });
+
+  it('registro retirado a pedido do titular encerra a cadeia, sem consultar o provedor seguinte', async () => {
+    respond(notFound, { status: 'WITHHELD' }, found('do terceiro'));
+
+    await expect(chain.fetch(CNPJ, context)).resolves.toEqual({
+      status: 'WITHHELD',
+    });
+    expect(calls()).toEqual(['BRASIL_API', 'OPEN_CNPJ']);
   });
 
   describe('"não encontrado"', () => {
