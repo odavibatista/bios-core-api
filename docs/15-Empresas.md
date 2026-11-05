@@ -73,9 +73,9 @@ O `RefreshCompanyProfileUseCase` faz, nesta ordem:
    cadastro é gravado do mesmo jeito.
 3. **CPF mascarado (INL02).** A Receita grava a razão social de empresário individual e de MEI
    como `NOME 12345678901`. Toda sequência de 11 dígitos (com ou sem a pontuação do CPF) vira
-   `***` na razão social e no nome fantasia. O nome do empresário é público por lei; o CPF não
-   precisa ser. Só pessoa jurídica chega ao banco: o quadro societário, o e-mail e os telefones
-   nunca são lidos pelos adapters.
+   `***` na razão social e no nome fantasia. O nome do empresário é público por lei, mas segue
+   sendo dado pessoal (LGPD, art. 5º, I); o CPF não precisa aparecer. Sócios e contatos não chegam
+   ao banco: o quadro societário, o e-mail e os telefones nunca são lidos pelos adapters.
 4. **Hash do conteúdo.** `content_hash` é o SHA-256 de nome, situação, porte, endereço e
    atividades (CNAEs em ordem de código). Ficam **fora** dele o provedor, o instante e o código
    IBGE do município (só alguns provedores o informam), então trocar de provedor não muda o hash.
@@ -282,8 +282,8 @@ ignorados, e o arquivo traz a lista inteira. A tradução dos critérios para o 
   os ODS, e não só o selecionado na pesquisa: a planilha serve para comparar empresas. O que não foi
   calculado fica como **célula vazia**, e não como zero; o índice `0` é gravado como `0`. Índice e
   confiança nunca se combinam.
-- **Sem dado pessoal (INL02).** Só os campos acima, que já são de pessoa jurídica: o nome do
-  empresário individual/MEI sai com o CPF mascarado (`***`), e endereço de rua, hashes, fonte
+- **Dados mínimos (INL02).** Só os campos acima: o nome do empresário individual/MEI sai com o CPF
+  mascarado (`***`), e endereço de rua, hashes, fonte
   cadastral, datas internas e regras do índice não entram no arquivo.
 - **Texto é texto.** As células de texto são gravadas como texto (tabela de textos do XLSX), nunca
   como fórmula: uma razão social como `=HYPERLINK(...)` aparece literalmente e não é executada ao
