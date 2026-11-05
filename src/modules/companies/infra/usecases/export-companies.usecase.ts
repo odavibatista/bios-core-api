@@ -39,7 +39,7 @@ export interface CompaniesExport {
  * Aplica os mesmos critérios e a mesma ordenação da pesquisa (`toSearchInput`), sem
  * paginação, e junta a cada empresa o índice e a confiança de **todos** os ODS ativos, em
  * colunas separadas: a planilha serve para comparar empresas, e não só no ODS selecionado.
- * Só leva dados de pessoa jurídica (INL02). Lê a base local: não chama fonte nem publica job.
+ * Não leva contato nem endereço de rua (INL02). Lê a base local: não chama fonte nem publica job.
  *
  * @throws {OdsNotAvailableException} quando o `ods` não é calculado pelo BIOS (422).
  * @throws {NoResultsToExportException} quando nenhuma empresa atende aos critérios.

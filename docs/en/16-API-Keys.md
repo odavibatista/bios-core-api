@@ -73,3 +73,23 @@ registration, evidence and, per SDG, index, confidence and explanation (see [Ful
 ---
 
 [Documentation index](README.md) · ← [15. Companies](15-Companies.md) · [17. Tests](17-Tests.md) →
+
+## CRM import (UC16, RF31)
+
+`POST /v1/crm/companies` takes `{ "cnpjs": [...] }` and returns the accounts as flat fields, ready to
+map to CRM columns. It authenticates like the public lookup, through the `x-api-key` header.
+
+- **Batches of up to 20 CNPJs.** Duplicates count once, and the response follows the order sent.
+- **Each CNPJ has its own status:** `IMPORTED`, `NOT_FOUND`, `INVALID` or `UNAVAILABLE`. The alternate
+  flows of UC12 become the account status, and one failure does not bring down the others. An empty
+  batch or one above the cap returns 422.
+- **It does not wait for external sources,** like `GET /v1/companies/:cnpj`. Whatever is pending
+  comes in `scores_pending` and `retry_after_seconds`.
+- **Its own rate limit.** One call is worth up to 20 lookups, so the route has
+  `THROTTLE_CRM_IMPORT_LIMIT` (3 per minute, per IP) on top of the per-key limit. That is 60 CNPJs a
+  minute, the same volume as single lookups.
+- **Minimum data (LGPD, art. 6, III).** The same list as the XLSX export goes out, with index and
+  confidence per SDG and the count of confirmed evidence per category. Contact details, street,
+  number, complement and ZIP code stay out, since for sole proprietors they are often the home
+  address. The legal name may contain the owner's name, with the CPF masked. Evidence details remain
+  at `GET /v1/companies/:cnpj`.
