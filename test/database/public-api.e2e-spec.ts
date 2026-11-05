@@ -3,6 +3,10 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { CATALOG_SEEDERS } from '@app/database/catalog.seeders.js';
 import { LAST_USED_PRECISION_MS } from '@modules/api-keys/infra/usecases/authenticate-api-key.usecase.js';
 import { CompanyFullProfileResponseSchema } from '@modules/environmental-intelligence/domain/dtos/requests/company-full-profile.dto.js';
+import {
+  CRM_IMPORT_MAX_CNPJS,
+  CrmImportResponseSchema,
+} from '@modules/environmental-intelligence/domain/dtos/requests/crm-import.dto.js';
 import { API_KEY_HEADER } from '@shared/config/throttler.config.js';
 import {
   type ErrorResponse,
@@ -28,6 +32,7 @@ const PUBLIC_PREFIX_LENGTH = 'bios_'.length + 8;
 
 /** Limite padrão da API pública (`THROTTLE_PUBLIC_API_LIMIT`). */
 const PUBLIC_API_LIMIT = 60;
+const CRM_IMPORT_LIMIT = 3;
 
 /**
  * Consulta de perfil pela API pública (UC12) ponta a ponta: o painel gera a
@@ -211,6 +216,62 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         expect(ErrorResponseSchema.parse(response.body).code).toBe(
           'INVALID_CNPJ',
         );
+      });
+    });
+
+    describe('importação por CRM (UC16)', () => {
+      const importLot = (apiKey: string | undefined, cnpjs: string[]) => {
+        const call = request(app.getHttpServer())
+          .post('/v1/crm/companies')
+          .send({ cnpjs });
+
+        return apiKey ? call.set(API_KEY_HEADER, apiKey) : call;
+      };
+
+      it('200: cada CNPJ traz seu estado, e a conta não leva endereço de rua', async () => {
+        const { key } = await createKey();
+
+        const { body } = await importLot(key, [CNPJ, CNPJ, 'invalido']).expect(
+          200,
+        );
+        const { data } = CrmImportResponseSchema.parse(body);
+
+        expect(data.map(({ cnpj, status }) => [cnpj, status])).toEqual([
+          [CNPJ, 'IMPORTED'],
+          ['invalido', 'INVALID'],
+        ]);
+        expect(data[0]?.account).toMatchObject({
+          external_id: CNPJ,
+          city: 'São Paulo',
+          uf: 'SP',
+          main_cnae_code: '6201501',
+        });
+        expect(JSON.stringify(body)).not.toContain('Avenida Paulista');
+        expect(JSON.stringify(body)).not.toContain('01310200');
+      });
+
+      it('401: exige a chave de API', async () => {
+        await importLot(undefined, [CNPJ]).expect(401);
+      });
+
+      it('422: lote vazio ou acima do teto', async () => {
+        const { key } = await createKey();
+
+        await importLot(key, []).expect(422);
+        await importLot(
+          key,
+          Array.from({ length: CRM_IMPORT_MAX_CNPJS + 1 }, () => CNPJ),
+        ).expect(422);
+      });
+
+      it('429: o lote tem limite próprio, para não multiplicar a cota por chave', async () => {
+        const { key } = await createKey();
+
+        for (let lot = 0; lot < CRM_IMPORT_LIMIT; lot += 1) {
+          await importLot(key, [CNPJ]).expect(200);
+        }
+
+        await importLot(key, [CNPJ]).expect(429);
       });
     });
 

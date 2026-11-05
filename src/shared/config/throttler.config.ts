@@ -34,6 +34,7 @@ export const ThrottlerName = {
   COMPANY_EVIDENCES: 'companyEvidences',
   COMPANY_SEARCH: 'companySearch',
   COMPANY_EXPORT: 'companyExport',
+  CRM_IMPORT: 'crmImport',
 } as const;
 
 export type ThrottlerName = (typeof ThrottlerName)[keyof typeof ThrottlerName];
@@ -44,6 +45,7 @@ export const ROUTE_THROTTLERS = {
   [ThrottlerName.COMPANY_EVIDENCES]: 'THROTTLE_COMPANY_EVIDENCES_LIMIT',
   [ThrottlerName.COMPANY_SEARCH]: 'THROTTLE_COMPANY_SEARCH_LIMIT',
   [ThrottlerName.COMPANY_EXPORT]: 'THROTTLE_COMPANY_EXPORT_LIMIT',
+  [ThrottlerName.CRM_IMPORT]: 'THROTTLE_CRM_IMPORT_LIMIT',
 } as const satisfies Partial<Record<ThrottlerName, keyof Environment>>;
 
 export type RouteThrottlerName = keyof typeof ROUTE_THROTTLERS;
