@@ -357,3 +357,20 @@ Quando o OpenCNPJ marca o registro com `lgpd_anonimizado`, a cadeia de provedore
 o empresário individual, inclusive o MEI, e ajuda a conferir um pedido de remoção. Os dois campos
 ficam fora do hash de conteúdo, para o novo dado não contar como mudança cadastral. Cadastros
 gravados antes deles ficam com `null` até a próxima atualização.
+
+## Panorama de dados (UC19, RF37)
+
+`GET /companies/analytics` aceita os critérios de `GET /companies`, sem paginação, e devolve os totais e as
+distribuições do conjunto. Sem critério, responde pela base inteira, para o resumo da tela principal.
+
+- **Três agregados.** O conjunto de CNPJs sai sempre de `company_profile`, e restringe `evidence_normalized` e
+  `company_ods_scores`. Assim, evidência de empresa que só a ingestão conhece não entra na conta.
+- **Só evidências confirmadas.** `NOT_FOUND` e `UNKNOWN` não contam como fato sobre a empresa ([IND02]).
+- **Amostra mínima.** Abaixo de `SECTOR_SNAPSHOT_MIN_COMPANIES` (padrão 5), médias e faixas de um ODS ficam
+  omitidas, e as contagens continuam.
+- **Nada de ranking.** A resposta não cita empresas, e as categorias só se ordenam pelo tamanho ([IND03]).
+  Acima de 12 categorias, as menores vão para "Outros".
+- **Multas.** `fine_amount` é o valor lançado nos autos, e não o valor pago.
+- **Cache.** Só a resposta sem critério fica guardada, por uma hora. A retirada de um cadastro a apaga.
+- **Custo medido com 100 mil empresas, 100 mil índices e 100 mil evidências:** base inteira 1,9 s (1 ms pelo
+  cache), filtro por UF 0,9 s e filtro por nome 1,6 s.
