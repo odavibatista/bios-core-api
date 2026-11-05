@@ -26,6 +26,7 @@ export interface OpenCnpjBody {
   telefones: { ddd: string; numero: string; is_fax: boolean }[];
   capital_social: string;
   porte_empresa: string;
+  codigo_natureza_juridica: string;
   opcao_simples: string;
   lgpd_anonimizado: boolean;
   /** Quadro societário: dado de pessoa física que o BIOS nunca deve guardar (INL02). */
@@ -79,6 +80,7 @@ export const openCnpjFactory = defineFactory<OpenCnpjBody>(() => ({
   telefones: [{ ddd: '11', numero: '33334444', is_fax: false }],
   capital_social: '1000000,00',
   porte_empresa: 'Demais',
+  codigo_natureza_juridica: '2062',
   opcao_simples: 'N',
   lgpd_anonimizado: false,
   QSA: [

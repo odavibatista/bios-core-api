@@ -48,6 +48,12 @@ export interface CadastralRecord {
   /** Porte, em maiúsculas (ex.: `DEMAIS`, `MICRO EMPRESA`). */
   companySize: string | null;
 
+  /** Código da natureza jurídica na Receita (`2135` é empresário individual). */
+  legalNatureCode: string | null;
+
+  /** Descrição da natureza jurídica. */
+  legalNature: string | null;
+
   address: CadastralAddress;
   mainCnae: CadastralCnae;
   secondaryCnaes: CadastralCnae[];

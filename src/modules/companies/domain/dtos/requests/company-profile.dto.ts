@@ -56,6 +56,16 @@ export const CompanyProfileResponseSchema = z
         'Situação informada pelo provedor, como veio, quando ela não é uma das cinco da Receita; null nas demais',
       ),
     company_size: z.string().nullable().describe('Porte'),
+    legal_nature_code: z
+      .string()
+      .nullable()
+      .describe(
+        'Código da natureza jurídica na Receita; 2135 é empresário individual',
+      ),
+    legal_nature: z
+      .string()
+      .nullable()
+      .describe('Descrição da natureza jurídica'),
     address: CompanyAddressSchema,
     main_cnae: CnaeSchema.describe('CNAE principal'),
     secondary_cnaes: z.array(CnaeSchema).describe('CNAEs secundários'),

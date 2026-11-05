@@ -21,6 +21,8 @@ function buildRecord(legalName: string): CadastralRecord {
     registrationStatus: 'ATIVA',
     registrationStatusUnrecognized: null,
     companySize: 'DEMAIS',
+    legalNatureCode: '2062',
+    legalNature: 'Sociedade Empresária Limitada',
     address: {
       street: null,
       number: null,

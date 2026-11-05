@@ -40,6 +40,8 @@ const ReceitaOpenDataSchema = z.object({
   descricao_situacao_cadastral: field,
   situacao_cadastral: field,
   porte: field,
+  codigo_natureza_juridica: field,
+  natureza_juridica: field,
   cnae_fiscal: field,
   cnae_fiscal_descricao: field,
   cnaes_secundarios: z
@@ -110,6 +112,8 @@ export function toCadastralRecord(
     registrationStatus: registrationStatus.status,
     registrationStatusUnrecognized: registrationStatus.unrecognized,
     companySize: normalizeCompanySize(raw.porte),
+    legalNatureCode: cleanText(raw.codigo_natureza_juridica),
+    legalNature: cleanText(raw.natureza_juridica),
     address: {
       street: joinStreet(raw.descricao_tipo_de_logradouro, raw.logradouro),
       number: cleanText(raw.numero),

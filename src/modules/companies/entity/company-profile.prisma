@@ -32,6 +32,12 @@ model CompanyProfile {
   /// Porte da empresa.
   company_size String?
 
+  /// Código da natureza jurídica na Receita (`2135` é empresário individual).
+  legal_nature_code String?
+
+  /// Descrição da natureza jurídica.
+  legal_nature String?
+
   /// Endereço público da pessoa jurídica.
   address CompanyAddress
 
