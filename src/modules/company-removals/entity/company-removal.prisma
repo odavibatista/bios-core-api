@@ -1,0 +1,18 @@
+/// Cadastro retirado do BIOS a pedido do titular (LGPD, art. 18).
+///
+/// Observações:
+///  - guarda só o CNPJ e a data: o suficiente para não coletar o cadastro de novo;
+///  - `cnpj` é referência lógica: o perfil e as evidências da empresa já foram apagados;
+///  - mapeado para a coleção `company_removals`.
+model CompanyRemoval {
+  /// Identificador da remoção.
+  id_company_removal String @id @default(auto()) @map("_id") @db.ObjectId
+
+  /// CNPJ retirado (14 caracteres, sem máscara).
+  cnpj String @unique(map: "idx_company_removals_cnpj")
+
+  /// Quando o cadastro foi retirado.
+  removed_at DateTime @default(now())
+
+  @@map("company_removals")
+}
