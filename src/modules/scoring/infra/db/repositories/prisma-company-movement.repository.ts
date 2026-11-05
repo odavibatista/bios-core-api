@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { PrismaRepository } from '@shared/infra/database/prisma.repository.js';
 import { PrismaService } from '@shared/infra/database/prisma.service.js';
 import {
@@ -16,6 +17,10 @@ const UNIQUE_CONSTRAINT_VIOLATION = 'P2002';
 /** Quantos identificadores vão em cada `in`: o custo do Prisma cresce mais que o linear (#336). */
 const EVIDENCE_CHUNK_SIZE = 100;
 
+type StoredMovement = Prisma.CompanyMovementGetPayload<{
+  select: { cnpj: true; moved_at: true; ods_movements: true };
+}>;
+
 @Injectable()
 export class PrismaCompanyMovementRepository
   extends PrismaRepository
@@ -28,9 +33,11 @@ export class PrismaCompanyMovementRepository
   async findPage({
     skip,
     take,
+    category,
   }: CompanyMovementsWindow): Promise<CompanyMovementsPage> {
-    // A ordem é exatamente a de `idx_company_movements_moved_at_cnpj`: a leitura custa o
-    // tamanho da página, e não o da base (NFDE03).
+    if (category) return this.findCategoryPage({ skip, take, category });
+
+    // Sem filtro, a ordem é a do índice de data e CNPJ (NFDE03).
     const [rows, total] = await Promise.all([
       this.prisma.companyMovement.findMany({
         select: { cnpj: true, moved_at: true, ods_movements: true },
@@ -41,6 +48,57 @@ export class PrismaCompanyMovementRepository
       this.prisma.companyMovement.count(),
     ]);
 
+    return this.toPage(rows, total);
+  }
+
+  /** A busca por categoria usa diretamente o índice multikey; `some` no Prisma varre a coleção. */
+  private async findCategoryPage({
+    skip,
+    take,
+    category,
+  }: Required<CompanyMovementsWindow>): Promise<CompanyMovementsPage> {
+    const filter = { 'ods_movements.evidence_category': category };
+    const [found, counted] = await Promise.all([
+      this.prisma.$runCommandRaw({
+        find: 'company_movements',
+        filter,
+        sort: { moved_at: -1, cnpj: 1 },
+        projection: { cnpj: 1, _id: 0 },
+        skip,
+        limit: take,
+      }),
+      this.prisma.$runCommandRaw({ count: 'company_movements', query: filter }),
+    ]);
+    const batch = (found as { cursor?: { firstBatch?: { cnpj?: unknown }[] } })
+      .cursor?.firstBatch;
+    const total = (counted as { n?: unknown }).n;
+    if (!Array.isArray(batch) || typeof total !== 'number') {
+      throw new Error(
+        'Resposta inválida da consulta de movimentações filtradas',
+      );
+    }
+    const cnpjs = batch.map((item) => {
+      if (typeof item.cnpj !== 'string')
+        throw new Error('CNPJ inválido na consulta de movimentações');
+      return item.cnpj;
+    });
+    if (cnpjs.length === 0) return { rows: [], total };
+    const rows = await this.prisma.companyMovement.findMany({
+      where: { cnpj: { in: cnpjs } },
+      select: { cnpj: true, moved_at: true, ods_movements: true },
+    });
+    const byCnpj = new Map(rows.map((row) => [row.cnpj, row]));
+
+    return this.toPage(
+      cnpjs.flatMap((cnpj) => {
+        const row = byCnpj.get(cnpj);
+        return row ? [row] : [];
+      }),
+      total,
+    );
+  }
+
+  private toPage(rows: StoredMovement[], total: number): CompanyMovementsPage {
     return {
       rows: rows.map((row) => ({
         cnpj: row.cnpj,

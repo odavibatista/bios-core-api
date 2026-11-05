@@ -3,6 +3,7 @@ import { PrismaCompanyMovementRepository } from './prisma-company-movement.repos
 
 describe('PrismaCompanyMovementRepository', () => {
   const prisma = {
+    $runCommandRaw: vi.fn(),
     companyProfile: { findMany: vi.fn() },
     companyMovement: { findMany: vi.fn(), create: vi.fn(), count: vi.fn() },
     companyOdsScore: { findMany: vi.fn() },
@@ -67,6 +68,47 @@ describe('PrismaCompanyMovementRepository', () => {
           take: 10,
         }),
       );
+    });
+
+    it('aplica a categoria à lista e à contagem, sem mudar a ordem', async () => {
+      prisma.$runCommandRaw
+        .mockResolvedValueOnce({
+          cursor: { firstBatch: [{ cnpj: '2' }, { cnpj: '1' }] },
+        })
+        .mockResolvedValueOnce({ n: 3 });
+      prisma.companyMovement.findMany.mockResolvedValue([
+        { cnpj: '1', moved_at: published, ods_movements: [] },
+        { cnpj: '2', moved_at: collected, ods_movements: [] },
+      ]);
+
+      await expect(
+        repository.findPage({ skip: 2, take: 2, category: 'EMISSAO_GEE' }),
+      ).resolves.toEqual({
+        rows: [
+          { cnpj: '2', movedAt: collected, movements: [] },
+          { cnpj: '1', movedAt: published, movements: [] },
+        ],
+        total: 3,
+      });
+      const filter = { 'ods_movements.evidence_category': 'EMISSAO_GEE' };
+      expect(prisma.$runCommandRaw).toHaveBeenCalledWith({
+        find: 'company_movements',
+        filter,
+        sort: { moved_at: -1, cnpj: 1 },
+        projection: { cnpj: 1, _id: 0 },
+        skip: 2,
+        limit: 2,
+      });
+      expect(prisma.$runCommandRaw).toHaveBeenCalledWith({
+        count: 'company_movements',
+        query: filter,
+      });
+      expect(prisma.companyMovement.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { cnpj: { in: ['2', '1'] } },
+        }),
+      );
+      expect(prisma.companyMovement.count).not.toHaveBeenCalled();
     });
   });
 
