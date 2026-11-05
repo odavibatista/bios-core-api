@@ -268,12 +268,16 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         page_size: 1,
         page: 2,
       }).expect(200);
-      expect(page1.body.data.map(({ cnpj }: { cnpj: string }) => cnpj)).toEqual(
-        [last],
-      );
-      expect(page2.body.data.map(({ cnpj }: { cnpj: string }) => cnpj)).toEqual(
-        [first],
-      );
+      expect(
+        (page1.body as { data: { cnpj: string }[] }).data.map(
+          ({ cnpj }) => cnpj,
+        ),
+      ).toEqual([last]);
+      expect(
+        (page2.body as { data: { cnpj: string }[] }).data.map(
+          ({ cnpj }) => cnpj,
+        ),
+      ).toEqual([first]);
       expect(page1.body.pagination).toMatchObject({ total: 2, total_pages: 2 });
       expect(
         (await list({ category: 'CONDUTA_ADMINISTRATIVA' }).expect(200)).body
