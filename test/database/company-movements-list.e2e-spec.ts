@@ -1,4 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
+import type { EvidenceCategory } from '@prisma/client';
 import { CATALOG_SEEDERS } from '@app/database/catalog.seeders.js';
 import { CompanyMovementsResponseSchema } from '@modules/companies/domain/dtos/requests/company-movements.dto.js';
 import { ListRecentCompanyMovementsUseCase } from '@modules/companies/infra/usecases/list-recent-company-movements.usecase.js';
@@ -54,19 +55,27 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       refreshed_at: new Date('2026-11-01T00:00:00.000Z'),
     });
 
-    const odsMovement = (movedAt: Date, odsNumber = 15) => ({
+    const odsMovement = (
+      movedAt: Date,
+      odsNumber = 15,
+      category: EvidenceCategory = 'INFRACAO_AMBIENTAL',
+    ) => ({
       ods_id: odsId,
       ods_number: odsNumber,
       direction: 'DECREASED' as const,
       cause: 'EVIDENCE_ADDED' as const,
-      evidence_category: 'INFRACAO_AMBIENTAL' as const,
+      evidence_category: category,
       moved_at: movedAt,
     });
 
     async function saveCompany(
       legalName: string,
       movedAt: Date,
-      options: { cnpj?: string; tradeName?: string } = {},
+      options: {
+        cnpj?: string;
+        tradeName?: string;
+        category?: EvidenceCategory;
+      } = {},
     ): Promise<string> {
       sequence += 1;
       const cnpj = options.cnpj ?? String(sequence).padStart(14, '0');
@@ -78,7 +87,7 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
         data: {
           cnpj,
           moved_at: movedAt,
-          ods_movements: [odsMovement(movedAt)],
+          ods_movements: [odsMovement(movedAt, 15, options.category)],
         },
       });
 
@@ -237,9 +246,46 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       });
     });
 
+    it('filtra pela categoria, ordena por data e pagina só os itens filtrados', async () => {
+      const first = await saveCompany(
+        'Emissão antiga',
+        new Date('2026-10-01'),
+        {
+          category: 'EMISSAO_GEE',
+        },
+      );
+      await saveCompany('Infração', new Date('2026-10-03'));
+      const last = await saveCompany('Emissão nova', new Date('2026-10-02'), {
+        category: 'EMISSAO_GEE',
+      });
+
+      const page1 = await list({
+        category: 'EMISSAO_GEE',
+        page_size: 1,
+      }).expect(200);
+      const page2 = await list({
+        category: 'EMISSAO_GEE',
+        page_size: 1,
+        page: 2,
+      }).expect(200);
+      expect(page1.body.data.map(({ cnpj }: { cnpj: string }) => cnpj)).toEqual(
+        [last],
+      );
+      expect(page2.body.data.map(({ cnpj }: { cnpj: string }) => cnpj)).toEqual(
+        [first],
+      );
+      expect(page1.body.pagination).toMatchObject({ total: 2, total_pages: 2 });
+      expect(
+        (await list({ category: 'CONDUTA_ADMINISTRATIVA' }).expect(200)).body
+          .data,
+      ).toEqual([]);
+      expect((await list().expect(200)).body.pagination.total).toBe(3);
+    });
+
     it('recusa página fora do padrão das listas', async () => {
       await list({ page_size: 101 }).expect(422);
       await list({ page: 0 }).expect(422);
+      await list({ category: 'OUTRA_CATEGORIA' }).expect(422);
     });
 
     it('não consulta fonte externa nem expõe índice anterior', async () => {
@@ -271,7 +317,13 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
             return {
               cnpj: cnpjOf(index),
               moved_at: movedAt,
-              ods_movements: [odsMovement(movedAt)],
+              ods_movements: [
+                odsMovement(
+                  movedAt,
+                  15,
+                  index > COMPANIES - 5 ? 'EMISSAO_GEE' : 'INFRACAO_AMBIENTAL',
+                ),
+              ],
             };
           }),
         });
@@ -280,20 +332,32 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       const useCase = app.get(ListRecentCompanyMovementsUseCase, {
         strict: false,
       });
-      const timed = async (page: number) => {
+      const timed = async (page: number, category?: EvidenceCategory) => {
         const started = performance.now();
-        const { data } = await useCase.execute({ page, page_size: 100 });
+        const { data } = await useCase.execute({
+          page,
+          page_size: 100,
+          category,
+        });
 
         return { ms: performance.now() - started, data };
       };
       const first = await timed(1);
       const deep = await timed(COMPANIES / 100);
+      const rare = await timed(1, 'EMISSAO_GEE');
 
       expect(first.data[0].cnpj).toBe(cnpjOf(1));
       expect(first.data).toHaveLength(100);
       expect(deep.data[99].cnpj).toBe(cnpjOf(COMPANIES));
+      expect(rare.data.map(({ cnpj }) => cnpj)).toEqual(
+        Array.from({ length: 5 }, (_, index) => cnpjOf(COMPANIES - 4 + index)),
+      );
       expect(first.ms).toBeLessThan(MAX_MS);
       expect(deep.ms).toBeLessThan(MAX_MS);
+      expect(rare.ms).toBeLessThan(MAX_MS);
+      console.info(
+        `Movimentações em 100 mil empresas: início ${first.ms.toFixed(1)} ms, página profunda ${deep.ms.toFixed(1)} ms, categoria rara ${rare.ms.toFixed(1)} ms`,
+      );
     }, 120_000);
   },
 );
