@@ -5,7 +5,7 @@ import type {
 } from '../../../domain/dtos/repositories/company-profile.repository.js';
 import {
   registrationStatusExpression,
-  wholeCityName,
+  cityPattern,
 } from './company-search.pipeline.js';
 
 /**
@@ -58,7 +58,7 @@ export function canSearchFromScores(
 
 /** O \`$match\` dos índices: ODS, empresas com perfil, critérios desnormalizados e mínimos. */
 export function scoredMatch(
-  { uf, cityTerms, cnaePrefix, ods }: ScoredInput,
+  { uf, cityTerms, cityAliases, cnaePrefix, ods }: ScoredInput,
   mode: ScoredMode,
 ): Record<string, unknown> {
   const match: Record<string, unknown> = {
@@ -66,9 +66,9 @@ export function scoredMatch(
     uf: uf ?? { $ne: null },
   };
 
-  if (cityTerms !== undefined && cityTerms.length > 0) {
-    match.city = { $regex: wholeCityName(cityTerms), $options: 'i' };
-  }
+  const city = cityPattern({ cityTerms, cityAliases });
+
+  if (city !== null) match.city = { $regex: city, $options: 'i' };
 
   if (cnaePrefix !== undefined) {
     // Só dígitos (validados na entrada); casa o CNAE principal ou algum secundário.

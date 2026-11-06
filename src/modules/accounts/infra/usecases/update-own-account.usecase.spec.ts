@@ -1,3 +1,4 @@
+import { ResolveCityUseCase } from '@modules/locations/infra/usecases/resolve-city.usecase.js';
 import { Test } from '@nestjs/testing';
 import { UserRole } from '@prisma/client';
 import { faker } from '@test/support/faker.js';
@@ -20,6 +21,7 @@ describe('UpdateOwnAccountUseCase', () => {
     address: null,
     role: UserRole.USER,
   };
+  const resolveCity = { execute: vi.fn() };
   let useCase: UpdateOwnAccountUseCase;
 
   const address: Address = {
@@ -40,10 +42,40 @@ describe('UpdateOwnAccountUseCase', () => {
         UpdateOwnAccountUseCase,
         { provide: UpdateAccountUseCase, useValue: updateAccount },
         { provide: GetOwnAccountUseCase, useValue: getOwnAccount },
+        { provide: ResolveCityUseCase, useValue: resolveCity },
       ],
     }).compile();
 
     useCase = moduleRef.get(UpdateOwnAccountUseCase);
+  });
+
+  it('município escolhido é gravado com o nome do catálogo', async () => {
+    resolveCity.execute.mockResolvedValue({ name: 'Paraty' });
+
+    await useCase.execute({
+      userId,
+      address: { ...address, city: 'Parati', city_ibge_code: '3303807' },
+    });
+
+    expect(resolveCity.execute).toHaveBeenCalledWith({
+      ibgeCode: '3303807',
+      uf: 'SP',
+    });
+    expect(updateAccount.execute).toHaveBeenCalledWith({
+      userId,
+      changes: {
+        name: undefined,
+        address: { ...address, city: 'Paraty', city_ibge_code: '3303807' },
+      },
+    });
+  });
+
+  it('endereço sem código não consulta o catálogo', async () => {
+    resolveCity.execute.mockClear();
+
+    await useCase.execute({ userId, address });
+
+    expect(resolveCity.execute).not.toHaveBeenCalled();
   });
 
   it('altera o nome e devolve a conta atualizada', async () => {

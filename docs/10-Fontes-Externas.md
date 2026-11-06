@@ -11,6 +11,7 @@
 - [Cadastro: CadastralRecord e o adapter da BrasilAPI](#cadastro-cadastralrecord-e-o-adapter-da-brasilapi)
 - [Cadeia de fallback cadastral](#cadeia-de-fallback-cadastral)
 - [Descrição dos CNAEs: IBGE](#descrição-dos-cnaes-ibge)
+- [Endereço pelo CEP: ViaCEP](#endereço-pelo-cep-viacep)
 
 Cada fonte externa fica atrás de um adapter próprio, que implementa o contrato
 `DataSourceInterface` (`data-sources/domain/data-source.interface.ts`, NFPD02). O adapter diz
@@ -167,3 +168,19 @@ diário do IBAMA, definem o próprio fluxo de ingestão (ver [IBAMA](12-IBAMA.md
 ---
 
 [Índice da documentação](README.md) · ← [09. E-mails transacionais](09-E-mails.md) · [11. Evidências](11-Evidências.md) →
+
+## Endereço pelo CEP: ViaCEP
+
+`ViaCepDataSource` (`viacep/`, slug `VIACEP`, papel `ADDRESS_LOOKUP`, fora da cadeia cadastral) devolve o endereço
+de um CEP (RF39). Quem expõe a consulta é `GET /locations/postal-codes/:cep`, no módulo de localidades.
+
+- **Só o CEP sai do BIOS.** Nenhum dado da conta vai à fonte, e o log de requisições não guarda o CEP.
+- **Prazo de 3 segundos** (`request_timeout_ms`), porque a pessoa está esperando no formulário. Passou disso, a rota
+  responde `503` e a tela libera o preenchimento manual.
+- **CEP inexistente.** O ViaCEP responde 200 com `erro`: o adapter traduz para `NOT_FOUND`, e a rota, para `404`.
+  Só vale a resposta do CEP pedido.
+- **Número e complemento nunca são lidos.** O campo `complemento` da fonte é uma faixa de numeração, não o complemento
+  da pessoa.
+- **Município.** O código IBGE da resposta é conferido no catálogo, e a rota devolve o nome oficial. Código que o
+  catálogo não tem volta nulo, e a pessoa escolhe na lista.
+- **Cache de 30 dias** por CEP (`cache_ttl_seconds`), e só de endereço encontrado.

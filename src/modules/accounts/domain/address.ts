@@ -16,6 +16,9 @@ export function normalizeAddress(address: Address): Address {
     ...(complement ? { complement } : {}),
     neighborhood: address.neighborhood.trim(),
     city: address.city.trim(),
+    ...(address.city_ibge_code
+      ? { city_ibge_code: address.city_ibge_code }
+      : {}),
     state: address.state,
   };
 }

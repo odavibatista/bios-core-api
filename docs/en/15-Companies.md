@@ -206,8 +206,11 @@ field counts as not provided.
   - `uf`: the code of one of the 27 federative units, in any case (`rj` means `RJ`); anything else is 422;
   - `city`: the municipality's **full name**, ignoring accents, case and punctuation (`sao paulo` finds
     `SÃO PAULO`, `santa barbara d oeste` finds `Santa Bárbara d'Oeste`), but not by start of word:
-    `sao paulo` does not find `SAO PAULO DO POTENGI`. Without `uf`, it matches the municipality in any
-    state; to disambiguate, provide the state;
+    `sao paulo` does not find `SAO PAULO DO POTENGI`. Requires `uf`;
+  - `city_ibge_code`: the municipality's 7-digit IBGE code, as returned by
+    `GET /locations/states/:uf/cities`. Requires `uf` and cannot be combined with `city`. It reaches the
+    official name and the spellings used by other sources (see
+    [States and municipalities](#states-and-municipalities-rf38));
   - `cnae`: 2 to 7 digits (division, group, class or subclass), with or without the mask (`6201-5/01`),
     treated as a **prefix** of the code of the main CNAE **or** of any secondary one. `62` finds every
     information technology company; `01` does not find `6201501`.
@@ -378,3 +381,24 @@ distributions of the set. With no criteria it answers for the whole base, for th
 - **Cache.** Only the response with no criteria is kept, for one hour. Removing a record clears it.
 - **Cost measured with 100,000 companies, indexes and pieces of evidence:** whole base 1.9 s (1 ms from cache), UF
   filter 0.9 s and name filter 1.6 s.
+
+## States and municipalities (RF38)
+
+`GET /locations/states` lists the 27 federative units, and `GET /locations/states/:uf/cities` lists the
+municipalities of one of them. Both routes require a session, and neither calls IBGE: the catalog lives in
+`ibge_states` and `ibge_cities`.
+
+- **Origin.** `scripts/generate-ibge-locations.mjs` reads IBGE's locations API and writes the versioned
+  `ibge-locations.data.ts`. It refuses the result if a state is missing, if fewer than 5,571 municipalities arrive
+  or if a name looks corrupted. Run it again when IBGE creates or renames a municipality, and apply it with
+  `catalog:bootstrap`.
+- **Search.** `search` looks for the fragment in the name, ignoring accents, case and punctuation. Names starting
+  with it come first. Without `search`, the list is alphabetical and paginated.
+- **Spellings.** A record keeps the municipality as the source wrote it, which is not always the official name:
+  `PARATI` instead of Paraty. `city-aliases.data.ts` links those spellings to the code. In the November 2026 base
+  that means 13 places and 230 companies. `EXTERIOR`, with 11 companies, stays out of the catalog.
+- **Filter.** `city_ibge_code` covers the official name and the spellings, always within `uf`. A code from another
+  state returns `422 CITY_NOT_IN_STATE`.
+- **Code on records.** `npm run locations:backfill` fills `address.city_ibge_code` where it is missing. It is a dry
+  run by default, `-- --apply` writes, and a record that already has a code is never changed. The filter does not
+  depend on it: it compares names.

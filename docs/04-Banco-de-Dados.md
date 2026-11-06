@@ -110,16 +110,16 @@ connection string.
 
 ```bash
 npm run catalog:bootstrap              # mostra o que seria carregado
-npm run catalog:bootstrap -- --apply   # carrega ODS, fontes de dados e blacklist
+npm run catalog:bootstrap -- --apply   # carrega ODS, fontes de dados, blacklist e localidades
 npm run account:promote -- --email adm@exemplo.com            # dry-run
 npm run account:promote -- --email adm@exemplo.com --apply    # promove a ADMIN
 ```
 
 **`catalog:bootstrap`.** Roda os seeders de catálogo na ordem de dependência (ODS, fontes,
-blacklist), os mesmos dos testes. É **idempotente** e **só cria o que falta**: uma fonte que já existe
+blacklist, UFs e municípios), os mesmos dos testes. É **idempotente** e **só cria o que falta**: uma fonte que já existe
 nunca é alterada (ajustes de operação, como `rate_limit_per_minute` e `is_enabled`, prevalecem; para
 alinhar o contrato de uma fonte existente, use `catalog:sync`), e um domínio da blacklist removido pelo
-administrador não é recriado. Os ODS, de título e descrição oficiais, são reaplicados. O resumo mostra,
+administrador não é recriado. ODS, UFs e municípios, de texto oficial, são reaplicados. O resumo mostra,
 por catálogo, quantos itens seriam criados e quantos já existem; sai com `0` se tudo certo, `1` se algo
 falhar ou restar item por carregar e `2` para opção desconhecida.
 

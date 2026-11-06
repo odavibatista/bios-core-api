@@ -11,6 +11,7 @@ import type {
   SearchCompaniesQuery,
   SearchCompaniesResponse,
 } from '../../domain/dtos/requests/search-companies.dto.js';
+import { ResolveSelectedCityUseCase } from './resolve-selected-city.usecase.js';
 
 /**
  * Pesquisa empresas por nome, UF, município, CNAE e, para um ODS selecionado, índice e
@@ -37,6 +38,7 @@ export class SearchCompaniesUseCase extends UseCase<
   constructor(
     private readonly companyProfileRepository: CompanyProfileRepository,
     private readonly ensureActiveOds: EnsureActiveOdsUseCase,
+    private readonly selectedCity: ResolveSelectedCityUseCase,
   ) {
     super();
   }
@@ -52,7 +54,11 @@ export class SearchCompaniesUseCase extends UseCase<
 
     const pagination = { page, page_size };
     const { items, total } = await this.companyProfileRepository.search(
-      toSearchInput(criteria, toWindow(pagination)),
+      toSearchInput(
+        criteria,
+        toWindow(pagination),
+        await this.selectedCity.execute(criteria),
+      ),
     );
 
     return {

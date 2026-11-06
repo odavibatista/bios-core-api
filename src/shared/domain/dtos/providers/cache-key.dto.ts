@@ -36,6 +36,12 @@ export const CacheNamespace = {
    * empresa.
    */
   CNAE_DESCRIPTION: 'cnae-description',
+
+  /**
+   * Endereço de um CEP (ViaCEP). O identificador é o CEP, sem nada que ligue a consulta a uma
+   * conta: o endereço é do lugar, igual para quem mora nele.
+   */
+  POSTAL_CODE: 'postal-code',
 } as const;
 
 export type CacheNamespace =
