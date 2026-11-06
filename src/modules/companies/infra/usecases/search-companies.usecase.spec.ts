@@ -4,6 +4,7 @@ import { EnsureActiveOdsUseCase } from '@modules/scoring/infra/usecases/ensure-a
 import { companyProfileResponseFactory } from '@test/factories/companies/company-profile.factory.js';
 import { CompanyProfileRepository } from '../../domain/dtos/repositories/company-profile.repository.js';
 import { SearchCompaniesUseCase } from './search-companies.usecase.js';
+import { ResolveSelectedCityUseCase } from './resolve-selected-city.usecase.js';
 
 describe('SearchCompaniesUseCase', () => {
   const companyProfileRepository = {
@@ -46,6 +47,10 @@ describe('SearchCompaniesUseCase', () => {
           useValue: companyProfileRepository,
         },
         { provide: EnsureActiveOdsUseCase, useValue: ensureActiveOds },
+        {
+          provide: ResolveSelectedCityUseCase,
+          useValue: { execute: vi.fn().mockResolvedValue(undefined) },
+        },
       ],
     }).compile();
 

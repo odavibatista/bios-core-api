@@ -16,6 +16,7 @@ import {
   type WorkbookCompany,
   type WorkbookOdsScore,
 } from '../export/companies-workbook.builder.js';
+import { ResolveSelectedCityUseCase } from './resolve-selected-city.usecase.js';
 
 /** Tipo de conteúdo de um arquivo XLSX. */
 export const XLSX_CONTENT_TYPE =
@@ -54,6 +55,7 @@ export class ExportCompaniesUseCase extends UseCase<
     private readonly companyProfileRepository: CompanyProfileRepository,
     private readonly listScores: ListOdsScoreSummariesUseCase,
     private readonly ensureActiveOds: EnsureActiveOdsUseCase,
+    private readonly selectedCity: ResolveSelectedCityUseCase,
     private readonly configService: ConfigService<Environment, true>,
   ) {
     super();
@@ -68,7 +70,11 @@ export class ExportCompaniesUseCase extends UseCase<
       infer: true,
     });
     const { items, total } = await this.companyProfileRepository.search(
-      toSearchInput(query, { skip: 0, take: max }),
+      toSearchInput(
+        query,
+        { skip: 0, take: max },
+        await this.selectedCity.execute(query),
+      ),
     );
 
     if (total === 0) throw new NoResultsToExportException();

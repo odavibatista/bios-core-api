@@ -81,7 +81,15 @@ const SearchCriteriaSchema = z.object({
       .pipe(z.enum(BRAZILIAN_UFS)),
   ).describe('Sigla da unidade da federação (ex.: SP)'),
   city: optionalField(z.string().trim().max(MAX_CITY_LENGTH)).describe(
-    'Município; acentos, caixa e pontuação são ignorados. Sem a UF, casa o município de qualquer estado',
+    'Nome inteiro do município, exige `uf`; acentos, caixa e pontuação são ignorados',
+  ),
+  city_ibge_code: optionalField(
+    z
+      .string()
+      .trim()
+      .regex(/^\d{7}$/, 'Informe o código IBGE do município.'),
+  ).describe(
+    'Código IBGE do município, exige `uf`. Alcança também as grafias usadas por outras fontes',
   ),
   cnae: optionalField(
     z
@@ -139,6 +147,24 @@ function validateCriteriaRules(
     });
   }
 
+  if (query.city !== undefined && query.city_ibge_code !== undefined) {
+    context.addIssue({
+      code: 'custom',
+      path: ['city'],
+      message: 'Informe o município pelo nome ou pelo código, não pelos dois.',
+    });
+  }
+
+  for (const field of ['city', 'city_ibge_code'] as const) {
+    if (query[field] !== undefined && query.uf === undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: [field],
+        message: 'Informe a UF (`uf`) do município.',
+      });
+    }
+  }
+
   for (const field of ['min_score', 'min_confidence', 'order'] as const) {
     if (query[field] !== undefined && query.ods === undefined) {
       context.addIssue({
@@ -161,6 +187,7 @@ function validateSearchCriteria(
     (query.name ?? '') !== '' ||
     query.uf !== undefined ||
     query.city !== undefined ||
+    query.city_ibge_code !== undefined ||
     query.cnae !== undefined ||
     query.ods !== undefined;
 
