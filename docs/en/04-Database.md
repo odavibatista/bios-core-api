@@ -110,17 +110,17 @@ never print the connection string.
 
 ```bash
 npm run catalog:bootstrap              # shows what would be loaded
-npm run catalog:bootstrap -- --apply   # loads SDGs, data sources and blocklist
+npm run catalog:bootstrap -- --apply   # loads SDGs, data sources, blocklist and locations
 npm run account:promote -- --email adm@example.com            # dry run
 npm run account:promote -- --email adm@example.com --apply    # promotes to ADMIN
 ```
 
-**`catalog:bootstrap`.** Runs the catalog seeders in dependency order (SDGs, sources, blocklist), the
-same ones the tests use. It is **idempotent** and **only creates what is missing**: a source that
+**`catalog:bootstrap`.** Runs the catalog seeders in dependency order (SDGs, sources, blocklist, states
+and municipalities), the same ones the tests use. It is **idempotent** and **only creates what is missing**: a source that
 already exists is never changed (operational adjustments, such as `rate_limit_per_minute` and
 `is_enabled`, prevail; to align the contract of an existing source, use `catalog:sync`), and a
-blocklisted domain removed by the administrator is not recreated. The SDGs, with official title and
-description, are reapplied. The summary shows, per catalog, how many items would be created and how
+blocklisted domain removed by the administrator is not recreated. SDGs, states and municipalities, with
+official text, are reapplied. The summary shows, per catalog, how many items would be created and how
 many already exist; it exits with `0` when everything is fine, `1` if something fails or items remain
 to be loaded and `2` for an unknown option.
 

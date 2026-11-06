@@ -202,8 +202,10 @@ se somam: a empresa precisa atender a todos. Campo em branco vale como não info
   - `uf`: sigla das 27 unidades da federação, em qualquer caixa (`rj` vale `RJ`); outra coisa é 422;
   - `city`: o **nome inteiro** do município, sem distinguir acento, caixa nem pontuação
     (`sao paulo` acha `SÃO PAULO`, `santa barbara d oeste` acha `Santa Bárbara d'Oeste`), mas não por
-    início de palavra: `sao paulo` não acha `SAO PAULO DO POTENGI`. Sem `uf`, casa o município de
-    qualquer estado; para desambiguar, informe a UF;
+    início de palavra: `sao paulo` não acha `SAO PAULO DO POTENGI`. Exige `uf`;
+  - `city_ibge_code`: o código IBGE do município, com 7 dígitos, como vem de
+    `GET /locations/states/:uf/cities`. Exige `uf` e não se combina com `city`. Alcança o nome oficial e as
+    grafias de outras fontes (ver [UFs e municípios](#ufs-e-municípios-rf38));
   - `cnae`: de 2 a 7 dígitos (divisão, grupo, classe ou subclasse), com ou sem a máscara
     (`6201-5/01`), tratado como **prefixo** do código do CNAE principal **ou** de algum secundário.
     `62` acha todas as empresas de tecnologia da informação; `01` não acha `6201501`.
@@ -374,3 +376,23 @@ distribuições do conjunto. Sem critério, responde pela base inteira, para o r
 - **Cache.** Só a resposta sem critério fica guardada, por uma hora. A retirada de um cadastro a apaga.
 - **Custo medido com 100 mil empresas, 100 mil índices e 100 mil evidências:** base inteira 1,9 s (1 ms pelo
   cache), filtro por UF 0,9 s e filtro por nome 1,6 s.
+
+## UFs e municípios (RF38)
+
+`GET /locations/states` lista as 27 UFs, e `GET /locations/states/:uf/cities` lista os municípios de uma delas.
+As duas rotas exigem sessão, e nenhuma vai ao IBGE: o catálogo fica em `ibge_states` e `ibge_cities`.
+
+- **Origem.** `scripts/generate-ibge-locations.mjs` lê a API de localidades do IBGE e grava
+  `ibge-locations.data.ts`, versionado. Ele recusa o resultado se faltar UF, se vierem menos de 5.571 municípios
+  ou se algum nome vier corrompido. Rode de novo quando o IBGE criar ou renomear um município, e aplique com
+  `catalog:bootstrap`.
+- **Busca.** `search` procura o trecho no nome, sem distinguir acento, caixa ou pontuação. Quem começa pelo
+  trecho vem primeiro. Sem `search`, a lista vem em ordem alfabética, paginada.
+- **Grafias.** O cadastro guarda o município como a fonte escreveu, e nem sempre é o nome oficial: `PARATI` em
+  vez de Paraty. `city-aliases.data.ts` liga essas grafias ao código. Na base de novembro de 2026 são 13 locais e
+  230 empresas. `EXTERIOR`, com 11 empresas, fica fora do catálogo.
+- **Filtro.** `city_ibge_code` vale pelo nome oficial e pelas grafias, sempre dentro da `uf`. Código que não é da
+  UF responde `422 CITY_NOT_IN_STATE`.
+- **Código nos cadastros.** `npm run locations:backfill` preenche `address.city_ibge_code` em quem ainda não tem.
+  É dry-run por padrão, `-- --apply` grava, e cadastro que já tem código nunca é alterado. O filtro não depende
+  dele: compara nomes.
