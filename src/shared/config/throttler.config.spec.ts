@@ -70,6 +70,7 @@ const ENVIRONMENT: Partial<Environment> = {
   THROTTLE_COMPANY_SEARCH_LIMIT: 63,
   THROTTLE_COMPANY_EXPORT_LIMIT: 14,
   THROTTLE_CRM_IMPORT_LIMIT: 4,
+  THROTTLE_POSTAL_CODE_LIMIT: 5,
 };
 
 describe('configuração do limite de requisições', () => {
@@ -109,6 +110,7 @@ describe('configuração do limite de requisições', () => {
         ThrottlerName.COMPANY_SEARCH,
         ThrottlerName.COMPANY_EXPORT,
         ThrottlerName.CRM_IMPORT,
+        ThrottlerName.POSTAL_CODE,
       ]);
     });
 
@@ -232,6 +234,7 @@ describe('configuração do limite de requisições', () => {
       [ThrottlerName.COMPANY_SEARCH, 63],
       [ThrottlerName.COMPANY_EXPORT, 14],
       [ThrottlerName.CRM_IMPORT, 4],
+      [ThrottlerName.POSTAL_CODE, 5],
     ])(
       'o limite %s vem da variável de ambiente (%i) e usa a janela geral',
       (name, limit) => {
@@ -246,6 +249,7 @@ describe('configuração do limite de requisições', () => {
         companySearch: 'THROTTLE_COMPANY_SEARCH_LIMIT',
         companyExport: 'THROTTLE_COMPANY_EXPORT_LIMIT',
         crmImport: 'THROTTLE_CRM_IMPORT_LIMIT',
+        postalCode: 'THROTTLE_POSTAL_CODE_LIMIT',
       });
     });
 

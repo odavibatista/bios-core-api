@@ -81,7 +81,8 @@ describe('SearchCompaniesQuerySchema', () => {
     it.each([
       ['nome', { name: 'ambev' }],
       ['UF', { uf: 'SP' }],
-      ['município', { city: 'Santos' }],
+      ['município', { uf: 'SP', city: 'Santos' }],
+      ['código do município', { uf: 'SP', city_ibge_code: '3548500' }],
       ['CNAE', { cnae: '62' }],
       ['ODS', { ods: '15' }],
     ])('aceita só o critério %s', (_caso, query) => {
@@ -105,15 +106,42 @@ describe('SearchCompaniesQuerySchema', () => {
   });
 
   describe('município', () => {
+    it.each([
+      ['nome sem UF', { city: 'Santos' }, 'city'],
+      ['código sem UF', { city_ibge_code: '3548500' }, 'city_ibge_code'],
+      ['código curto', { uf: 'SP', city_ibge_code: '123' }, 'city_ibge_code'],
+      [
+        'código com letras',
+        { uf: 'SP', city_ibge_code: '35485a0' },
+        'city_ibge_code',
+      ],
+      [
+        'nome e código juntos',
+        { uf: 'SP', city: 'Santos', city_ibge_code: '3548500' },
+        'city',
+      ],
+    ])('recusa %s', (_case, query, field) => {
+      const result = parse(query);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0].path).toEqual([field]);
+    });
+
+    it('código em branco vale como não informado', () => {
+      expect(parse({ uf: 'SP', city_ibge_code: ' ' }).success).toBe(true);
+    });
+
     it('aceita o nome com acento e pontuação', () => {
       expect(
-        SearchCompaniesQuerySchema.parse({ city: " Santa Bárbara d'Oeste " })
-          .city,
+        SearchCompaniesQuerySchema.parse({
+          uf: 'SP',
+          city: " Santa Bárbara d'Oeste ",
+        }).city,
       ).toBe("Santa Bárbara d'Oeste");
     });
 
     it('recusa o que não tem nenhuma letra ou dígito', () => {
-      const result = parse({ city: '***' });
+      const result = parse({ uf: 'SP', city: '***' });
 
       expect(result.success).toBe(false);
       expect(result.error?.issues[0].path).toEqual(['city']);

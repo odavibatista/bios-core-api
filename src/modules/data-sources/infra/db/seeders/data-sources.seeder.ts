@@ -61,6 +61,18 @@ export const DATA_SOURCES: readonly DataSourceDefinition[] = [
     request_timeout_ms: 5_000,
   },
   {
+    slug: 'VIACEP',
+    name: 'ViaCEP',
+    base_url: 'https://viacep.com.br/ws',
+    role: DataSourceRole.ADDRESS_LOOKUP,
+    ingestion_mode: IngestionMode.ON_DEMAND,
+    rate_limit_per_minute: 60,
+    // O endereço de um CEP quase não muda.
+    cache_ttl_seconds: 30 * ONE_DAY,
+    // RF39: passado este prazo, a pessoa preenche à mão.
+    request_timeout_ms: 3_000,
+  },
+  {
     slug: 'IBAMA',
     name: 'IBAMA — Dados Abertos',
     // Armazenamento onde o IBAMA publica os arquivos dos dumps (o portal CKAN só

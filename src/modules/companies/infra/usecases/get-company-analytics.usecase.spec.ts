@@ -8,6 +8,7 @@ import {
   BASE_ANALYTICS_CACHE_KEY,
   GetCompanyAnalyticsUseCase,
 } from './get-company-analytics.usecase.js';
+import { ResolveSelectedCityUseCase } from './resolve-selected-city.usecase.js';
 
 const ROWS: CompanyAnalyticsRows = {
   companies: 1,
@@ -30,6 +31,7 @@ const ROWS: CompanyAnalyticsRows = {
 };
 
 describe('GetCompanyAnalyticsUseCase', () => {
+  const selectedCity = { execute: vi.fn().mockResolvedValue(undefined) };
   const analytics = {
     aggregate: vi.fn<CompanyAnalyticsRepository['aggregate']>(),
   };
@@ -50,6 +52,10 @@ describe('GetCompanyAnalyticsUseCase', () => {
         GetCompanyAnalyticsUseCase,
         { provide: CompanyAnalyticsRepository, useValue: analytics },
         { provide: EnsureActiveOdsUseCase, useValue: ensureActiveOds },
+        {
+          provide: ResolveSelectedCityUseCase,
+          useValue: selectedCity,
+        },
         { provide: CacheProvider, useValue: cache },
         { provide: ConfigService, useValue: { get: () => 5 } },
       ],

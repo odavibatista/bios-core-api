@@ -27,6 +27,7 @@ com duas instâncias no ar.
 | `companyEvidences` | `THROTTLE_TTL` / `THROTTLE_COMPANY_EVIDENCES_LIMIT` (20) | endereço IP |
 | `companySearch` | `THROTTLE_TTL` / `THROTTLE_COMPANY_SEARCH_LIMIT` (60) | endereço IP |
 | `companyExport` | `THROTTLE_TTL` / `THROTTLE_COMPANY_EXPORT_LIMIT` (10) | endereço IP |
+| `postalCode` | `THROTTLE_TTL` / `THROTTLE_POSTAL_CODE_LIMIT` (20) | endereço IP |
 | `crmImport` | `THROTTLE_TTL` / `THROTTLE_CRM_IMPORT_LIMIT` (3) | endereço IP |
 
 - **Limite próprio das rotas de empresa (#335).** Nenhum teto vive no código das rotas: cada uma

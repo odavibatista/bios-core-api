@@ -58,6 +58,9 @@ export interface SearchCompaniesInput {
   /** Palavras normalizadas do nome do município. */
   cityTerms?: string[];
 
+  /** Outras grafias aceitas do mesmo município, cada uma com suas palavras. */
+  cityAliases?: string[][];
+
   /** Código CNAE (2 a 7 dígitos), tratado como prefixo, do CNAE principal ou de um secundário. */
   cnaePrefix?: string;
 

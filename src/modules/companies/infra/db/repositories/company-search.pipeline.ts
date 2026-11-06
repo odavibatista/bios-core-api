@@ -74,11 +74,22 @@ export function wholeCityName(terms: readonly string[]): string {
     .join(WORD_SEPARATOR)}[^${WORD_CHAR}]*$`;
 }
 
+/** Expressão do município com as grafias alternativas. `null`: sem filtro por município. */
+export function cityPattern({
+  cityTerms = [],
+  cityAliases = [],
+}: Pick<SearchCompaniesInput, 'cityTerms' | 'cityAliases'>): string | null {
+  const names = [cityTerms, ...cityAliases].filter((name) => name.length > 0);
+
+  return names.length === 0 ? null : names.map(wholeCityName).join('|');
+}
+
 /** Condições do `$match` cadastral: nome, UF, município e CNAE. Vazio: sem filtro. */
 function cadastralConditions({
   nameTerms,
   uf,
   cityTerms,
+  cityAliases,
   cnaePrefix,
 }: SearchCompaniesInput): Record<string, unknown>[] {
   const conditions: Record<string, unknown>[] = nameTerms.map((term) => ({
@@ -89,10 +100,10 @@ function cadastralConditions({
 
   if (uf !== undefined) conditions.push({ 'address.uf': uf });
 
-  if (cityTerms !== undefined && cityTerms.length > 0) {
-    conditions.push({
-      'address.city': { $regex: wholeCityName(cityTerms), $options: 'i' },
-    });
+  const city = cityPattern({ cityTerms, cityAliases });
+
+  if (city !== null) {
+    conditions.push({ 'address.city': { $regex: city, $options: 'i' } });
   }
 
   if (cnaePrefix !== undefined) {

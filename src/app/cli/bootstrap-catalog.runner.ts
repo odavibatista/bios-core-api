@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import { DATA_SOURCES } from '@modules/data-sources/infra/db/seeders/data-sources.seeder.js';
+import { diffLocations } from '@modules/locations/infra/db/seeders/locations.seeder.js';
 import { REFERENCE_ODS } from '@modules/scoring/infra/db/seeders/ods.seeder.js';
 import { SEED_BLOCKED_EMAIL_DOMAINS } from '@modules/security/infra/db/seeders/blocked-email-domains.seeder.js';
 import type { DatabaseSeeder } from '@shared/infra/database/database-seeder.js';
@@ -9,7 +10,7 @@ export interface CatalogBootstrapCliDeps {
   client: PrismaClient;
   /** Só o nome do banco: a connection string (com credenciais) nunca chega aqui. */
   databaseName: string;
-  /** Seeders de catálogo, na ordem de dependência (ODS, fontes, blacklist). */
+  /** Seeders de catálogo, na ordem de dependência (ODS, fontes, blacklist, localidades). */
   seeders: readonly DatabaseSeeder[];
   write: (line: string) => void;
 }
@@ -19,16 +20,17 @@ export interface CatalogBootstrapPlan {
   ods: { create: number; update: number; unchanged: number };
   dataSources: { create: number; existing: number };
   blockedDomains: { create: number; existing: number };
+  locations: { create: number; update: number; unchanged: number };
 }
 
 const USAGE = [
   'Uso: npm run catalog:bootstrap [-- --apply]',
   '',
   '  (sem opção)  mostra o que seria carregado (dry-run); não grava nada',
-  '  --apply      grava o que falta: ODS, fontes de dados e blacklist de domínios',
+  '  --apply      grava o que falta: ODS, fontes de dados, blacklist de domínios e localidades',
   '',
   'Idempotente. Só cria o que falta: fontes e domínios que já existem nunca são alterados',
-  '(ajustes de operação e remoções do administrador prevalecem). Os ODS, de texto oficial,',
+  '(ajustes de operação e remoções do administrador prevalecem). ODS e localidades, oficiais,',
   'são reaplicados. Para alinhar uma fonte existente ao contrato do código, use catalog:sync.',
 ];
 
@@ -36,7 +38,7 @@ const USAGE = [
 export async function planCatalogBootstrap(
   client: PrismaClient,
 ): Promise<CatalogBootstrapPlan> {
-  const [ods, sources, blocked] = await Promise.all([
+  const [ods, sources, blocked, locations] = await Promise.all([
     client.ods.findMany({
       select: { ods_number: true, title: true, description: true },
     }),
@@ -45,6 +47,7 @@ export async function planCatalogBootstrap(
       where: { domain: { in: [...SEED_BLOCKED_EMAIL_DOMAINS] } },
       select: { domain: true },
     }),
+    diffLocations(client),
   ]);
   const odsByNumber = new Map(ods.map((item) => [item.ods_number, item]));
   const knownSlugs = new Set(sources.map(({ slug }) => slug));
@@ -54,6 +57,11 @@ export async function planCatalogBootstrap(
     blockedDomains: {
       create: SEED_BLOCKED_EMAIL_DOMAINS.length - blocked.length,
       existing: blocked.length,
+    },
+    locations: {
+      create: locations.states.create.length + locations.cities.create.length,
+      update: locations.states.update.length + locations.cities.update.length,
+      unchanged: locations.states.unchanged + locations.cities.unchanged,
     },
   };
 
@@ -83,6 +91,7 @@ export function formatBootstrapPlan(plan: CatalogBootstrapPlan): string[] {
     `ODS: ${plan.ods.create} a criar, ${plan.ods.update} a atualizar (texto oficial), ${plan.ods.unchanged} iguais.`,
     `Fontes de dados: ${plan.dataSources.create} a criar, ${plan.dataSources.existing} já existem (não são alteradas; veja catalog:sync).`,
     `Blacklist de domínios: ${plan.blockedDomains.create} a criar, ${plan.blockedDomains.existing} já existem.`,
+    `UFs e municípios: ${plan.locations.create} a criar, ${plan.locations.update} a atualizar (nome oficial), ${plan.locations.unchanged} iguais.`,
   ];
 }
 
@@ -91,7 +100,9 @@ function pendingChanges(plan: CatalogBootstrapPlan): number {
     plan.ods.create +
     plan.ods.update +
     plan.dataSources.create +
-    plan.blockedDomains.create
+    plan.blockedDomains.create +
+    plan.locations.create +
+    plan.locations.update
   );
 }
 

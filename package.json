@@ -36,6 +36,7 @@
     "db:push": "prisma db push",
     "catalog:sync": "nest build && node dist/app/cli/sync-catalog.main.js",
     "catalog:bootstrap": "nest build && node dist/app/cli/bootstrap-catalog.main.js",
+    "locations:backfill": "nest build && node dist/app/cli/backfill-city-codes.main.js",
     "account:promote": "nest build && node dist/app/cli/promote-account.main.js",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",

@@ -14,6 +14,7 @@ import type { CompanyAnalytics } from '../../domain/dtos/requests/company-analyt
 import type { CompanyAnalyticsQuery } from '../../domain/dtos/requests/search-companies.dto.js';
 import { toSearchInput } from '../../domain/search-companies-input.js';
 import { hasAnalyticsCriteria } from '../db/repositories/company-analytics.pipeline.js';
+import { ResolveSelectedCityUseCase } from './resolve-selected-city.usecase.js';
 
 /** O panorama da base inteira, para o resumo da tela principal. */
 export const BASE_ANALYTICS_CACHE_KEY: CacheKey = {
@@ -39,6 +40,7 @@ export class GetCompanyAnalyticsUseCase extends UseCase<
   constructor(
     private readonly analytics: CompanyAnalyticsRepository,
     private readonly ensureActiveOds: EnsureActiveOdsUseCase,
+    private readonly selectedCity: ResolveSelectedCityUseCase,
     private readonly cache: CacheProvider,
     private readonly configService: ConfigService<Environment, true>,
   ) {
@@ -50,7 +52,11 @@ export class GetCompanyAnalyticsUseCase extends UseCase<
   ): Promise<CompanyAnalytics> {
     if (query.ods !== undefined) await this.ensureActiveOds.execute(query.ods);
 
-    const input = toSearchInput(query, { skip: 0, take: 0 });
+    const input = toSearchInput(
+      query,
+      { skip: 0, take: 0 },
+      await this.selectedCity.execute(query),
+    );
     const useCache = !hasAnalyticsCriteria(input);
 
     if (useCache) {

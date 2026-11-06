@@ -162,3 +162,20 @@ daily dump, define their own ingestion flow (see [IBAMA](12-IBAMA.md)).
 ---
 
 [Documentation index](README.md) · ← [09. Transactional emails](09-Emails.md) · [11. Evidence](11-Evidence.md) →
+
+## Address from postal code: ViaCEP
+
+`ViaCepDataSource` (`viacep/`, slug `VIACEP`, role `ADDRESS_LOOKUP`, outside the registration chain) returns the
+address of a postal code (RF39). The lookup is exposed by `GET /locations/postal-codes/:cep`, in the locations module.
+
+- **Only the postal code leaves BIOS.** No account data goes to the source, and the request log does not keep the
+  postal code.
+- **3-second deadline** (`request_timeout_ms`), because the person is waiting on the form. Past that, the route returns
+  `503` and the screen allows filling in by hand.
+- **Nonexistent postal code.** ViaCEP answers 200 with `erro`: the adapter translates it to `NOT_FOUND`, and the route
+  to `404`. Only the answer for the requested code is accepted.
+- **Number and complement are never read.** The source's `complemento` field is a numbering range, not the person's
+  complement.
+- **Municipality.** The IBGE code in the answer is checked against the catalog, and the route returns the official
+  name. A code the catalog does not have comes back null, and the person picks from the list.
+- **30-day cache** per postal code (`cache_ttl_seconds`), only for addresses found.

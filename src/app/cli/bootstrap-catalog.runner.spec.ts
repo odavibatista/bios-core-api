@@ -1,5 +1,13 @@
 import type { PrismaClient } from '@prisma/client';
 import { DATA_SOURCES } from '@modules/data-sources/infra/db/seeders/data-sources.seeder.js';
+import {
+  IBGE_CITIES,
+  IBGE_STATES,
+} from '@modules/locations/infra/db/seeders/ibge-locations.data.js';
+import {
+  desiredCities,
+  desiredStates,
+} from '@modules/locations/infra/db/seeders/locations.seeder.js';
 import { REFERENCE_ODS } from '@modules/scoring/infra/db/seeders/ods.seeder.js';
 import { SEED_BLOCKED_EMAIL_DOMAINS } from '@modules/security/infra/db/seeders/blocked-email-domains.seeder.js';
 import type { DatabaseSeeder } from '@shared/infra/database/database-seeder.js';
@@ -13,10 +21,14 @@ describe('comando catalog:bootstrap', () => {
   const findOds = vi.fn();
   const findSources = vi.fn();
   const findBlocked = vi.fn();
+  const findStates = vi.fn();
+  const findCities = vi.fn();
   const client = {
     ods: { findMany: findOds },
     dataSource: { findMany: findSources },
     blockedEmailDomain: { findMany: findBlocked },
+    ibgeState: { findMany: findStates },
+    ibgeCity: { findMany: findCities },
   } as unknown as PrismaClient;
   const lines: string[] = [];
   const calls: string[] = [];
@@ -43,6 +55,8 @@ describe('comando catalog:bootstrap', () => {
     findOds.mockResolvedValue([]);
     findSources.mockResolvedValue([]);
     findBlocked.mockResolvedValue([]);
+    findStates.mockResolvedValue([]);
+    findCities.mockResolvedValue([]);
   }
 
   /** Banco já carregado, com tudo igual ao código. */
@@ -52,6 +66,8 @@ describe('comando catalog:bootstrap', () => {
     findBlocked.mockResolvedValue(
       SEED_BLOCKED_EMAIL_DOMAINS.map((domain) => ({ domain })),
     );
+    findStates.mockResolvedValue(desiredStates());
+    findCities.mockResolvedValue(desiredCities());
   }
 
   beforeEach(() => {
@@ -71,6 +87,11 @@ describe('comando catalog:bootstrap', () => {
         blockedDomains: {
           create: SEED_BLOCKED_EMAIL_DOMAINS.length,
           existing: 0,
+        },
+        locations: {
+          create: IBGE_STATES.length + IBGE_CITIES.length,
+          update: 0,
+          unchanged: 0,
         },
       });
     });
@@ -156,10 +177,11 @@ describe('comando catalog:bootstrap', () => {
     it('formata uma linha por catálogo', async () => {
       const text = formatBootstrapPlan(await planCatalogBootstrap(client));
 
-      expect(text).toHaveLength(3);
+      expect(text).toHaveLength(4);
       expect(text[0]).toMatch(/^ODS: 2 a criar/);
-      expect(text[1]).toMatch(/^Fontes de dados: 8 a criar/);
+      expect(text[1]).toMatch(/^Fontes de dados: 9 a criar/);
       expect(text[2]).toMatch(/^Blacklist de domínios: \d+ a criar/);
+      expect(text[3]).toMatch(/^UFs e municípios: 5598 a criar/);
     });
   });
 
@@ -197,6 +219,8 @@ describe('comando catalog:bootstrap', () => {
         .mockResolvedValue(
           SEED_BLOCKED_EMAIL_DOMAINS.map((domain) => ({ domain })),
         );
+      findStates.mockResolvedValueOnce([]).mockResolvedValue(desiredStates());
+      findCities.mockResolvedValueOnce([]).mockResolvedValue(desiredCities());
 
       await expect(run('--apply')).resolves.toBe(0);
 

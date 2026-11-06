@@ -52,7 +52,8 @@ npm run start:dev           # API at http://localhost:3000
 | `keys:generate` | Generates the `.env` encryption keys (`-- --version N` to rotate) |
 | `db:push` | Syncs MongoDB collections and indexes with the schema |
 | `catalog:sync` | Compares the source catalog in the database with the seed (dry run); `-- --apply` writes. See [Source catalog](04-Database.md#source-catalog-loading-and-synchronization) |
-| `catalog:bootstrap` | Initial load of SDGs, sources and blocklist into a new database (dry run; `-- --apply` writes). See [Initial load](04-Database.md#initial-load-of-a-new-database-and-first-administrator-329) |
+| `locations:backfill` | Fills the IBGE code on records that lack it (dry run; `-- --apply` writes). See [States and municipalities](15-Companies.md#states-and-municipalities-rf38) |
+| `catalog:bootstrap` | Initial load of SDGs, sources, blocklist and locations into a new database (dry run; `-- --apply` writes). See [Initial load](04-Database.md#initial-load-of-a-new-database-and-first-administrator-329) |
 | `account:promote` | Promotes an account to `ADMIN` (`-- --email <email>`; `--demote` demotes; `--apply` writes) and ends its sessions |
 | `docker:up` / `docker:down` | Starts/stops the local infrastructure |
 

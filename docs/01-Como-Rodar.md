@@ -52,7 +52,8 @@ npm run start:dev           # API em http://localhost:3000
 | `keys:generate` | Gera as chaves de criptografia do `.env` (`-- --version N` para rotacionar) |
 | `db:push` | Sincroniza coleções e índices do MongoDB com o schema |
 | `catalog:sync` | Compara o catálogo de fontes do banco com o seed (dry-run); `-- --apply` grava. Ver [Catálogo de fontes](04-Banco-de-Dados.md#catálogo-de-fontes-carga-e-sincronização) |
-| `catalog:bootstrap` | Carga inicial de ODS, fontes e blacklist num banco novo (dry-run; `-- --apply` grava). Ver [Carga inicial](04-Banco-de-Dados.md#carga-inicial-de-um-banco-novo-e-primeiro-administrador-329) |
+| `locations:backfill` | Preenche o código IBGE nos cadastros que não o têm (dry-run; `-- --apply` grava). Ver [UFs e municípios](15-Empresas.md#ufs-e-municípios-rf38) |
+| `catalog:bootstrap` | Carga inicial de ODS, fontes, blacklist e localidades num banco novo (dry-run; `-- --apply` grava). Ver [Carga inicial](04-Banco-de-Dados.md#carga-inicial-de-um-banco-novo-e-primeiro-administrador-329) |
 | `account:promote` | Promove uma conta a `ADMIN` (`-- --email <e-mail>`; `--demote` rebaixa; `--apply` grava) e encerra as sessões dela |
 | `docker:up` / `docker:down` | Sobe/derruba a infraestrutura local |
 
