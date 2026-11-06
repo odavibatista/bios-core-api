@@ -82,6 +82,9 @@ enum DataSourceRole {
   /// Descrição de atividades econômicas (CNAE).
   CNAE_TAXONOMY
 
+  /// Endereço a partir do CEP, para o preenchimento do endereço da conta.
+  ADDRESS_LOOKUP
+
   /// Fonte de evidência ambiental ou de conduta.
   EVIDENCE
 }

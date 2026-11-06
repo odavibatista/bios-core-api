@@ -11,6 +11,7 @@ import { ScoringModule } from '@modules/scoring/infra/modules/scoring.module.js'
 import { CguModule } from '@modules/cgu/infra/modules/cgu.module.js';
 import { CompanyRemovalsModule } from '@modules/company-removals/infra/modules/company-removals.module.js';
 import { LocationsModule } from '@modules/locations/infra/modules/locations.module.js';
+import { ViaCepModule } from '@modules/viacep/infra/modules/viacep.module.js';
 
 /**
  * Agregador do domínio de inteligência socioambiental: fontes de dados e seus
@@ -25,6 +26,7 @@ import { LocationsModule } from '@modules/locations/infra/modules/locations.modu
     DataSourcesModule,
     ReceitaModule,
     IbgeCnaeModule,
+    ViaCepModule,
     IbamaModule,
     CguModule,
     GhgModule,

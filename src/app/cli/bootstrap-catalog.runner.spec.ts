@@ -179,7 +179,7 @@ describe('comando catalog:bootstrap', () => {
 
       expect(text).toHaveLength(4);
       expect(text[0]).toMatch(/^ODS: 2 a criar/);
-      expect(text[1]).toMatch(/^Fontes de dados: 8 a criar/);
+      expect(text[1]).toMatch(/^Fontes de dados: 9 a criar/);
       expect(text[2]).toMatch(/^Blacklist de domínios: \d+ a criar/);
       expect(text[3]).toMatch(/^UFs e municípios: 5598 a criar/);
     });

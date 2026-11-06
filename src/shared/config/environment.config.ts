@@ -201,6 +201,9 @@ export const environmentSchema = z.object({
   THROTTLE_COMPANY_EXPORT_LIMIT: z.coerce.number().int().min(1).default(10),
   THROTTLE_CRM_IMPORT_LIMIT: z.coerce.number().int().min(1).default(3),
 
+  /* Consulta de CEP (RF39): cada CEP novo vira uma chamada ao ViaCEP. */
+  THROTTLE_POSTAL_CODE_LIMIT: z.coerce.number().int().min(1).default(20),
+
   /* Exportação da lista em XLSX (UC09, RF15, NFSE04 h): máximo de empresas em um arquivo. A
      planilha é montada em memória; o maior valor medido (20 000 linhas, 2 ODS) levou ~1,3 s
      e ~1 MB de arquivo, e é por isso o teto aceito. */
