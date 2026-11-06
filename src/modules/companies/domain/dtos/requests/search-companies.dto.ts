@@ -160,7 +160,7 @@ function validateCriteriaRules(
       context.addIssue({
         code: 'custom',
         path: [field],
-        message: 'Informe a UF (`uf`) do município.',
+        message: 'Informe a UF do município.',
       });
     }
   }
