@@ -361,3 +361,20 @@ fetching the same data from the next provider would bypass the request made to i
 identifies sole proprietors, including MEIs, and helps check a removal request. Both fields stay out
 of the content hash, so the new data does not count as a registration change. Records saved before
 them remain `null` until the next refresh.
+
+## Data overview (UC19, RF37)
+
+`GET /companies/analytics` takes the criteria of `GET /companies`, without pagination, and returns the totals and
+distributions of the set. With no criteria it answers for the whole base, for the home screen summary.
+
+- **Three aggregations.** The CNPJ set always comes from `company_profile`, and it restricts `evidence_normalized`
+  and `company_ods_scores`. That way, evidence of a company known only to ingestion stays out of the count.
+- **Confirmed evidence only.** `NOT_FOUND` and `UNKNOWN` do not count as facts about the company ([IND02]).
+- **Minimum sample.** Below `SECTOR_SNAPSHOT_MIN_COMPANIES` (default 5), an SDG's averages and ranges are omitted,
+  and the counts remain.
+- **No ranking.** The response names no company, and categories are ordered only by size ([IND03]). Above 12
+  categories, the smallest go into "Outros".
+- **Fines.** `fine_amount` is the amount assessed in the notices, not the amount paid.
+- **Cache.** Only the response with no criteria is kept, for one hour. Removing a record clears it.
+- **Cost measured with 100,000 companies, indexes and pieces of evidence:** whole base 1.9 s (1 ms from cache), UF
+  filter 0.9 s and name filter 1.6 s.

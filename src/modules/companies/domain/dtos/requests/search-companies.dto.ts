@@ -115,8 +115,8 @@ const SearchCriteriaSchema = z.object({
 
 type SearchCriteria = z.infer<typeof SearchCriteriaSchema>;
 
-/** Regras entre os critérios, comuns à pesquisa e à exportação. */
-function validateSearchCriteria(
+/** Regras entre os critérios, comuns à pesquisa, à exportação e ao panorama. */
+function validateCriteriaRules(
   query: SearchCriteria,
   context: z.RefinementCtx,
 ): void {
@@ -148,9 +148,17 @@ function validateSearchCriteria(
       });
     }
   }
+}
+
+/** Pesquisa e exportação exigem ao menos um critério, para não devolver a base inteira. */
+function validateSearchCriteria(
+  query: SearchCriteria,
+  context: z.RefinementCtx,
+): void {
+  validateCriteriaRules(query, context);
 
   const hasCriterion =
-    name !== '' ||
+    (query.name ?? '') !== '' ||
     query.uf !== undefined ||
     query.city !== undefined ||
     query.cnae !== undefined ||
@@ -180,6 +188,13 @@ export const ExportCompaniesQuerySchema = SearchCriteriaSchema.superRefine(
 );
 
 export type ExportCompaniesQuery = z.infer<typeof ExportCompaniesQuerySchema>;
+
+/** Panorama (UC19, RF37): os critérios da pesquisa. Sem nenhum, vale a base inteira. */
+export const CompanyAnalyticsQuerySchema = SearchCriteriaSchema.superRefine(
+  validateCriteriaRules,
+);
+
+export type CompanyAnalyticsQuery = z.infer<typeof CompanyAnalyticsQuerySchema>;
 
 /** Índice e confiança de uma empresa no ODS selecionado na pesquisa. */
 export const CompanySearchOdsScoreSchema = z
