@@ -40,6 +40,8 @@ const EXPECTED_OPERATIONS: Record<string, string> = {
   'GET /admin/company-removals': 'listCompanyRemovals',
   'POST /admin/company-removals': 'addCompanyRemoval',
   'DELETE /admin/company-removals/{cnpj}': 'restoreCompany',
+  'GET /locations/states': 'listStates',
+  'GET /locations/states/{uf}/cities': 'listCities',
   'GET /companies': 'searchCompanies',
   'GET /companies/analytics': 'getCompanyAnalytics',
   'GET /companies/export/xlsx': 'exportCompaniesXlsx',
