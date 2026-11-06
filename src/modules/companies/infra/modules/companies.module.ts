@@ -7,10 +7,14 @@ import { ScoringModule } from '@modules/scoring/infra/modules/scoring.module.js'
 import { CompanyProfileRepository } from '../../domain/dtos/repositories/company-profile.repository.js';
 import { CompaniesController } from '../../http/controllers/companies.controller.js';
 import { CompaniesExportController } from '../../http/controllers/companies-export.controller.js';
+import { CompanyAnalyticsRepository } from '../../domain/dtos/repositories/company-analytics.repository.js';
+import { CompanyAnalyticsController } from '../../http/controllers/company-analytics.controller.js';
 import { CompanyMovementsController } from '../../http/controllers/company-movements.controller.js';
+import { PrismaCompanyAnalyticsRepository } from '../db/repositories/prisma-company-analytics.repository.js';
 import { PrismaCompanyProfileRepository } from '../db/repositories/prisma-company-profile.repository.js';
 import { CompanyProfileProcessor } from '../queue/company-profile.processor.js';
 import { ExportCompaniesUseCase } from '../usecases/export-companies.usecase.js';
+import { GetCompanyAnalyticsUseCase } from '../usecases/get-company-analytics.usecase.js';
 import { GetCompanyProfileUseCase } from '../usecases/get-company-profile.usecase.js';
 import { ListRecentCompanyMovementsUseCase } from '../usecases/list-recent-company-movements.usecase.js';
 import { RefreshCompanyProfileUseCase } from '../usecases/refresh-company-profile.usecase.js';
@@ -46,6 +50,7 @@ import { SearchCompaniesUseCase } from '../usecases/search-companies.usecase.js'
   controllers: [
     CompaniesController,
     CompaniesExportController,
+    CompanyAnalyticsController,
     CompanyMovementsController,
   ],
   exports: [CompanyProfileRepository, GetCompanyProfileUseCase],
@@ -55,8 +60,13 @@ import { SearchCompaniesUseCase } from '../usecases/search-companies.usecase.js'
       provide: CompanyProfileRepository,
       useClass: PrismaCompanyProfileRepository,
     },
+    {
+      provide: CompanyAnalyticsRepository,
+      useClass: PrismaCompanyAnalyticsRepository,
+    },
 
     /* Casos de uso */
+    GetCompanyAnalyticsUseCase,
     GetCompanyProfileUseCase,
     ListRecentCompanyMovementsUseCase,
     RefreshCompanyProfileUseCase,

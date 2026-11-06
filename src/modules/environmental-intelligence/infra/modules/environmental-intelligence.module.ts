@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ApiKeysModule } from '@modules/api-keys/infra/modules/api-keys.module.js';
 import { CompanyProfileController } from '../../http/controllers/company-profile.controller.js';
 import { PublicCompanyProfileController } from '../../http/controllers/public-company-profile.controller.js';
+import { CompanyIndexEvolutionController } from '../../http/controllers/company-index-evolution.controller.js';
 import { CrmImportController } from '../../http/controllers/crm-import.controller.js';
 import { EnvironmentalEvidencesController } from '../../http/controllers/environmental-evidences.controller.js';
 import { CompaniesModule } from '@modules/companies/infra/modules/companies.module.js';
@@ -14,6 +15,7 @@ import { EvidencesModule } from '@modules/evidences/infra/modules/evidences.modu
 import { EnvironmentalEvidencesProcessor } from '../queue/environmental-evidences.processor.js';
 import { RequestCguCompanyEvidencesUseCase } from '../usecases/request-cgu-company-evidences.usecase.js';
 import { GetCompanyFullProfileUseCase } from '../usecases/get-company-full-profile.usecase.js';
+import { GetCompanyIndexEvolutionUseCase } from '../usecases/get-company-index-evolution.usecase.js';
 import { ImportCrmAccountsUseCase } from '../usecases/import-crm-accounts.usecase.js';
 import { GetCompanyEnvironmentalEvidencesUseCase } from '../usecases/get-company-environmental-evidences.usecase.js';
 /** Orquestracao acima dos adapters; o armazenamento nao depende deles. */
@@ -30,6 +32,7 @@ import { GetCompanyEnvironmentalEvidencesUseCase } from '../usecases/get-company
   ],
   controllers: [
     EnvironmentalEvidencesController,
+    CompanyIndexEvolutionController,
     CompanyProfileController,
     PublicCompanyProfileController,
     CrmImportController,
@@ -39,6 +42,7 @@ import { GetCompanyEnvironmentalEvidencesUseCase } from '../usecases/get-company
     RequestCguCompanyEvidencesUseCase,
     GetCompanyEnvironmentalEvidencesUseCase,
     GetCompanyFullProfileUseCase,
+    GetCompanyIndexEvolutionUseCase,
     ImportCrmAccountsUseCase,
   ],
   exports: [GetCompanyEnvironmentalEvidencesUseCase],

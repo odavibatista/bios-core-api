@@ -356,6 +356,22 @@ export function buildCompanySearchPipeline(
   ] as Prisma.InputJsonValue[];
 }
 
+/** O conjunto de empresas da pesquisa, sem ordenar nem paginar (UC19). */
+export function analyticsSetStages(
+  input: Omit<SearchCompaniesInput, 'skip' | 'take'>,
+): Record<string, unknown>[] {
+  const search = { ...input, skip: 0, take: 0 };
+  const conditions = cadastralConditions(search);
+
+  return [
+    ...(conditions.length > 0 ? [{ $match: { $and: conditions } }] : []),
+    ...odsStages({
+      ...search,
+      ods: search.ods && { ...search.ods, order: undefined },
+    }),
+  ];
+}
+
 /** Quantas empresas do perfil atendem aos critérios cadastrais (sem ler o índice). */
 export function buildCompanyCountPipeline(
   input: SearchCompaniesInput,

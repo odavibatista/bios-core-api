@@ -37,11 +37,15 @@ export class RemoveCompanyUseCase extends UseCase<string, CompanyRemoval> {
 
     const { removedAt } = await this.removals.remove(cnpj);
 
-    await Promise.all(
-      COMPANY_CACHES.map((namespace) =>
+    await Promise.all([
+      ...COMPANY_CACHES.map((namespace) =>
         this.cache.delete({ namespace, identifier: cnpj }),
       ),
-    );
+      this.cache.delete({
+        namespace: CacheNamespace.COMPANY_ANALYTICS,
+        identifier: 'base',
+      }),
+    ]);
 
     return { cnpj, removed_at: removedAt.toISOString() };
   }

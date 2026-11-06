@@ -124,6 +124,26 @@ Contribuição órfã, inconsistente ou sem proveniência auditável responde 40
 para não apresentar uma explicação parcial como completa. A resposta não
 classifica a empresa como sustentável ou insustentável.
 
+## Evolução do índice por empresa (UC07, RF36)
+
+`GET /companies/:cnpj/index-evolution` mostra como o índice chegou ao valor atual, por ODS, em degraus.
+A rota exige sessão e fica fora da API por chave.
+
+- **Calculada na leitura, sem gravar.** `buildOdsEvolution` (`scoring/domain/ods-evolution.ts`) reaplica as
+  regras vigentes às evidências que compõem o índice atual. `company_ods_scores` e `company_movements` não
+  mudam, e registros que a fonte retirou não entram. Por isso a resposta traz `reconstructed: true`.
+- **Quando o índice pode mudar.** No dia do fato, no dia seguinte ao fim de uma sanção, quando ela passa a
+  pesar menos, e no dia da baixa de um embargo. Só há degrau quando o valor muda: uma evidência absorvida
+  pelo teto da categoria não mexe no índice.
+- **Cada degrau** traz a data, o índice, a causa e a evidência principal. Não há variação nem comparação com
+  outras empresas ([IND03], item d).
+- **O último degrau reproduz o índice gravado.** Se não reproduzir, a série não sai (`NOT_REPRODUCIBLE`), e o
+  erro vai ao log. Conferido em novembro de 2026 nas 86.704 séries da base: nenhuma falhou.
+- **Motivo da ausência.** `status` é `INDIVIDUAL_ENTREPRENEUR`, `LEGAL_NATURE_PENDING`, `SHORT_HISTORY` (menos de
+  dois anos de evidências, ou menos de dois degraus), `NO_DATED_EVIDENCE` ou `NOT_REPRODUCIBLE`. Sem natureza
+  jurídica conhecida, a curva não aparece, porque o cadastro pode ser de uma pessoa.
+- **Custo.** O pior caso da base, com 2.535 evidências, levou 2,0 s na função. A rota usa o limite do perfil.
+
 ## ODS que o BIOS calcula (`GET /ods`)
 
 `GET /ods` (RF10, #332) lista os ODS **ativos** da coleção `ods`, em ordem de número, com

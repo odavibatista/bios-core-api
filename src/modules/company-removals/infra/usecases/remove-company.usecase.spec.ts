@@ -36,13 +36,12 @@ describe('RemoveCompanyUseCase', () => {
     });
 
     expect(removals.remove).toHaveBeenCalledWith(cnpj);
-    expect(cache.delete.mock.calls.map(([key]) => key)).toEqual(
-      [
-        CacheNamespace.COMPANY_PROFILE,
-        CacheNamespace.COMPANY_EVIDENCES,
-        CacheNamespace.COMPANY_SCORES,
-      ].map((namespace) => ({ namespace, identifier: cnpj })),
-    );
+    expect(cache.delete.mock.calls.map(([key]) => key)).toEqual([
+      { namespace: CacheNamespace.COMPANY_PROFILE, identifier: cnpj },
+      { namespace: CacheNamespace.COMPANY_EVIDENCES, identifier: cnpj },
+      { namespace: CacheNamespace.COMPANY_SCORES, identifier: cnpj },
+      { namespace: CacheNamespace.COMPANY_ANALYTICS, identifier: 'base' },
+    ]);
   });
 
   it('recusa CNPJ inválido sem tocar em nada', async () => {
