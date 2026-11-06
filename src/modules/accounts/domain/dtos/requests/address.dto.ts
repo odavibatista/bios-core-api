@@ -73,6 +73,13 @@ export const AddressSchema = z
       .min(2, 'Informe a cidade.')
       .max(100, 'A cidade deve ter no máximo 100 caracteres.')
       .describe('Cidade'),
+    city_ibge_code: z
+      .string()
+      .regex(/^\d{7}$/, 'Informe o código IBGE do município.')
+      .optional()
+      .describe(
+        'Código IBGE do município escolhido. Quando vem, precisa ser da UF informada, e o nome passa a ser o do catálogo',
+      ),
     state: z
       .enum(BRAZILIAN_STATES, 'Informe a sigla de uma unidade da federação.')
       .describe('Unidade da federação (sigla)'),

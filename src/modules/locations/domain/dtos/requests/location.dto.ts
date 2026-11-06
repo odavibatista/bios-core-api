@@ -58,6 +58,42 @@ export const StateParamSchema = z.object({
 
 export type StateParam = z.infer<typeof StateParamSchema>;
 
+/** CEP da rota, com ou sem hífen. Sai só com os dígitos. */
+export const PostalCodeParamSchema = z.object({
+  cep: z
+    .string()
+    .trim()
+    .regex(/^\d{5}-?\d{3}$/, 'Informe um CEP válido (8 dígitos).')
+    .transform((cep) => cep.replace('-', ''))
+    .describe('CEP, com ou sem hífen'),
+});
+
+export type PostalCodeParam = z.infer<typeof PostalCodeParamSchema>;
+
+/** Endereço de um CEP. Número e complemento nunca vêm: o CEP não os define. */
+export const PostalAddressSchema = z
+  .object({
+    postal_code: z.string().describe('CEP, só com os dígitos'),
+    street: z
+      .string()
+      .nullable()
+      .describe('Logradouro; nulo em CEP geral de município'),
+    neighborhood: z
+      .string()
+      .nullable()
+      .describe('Bairro; nulo em CEP geral de município'),
+    city: z.string().describe('Nome do município'),
+    city_ibge_code: z
+      .string()
+      .nullable()
+      .describe('Código IBGE do município; nulo quando não está no catálogo'),
+    state: z.string().describe('Sigla da UF'),
+  })
+  .describe('Endereço de um CEP')
+  .meta({ id: 'PostalAddress' });
+
+export type PostalAddress = z.infer<typeof PostalAddressSchema>;
+
 export const ListCitiesQuerySchema = PaginationQuerySchema.extend({
   search: z
     .string()
