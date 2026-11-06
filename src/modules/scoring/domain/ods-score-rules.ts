@@ -84,19 +84,12 @@ export const ODS_SCORE_RULES: Readonly<
   ],
 };
 
-export function scoreOdsEvidences(
+/** As contribuições de cada evidência, sem a confiança nem a cobertura. */
+export function scoreOdsContributions(
   odsNumber: number,
   evidences: readonly StoredEvidence[],
   now: Date = new Date(),
-): Pick<
-  CalculatedOdsScore,
-  | 'scoreValue'
-  | 'confidenceValue'
-  | 'evidenceCount'
-  | 'contributions'
-  | 'coverageStatus'
-  | 'sourcesWithoutRecords'
-> {
+): CalculatedOdsScore['contributions'] {
   const rules = ODS_SCORE_RULES[odsNumber];
   if (!rules) throw new Error(`ODS ${odsNumber} sem regras de pontuação.`);
 
@@ -141,6 +134,23 @@ export function scoreOdsEvidences(
     });
   }
 
+  return contributions;
+}
+
+export function scoreOdsEvidences(
+  odsNumber: number,
+  evidences: readonly StoredEvidence[],
+  now: Date = new Date(),
+): Pick<
+  CalculatedOdsScore,
+  | 'scoreValue'
+  | 'confidenceValue'
+  | 'evidenceCount'
+  | 'contributions'
+  | 'coverageStatus'
+  | 'sourcesWithoutRecords'
+> {
+  const contributions = scoreOdsContributions(odsNumber, evidences, now);
   const count = contributions.length;
   const scoreValue = count
     ? contributions.reduce((total, item) => total + item.points, 0)
