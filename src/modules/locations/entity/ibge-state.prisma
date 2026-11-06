@@ -1,0 +1,17 @@
+/// Unidade da federação no catálogo do IBGE (RF38).
+///
+/// Observações:
+///  - a carga vem de `scripts/generate-ibge-locations.mjs`, e nenhuma consulta vai ao IBGE em uso;
+///  - mapeado para a coleção `ibge_states`.
+model IbgeState {
+  /// Código IBGE da UF.
+  id_ibge_state Int @id @map("_id")
+
+  /// Sigla da UF (2 caracteres).
+  acronym String @unique(map: "idx_ibge_states_acronym")
+
+  /// Nome oficial.
+  name String
+
+  @@map("ibge_states")
+}

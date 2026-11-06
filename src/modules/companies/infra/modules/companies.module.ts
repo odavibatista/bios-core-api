@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { CompanyRemovalsModule } from '@modules/company-removals/infra/modules/company-removals.module.js';
 import { DataSourcesModule } from '@modules/data-sources/infra/modules/data-sources.module.js';
 import { IbgeCnaeModule } from '@modules/ibge-cnae/infra/modules/ibge-cnae.module.js';
+import { LocationsModule } from '@modules/locations/infra/modules/locations.module.js';
 import { ReceitaModule } from '@modules/receita/infra/modules/receita.module.js';
 import { ScoringModule } from '@modules/scoring/infra/modules/scoring.module.js';
 import { CompanyProfileRepository } from '../../domain/dtos/repositories/company-profile.repository.js';
@@ -19,6 +20,7 @@ import { GetCompanyProfileUseCase } from '../usecases/get-company-profile.usecas
 import { ListRecentCompanyMovementsUseCase } from '../usecases/list-recent-company-movements.usecase.js';
 import { RefreshCompanyProfileUseCase } from '../usecases/refresh-company-profile.usecase.js';
 import { ResolveCnaeDescriptionsUseCase } from '../usecases/resolve-cnae-descriptions.usecase.js';
+import { ResolveSelectedCityUseCase } from '../usecases/resolve-selected-city.usecase.js';
 import { SearchCompaniesUseCase } from '../usecases/search-companies.usecase.js';
 
 /**
@@ -43,6 +45,7 @@ import { SearchCompaniesUseCase } from '../usecases/search-companies.usecase.js'
     DataSourcesModule,
     ReceitaModule,
     IbgeCnaeModule,
+    LocationsModule,
     ScoringModule,
   ],
   // A rota fixa `companies/movements` vem antes de `companies/:cnpj`, que mora no
@@ -71,6 +74,7 @@ import { SearchCompaniesUseCase } from '../usecases/search-companies.usecase.js'
     ListRecentCompanyMovementsUseCase,
     RefreshCompanyProfileUseCase,
     ResolveCnaeDescriptionsUseCase,
+    ResolveSelectedCityUseCase,
     SearchCompaniesUseCase,
     ExportCompaniesUseCase,
 

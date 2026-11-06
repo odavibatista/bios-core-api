@@ -68,6 +68,7 @@ describe('ExportCompaniesUseCase', () => {
       repository as never,
       listScores as never,
       ensureActiveOds as never,
+      { execute: vi.fn().mockResolvedValue(undefined) } as never,
       config as never,
     );
   });

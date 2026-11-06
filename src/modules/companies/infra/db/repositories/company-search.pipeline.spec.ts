@@ -2,6 +2,7 @@ import { extractNameTerms } from '../../../domain/company-name-terms.js';
 import type { SearchCompaniesInput } from '../../../domain/dtos/repositories/company-profile.repository.js';
 import {
   buildCompanySearchPipeline,
+  cityPattern,
   registrationStatusExpression,
 } from './company-search.pipeline.js';
 
@@ -568,5 +569,27 @@ describe('buildCompanySearchPipeline', () => {
         ],
       });
     });
+  });
+});
+
+describe('cityPattern', () => {
+  const matches = (pattern: string | null, city: string) =>
+    new RegExp(pattern ?? '', 'i').test(city);
+
+  it('sem município, não há filtro', () => {
+    expect(cityPattern({})).toBeNull();
+    expect(cityPattern({ cityTerms: [], cityAliases: [[]] })).toBeNull();
+  });
+
+  it('casa o nome inteiro e cada grafia alternativa, nunca um pedaço', () => {
+    const pattern = cityPattern({
+      cityTerms: ['PARATY'],
+      cityAliases: [['PARATI'], ['PARA', 'TI']],
+    });
+
+    expect(matches(pattern, 'PARATY')).toBe(true);
+    expect(matches(pattern, 'Parati')).toBe(true);
+    expect(matches(pattern, 'PARA-TI')).toBe(true);
+    expect(matches(pattern, 'PARATINGA')).toBe(false);
   });
 });

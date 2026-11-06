@@ -423,17 +423,23 @@ describe.runIf(inject('databaseAvailable') && inject('redisAvailable'))(
       });
 
       it('por município, com o nome inteiro e sem distinguir acento nem caixa', async () => {
-        expect(await names({ city: 'sao paulo' })).toEqual(['ALFA SP CAPITAL']);
-        expect(await names({ city: 'São Paulo' })).toEqual(['ALFA SP CAPITAL']);
-        expect(await names({ city: 'rio de janeiro' })).toEqual(['GAMA RJ']);
+        expect(await names({ uf: 'SP', city: 'sao paulo' })).toEqual([
+          'ALFA SP CAPITAL',
+        ]);
+        expect(await names({ uf: 'SP', city: 'São Paulo' })).toEqual([
+          'ALFA SP CAPITAL',
+        ]);
+        expect(await names({ uf: 'RJ', city: 'rio de janeiro' })).toEqual([
+          'GAMA RJ',
+        ]);
       });
 
       it('município não casa por início de palavra nem por pedaço do nome', async () => {
-        expect(await names({ city: 'paulo' })).toEqual([]);
-        expect(await names({ city: 'sao' })).toEqual([]);
-        expect(await names({ city: 'sao paulo do potengi' })).toEqual([
-          'DELTA RN',
-        ]);
+        expect(await names({ uf: 'SP', city: 'paulo' })).toEqual([]);
+        expect(await names({ uf: 'SP', city: 'sao' })).toEqual([]);
+        expect(await names({ uf: 'RN', city: 'sao paulo do potengi' })).toEqual(
+          ['DELTA RN'],
+        );
       });
 
       it('o município de outro estado fica de fora quando a UF é informada', async () => {
