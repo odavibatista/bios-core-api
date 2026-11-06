@@ -1,0 +1,28 @@
+/// Município no catálogo do IBGE (RF38, RF39).
+///
+/// Observações:
+///  - `ibge_state_id` é referência lógica a `ibge_states`;
+///  - `search_name` e `aliases` estão normalizados (`toSearchName`), sem acento e em maiúsculas;
+///  - `aliases` guarda grafias de outras fontes, para o código IBGE alcançar quem foi cadastrado
+///    com o nome escrito de outro jeito;
+///  - mapeado para a coleção `ibge_cities`.
+model IbgeCity {
+  /// Código IBGE do município.
+  id_ibge_city Int @id @map("_id")
+
+  /// Código IBGE da UF.
+  ibge_state_id Int
+
+  /// Nome oficial.
+  name String
+
+  /// Nome normalizado, para a busca do seletor.
+  search_name String
+
+  /// Grafias alternativas encontradas nas fontes, normalizadas.
+  aliases String[]
+
+  @@index([ibge_state_id, search_name], map: "idx_ibge_cities_state_search")
+  @@index([aliases], map: "idx_ibge_cities_aliases")
+  @@map("ibge_cities")
+}
