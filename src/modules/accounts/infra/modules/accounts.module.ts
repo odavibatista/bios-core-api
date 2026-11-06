@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { LocationsModule } from '@modules/locations/infra/modules/locations.module.js';
 import { MailingModule } from '@modules/mailing/infra/modules/mailing.module.js';
 import { SecurityModule } from '@modules/security/infra/modules/security.module.js';
 import { UserTokenRepository } from '../../domain/dtos/repositories/user-token.repository.js';
@@ -34,7 +35,7 @@ import { UpdateOwnAccountUseCase } from '../usecases/update-own-account.usecase.
  * (`UserRepository`), de que a autenticação lê as credenciais.
  */
 @Module({
-  imports: [SecurityModule, MailingModule],
+  imports: [SecurityModule, MailingModule, LocationsModule],
   controllers: [AccountsController],
   providers: [
     /* Repositórios */
