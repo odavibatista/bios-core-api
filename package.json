@@ -61,7 +61,7 @@
     "ioredis": "^6.0.0",
     "jsonwebtoken": "^9.0.3",
     "nodemailer": "^10.2.1",
-    "pdfjs-dist": "6.4.299",
+    "pdfjs-dist": "6.5.438",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "write-excel-file": "^4.1.1",
